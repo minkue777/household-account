@@ -380,3 +380,9 @@ Recurring Domain은 Ledger Entity나 Firebase를 import하지 않습니다. Work
 11. V2 shadow read와 reconciliation 후 legacy checkpoint/direct write를 제거합니다.
 
 정기 계획 설정의 생성·수정·삭제·활성 변경은 저장 실패를 화면에 표시하며 편집 초안과 시작 version을 유지합니다. 성공일 때만 편집/확인창을 닫고 진행 중 중복 제출과 가구 전환 뒤 늦은 완료를 격리합니다. 조회 실패는 마지막 정상 목록을 보존하는 별도 상태입니다.
+
+### 2026-10-05 실행 저장 경계
+
+단건 `ManageRecurringPlan`은 target planId·해당 command receipt와 호환 문서만 transaction에서 읽습니다. Application은 단일 snapshot에서 한 번 판정하고 변경된 plan/receipt/event를 반환합니다. 생성·수정에 필요한 category catalog도 같은 transaction에서 읽습니다. 전체 plan/receipt state, 사전 전체 조회, 배열 diff는 사용하지 않습니다. 목록은 plans만 읽고 기존 정렬·cursor·checkpoint 의미를 유지합니다.
+
+Scheduler는 필수 `readPlanPage`만 사용하고 무제한 전체 읽기 fallback은 없습니다. `transact`는 업무 결과를 반환하며 event는 동일 transaction의 outbox 저장으로 전달합니다. 별도 after-commit publisher는 존재하지 않습니다. 검사는 committed outbox와 실제 consumer를 관찰합니다. 상세 근거는 [정기 계획 정비](../../../../../operations/recurring-simplicity-2026-10-05.md)를 따릅니다.

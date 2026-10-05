@@ -14,7 +14,7 @@ function scheduler(memory: InMemoryFirestore) {
     unitOfWork: new FirebaseRecurringFinanceUnitOfWork(memory as unknown as Firestore),
     clock: { now: () => '2026-10-06T00:00:00Z', localDate: () => '2026-10-06' },
     ids: { transactionId: key => `transaction-${key}`, eventId: (key, type) => `${key}-${type}` },
-    events: { async publish() {} },
+
   });
 }
 

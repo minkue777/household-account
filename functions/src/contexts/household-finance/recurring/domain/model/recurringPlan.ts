@@ -46,12 +46,6 @@ export interface RecurringPlanChangedEvent {
   planVersion: number;
 }
 
-export interface RecurringPlanManagementState {
-  plans: readonly RecurringPlan[];
-  receipts: readonly RecurringPlanCommandReceipt[];
-  events: readonly RecurringPlanChangedEvent[];
-}
-
 export interface RecurringCreatorMigrationReceipt {
   commandId: string;
   householdId: string;

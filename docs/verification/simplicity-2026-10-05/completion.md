@@ -6,11 +6,11 @@
 |---|---|---|
 | [FT-01 / P2: 실제 동작과 연결되지 않는 상수 관측을 없애기](finance-tests.md) | 미착수 | |
 | [FT-02 / P2: Capture 조율용 fixture가 별도 금융 엔진을 구현하는 범위 줄이기](finance-tests.md) | 미착수 | |
-| [FIN-09 · P1 · 정기 계획 한 건의 명령을 가구 전체 plans·receipts 로딩과 diff 저장에서 분리합니다](finance.md) | 미착수 | |
+| [FIN-09 · P1 · 정기 계획 한 건의 명령을 가구 전체 plans·receipts 로딩과 diff 저장에서 분리합니다](finance.md) | 구현·실제 SDK 검사 완료 | [정기 계획과 Outbox 단순화](../../operations/recurring-simplicity-2026-10-05.md) |
 | [FIN-01 · P1 · 자산·보유종목 Command가 계산한 최종 상태를 버려 Web이 서버 상태를 추정합니다](finance.md) | 미착수 | |
 | [FIN-02 · P1 · 실제 경로와 분리된 Reporting 상태기계·포트폴리오 정책을 계약 검사와 함께 정리합니다](finance.md) | 미착수 | |
-| [FIN-03 · P2 · 정기지출의 optional pagination이 테스트 때문에 무제한 조회 경로를 남깁니다](finance.md) | 미착수 | |
-| [FIN-04 · P2 · 정기지출은 Outbox 원자 저장 뒤 사용하지 않는 별도 publish 경로를 유지합니다](finance.md) | 미착수 | |
+| [FIN-03 · P2 · 정기지출의 optional pagination이 테스트 때문에 무제한 조회 경로를 남깁니다](finance.md) | 구현·실제 SDK 검사 완료 | [정기 계획과 Outbox 단순화](../../operations/recurring-simplicity-2026-10-05.md) |
+| [FIN-04 · P2 · 정기지출은 Outbox 원자 저장 뒤 사용하지 않는 별도 publish 경로를 유지합니다](finance.md) | 구현·실제 SDK 검사 완료 | [정기 계획과 Outbox 단순화](../../operations/recurring-simplicity-2026-10-05.md) |
 | [FIN-05 · P2 · 삭제 자산 목록의 ID 왕복을 없애 한 번 읽은 문서를 그대로 반환합니다](finance.md) | 미착수 | |
 | [FIN-08 · P2 · 종목 catalog의 업로드 전 가상 metadata를 없애 실제 저장 결과에서 한 번만 구성합니다](finance.md) | 미착수 | |
 | [FIN-06 · P3-조건부 · 지역화폐 Canonical/legacy 이중 저장의 종료 계획을 명시합니다](finance.md) | 미착수 | |

@@ -3,7 +3,6 @@ import { createHash } from "node:crypto";
 import type * as firestore from "firebase-admin/firestore";
 
 import { FirebaseRecurringPlanManagementStore } from "../../adapters/firebase/recurring/firebaseRecurringPlanManagementStore";
-import { readUsableCategoryIds } from "../../adapters/firebase/categories/firebaseCategoryReferenceReader";
 import { createRecurringPlanManagementApplication } from "../../contexts/household-finance/recurring/application/recurringPlanManagementApplication";
 import type {
   ManageRecurringPlanResult,
@@ -113,21 +112,7 @@ function applicationFor(
       localDate: () => localDate(context.requestedAt),
     },
     identities: { planId },
-    categories: {
-      async resolveUsableCategory(householdId, categoryId) {
-        try {
-          const categories = await readUsableCategoryIds(database, householdId);
-          return categories.has(categoryId)
-            ? ({ kind: "usable" } as const)
-            : ({ kind: "not-usable" } as const);
-        } catch {
-          return {
-            kind: "retryable-failure" as const,
-            code: "CATEGORY_REPOSITORY_UNAVAILABLE",
-          };
-        }
-      },
-    },
+
   });
   return { actor, store, application };
 }

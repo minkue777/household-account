@@ -1,19 +1,17 @@
 import { createRecurringSchedulerWorkflowApplication } from "../../src/contexts/household-finance/recurring/application/recurringSchedulerWorkflowApplication";
 import type {
   RecurringFinanceUnitOfWork,
-  RecurringCommitFailure,
 } from "../../src/contexts/household-finance/recurring/application/ports/out/recurringProcessingPorts";
 import type {
   ProcessRecurringTargetResult,
   RecurringExecution,
   RecurringProcessingDecision,
-  RecurringProcessingEvent,
   RecurringProcessingState,
   RecurringProcessPlan,
 } from "../../src/contexts/household-finance/recurring/domain/model/recurringProcessing";
 import type { RecurringSchedulerWorkflowInputPort } from "../../src/contexts/household-finance/recurring/public";
 
-export type { RecurringCommitFailure };
+export type RecurringCommitFailure = "transaction-save" | "execution-checkpoint-save" | "receipt-save";
 
 function cloneState(state: RecurringProcessingState): RecurringProcessingState {
   return structuredClone(state);
@@ -55,52 +53,25 @@ class FixtureRecurringFinanceUnitOfWork implements RecurringFinanceUnitOfWork {
     }
   }
 
-  transact(
-    executionKey: string,
-    decide: (state: RecurringProcessingState) => RecurringProcessingDecision,
-  ): Promise<{
-    result: ProcessRecurringTargetResult;
-    committedEvents: readonly RecurringProcessingEvent[];
-  }> {
-    let resolveResult!: (value: {
-      result: ProcessRecurringTargetResult;
-      committedEvents: readonly RecurringProcessingEvent[];
-    }) => void;
-    const result = new Promise<{
-      result: ProcessRecurringTargetResult;
-      committedEvents: readonly RecurringProcessingEvent[];
-    }>((resolve) => {
-      resolveResult = resolve;
-    });
-    this.queue = this.queue.then(() => {
+  transact(executionKey: string, decide: (state: RecurringProcessingState) => RecurringProcessingDecision): Promise<ProcessRecurringTargetResult> {
+    const pending = this.queue.then(() => {
       const decision = decide(cloneState(this.stateValue));
-      if (decision.kind === "return") {
-        resolveResult({ result: decision.result, committedEvents: [] });
-        return;
-      }
+      if (decision.kind === "return") return decision.result;
       const failure = this.targetFailures.get(executionKey) ?? this.globalFailure;
-      if (failure !== undefined) {
-        resolveResult({
-          result: {
-            kind: "retryable-failure",
-            planId: decision.result.planId,
-            targetMonth:
-              "targetMonth" in decision.result
-                ? (decision.result.targetMonth ?? executionKey.split(":").at(-1)!)
-                : executionKey.split(":").at(-1)!,
-            code: failureCode(failure),
-          },
-          committedEvents: [],
-        });
-        return;
-      }
+      if (failure !== undefined) return { kind: "retryable-failure" as const, planId: decision.result.planId,
+        targetMonth: executionKey.slice(-7), code: failureCode(failure) };
       this.stateValue = cloneState(decision.nextState);
-      resolveResult({
-        result: structuredClone(decision.result),
-        committedEvents: decision.events.map((event) => ({ ...event })),
-      });
+      return structuredClone(decision.result);
     });
-    return result;
+    this.queue = pending.then(() => undefined, () => undefined);
+    return pending;
+  }
+
+  async readPlanPage(input: { afterPlanId?: string; limit: number }) {
+    const plans = (await this.read()).plans.filter(plan => input.afterPlanId === undefined || plan.planId > input.afterPlanId)
+      .sort((a, b) => a.planId.localeCompare(b.planId));
+    const page = plans.slice(0, input.limit);
+    return { plans: page, ...(page.length === input.limit ? { nextCursor: page.at(-1)!.planId } : {}) };
   }
 
   async read(): Promise<RecurringProcessingState> {
@@ -120,7 +91,6 @@ class FixtureRecurringFinanceUnitOfWork implements RecurringFinanceUnitOfWork {
 export interface RecurringProcessingFixture {
   readonly application: RecurringSchedulerWorkflowInputPort;
   readonly store: FixtureRecurringFinanceUnitOfWork;
-  readonly publishedEvents: () => readonly RecurringProcessingEvent[];
 }
 
 export function createRecurringProcessingFixture(input: {
@@ -130,7 +100,6 @@ export function createRecurringProcessingFixture(input: {
   failTargetKeys?: readonly string[];
 }): RecurringProcessingFixture {
   const store = new FixtureRecurringFinanceUnitOfWork(input);
-  const published: RecurringProcessingEvent[] = [];
   const application = createRecurringSchedulerWorkflowApplication({
     unitOfWork: store,
     clock: {
@@ -141,16 +110,11 @@ export function createRecurringProcessingFixture(input: {
       transactionId: (executionKey) => `recurring-tx:${executionKey}`,
       eventId: (executionKey, eventType) => `${eventType}:${executionKey}`,
     },
-    events: {
-      async publish(events) {
-        published.push(...events.map((event) => ({ ...event })));
-      },
-    },
+
   });
   return {
     application,
     store,
-    publishedEvents: () => published.map((event) => ({ ...event })),
   };
 }
 
@@ -288,8 +252,8 @@ export function createRecurringProcessingAtomicityFixture() {
         })),
       };
     },
-    async publishedEvents() {
-      return fixture.publishedEvents();
+    async committedOutboxEvents() {
+      return (await fixture.store.read()).outboxEvents;
     },
   };
 }

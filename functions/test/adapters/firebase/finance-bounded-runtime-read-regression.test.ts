@@ -29,7 +29,7 @@ describe("Finance production query boundaries", () => {
     const plan = { householdId: "house", planId: "plan", merchant: "Recurring", categoryId: "fixed", amountInWon: 1000, dayOfMonth: 1, creatorMemberId: "member", firstApplicableMonth: "2026-07", active: true, lifecycleState: "active", version: 1 };
     memory.seed("households/house/recurringPlans/plan", plan);
     const unitOfWork = new FirebaseRecurringFinanceUnitOfWork(memory as unknown as Firestore);
-    const app = createRecurringSchedulerWorkflowApplication({ unitOfWork, clock: { now: () => "2026-09-06T00:00:00Z", localDate: () => "2026-09-06" }, ids: { transactionId: key => `ledger-${key}`, eventId: (key, type) => `${key}-${type}` }, events: { async publish() {} } });
+    const app = createRecurringSchedulerWorkflowApplication({ unitOfWork, clock: { now: () => "2026-09-06T00:00:00Z", localDate: () => "2026-09-06" }, ids: { transactionId: key => `ledger-${key}`, eventId: (key, type) => `${key}-${type}` } });
     const actor = { kind: "system" as const, capabilities: ["recurring.process" as const] };
     await app.processMonth({ actor, householdId: "house", planId: "plan", targetMonth: "2026-09" });
     expect(memory.document("households/house/recurringPlans/plan")?.processedThroughMonth).toBeUndefined();

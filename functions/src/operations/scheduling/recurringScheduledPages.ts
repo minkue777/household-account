@@ -63,8 +63,7 @@ export function createRecurringScheduledPages(input: {
       eventId: (executionKey, eventType) =>
         hash(`${executionKey}\u0000${eventType}`),
     },
-    // Firebase UoW가 업무 변경과 함께 transactional outbox에 이미 저장합니다.
-    events: { async publish() {} },
+
   });
 
   return {

@@ -1349,7 +1349,7 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
         transactionId: (key) => `recurring-ledger-${hashForTest(key)}`,
         eventId: (key, eventType) => `${hashForTest(key)}-${eventType}`,
       },
-      events: { async publish() {} },
+
     });
     const input = {
       actor: { kind: "system" as const, capabilities: ["recurring.process"] as const },

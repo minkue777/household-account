@@ -71,7 +71,7 @@ export interface RecurringProcessingAtomicitySubject {
   }): Promise<ProcessRecurringMonthResult>;
   setCommitFailureForTest(failure?: RecurringCommitFailure): void;
   snapshot(): Promise<RecurringAtomicitySnapshot>;
-  publishedEvents(): Promise<readonly RecurringProcessingEvent[]>;
+  committedOutboxEvents(): Promise<readonly RecurringProcessingEvent[]>;
 }
 
 export function createSubject(): RecurringProcessingAtomicitySubject {
@@ -97,7 +97,7 @@ describe("정기 거래 처리의 Finance Unit of Work 원자성 계약", () => 
       code: "LEDGER_TRANSACTION_SAVE_FAILED",
     });
     expect(await subject.snapshot()).toEqual(before);
-    expect(await subject.publishedEvents()).toEqual([]);
+    expect(await subject.committedOutboxEvents()).toEqual([]);
   });
 
   it("[T-REC-006][REC-002] execution checkpoint 저장 실패는 이미 성공한 것처럼 거래만 남기지 않는다", async () => {
@@ -112,7 +112,7 @@ describe("정기 거래 처리의 Finance Unit of Work 원자성 계약", () => 
       code: "RECURRING_CHECKPOINT_SAVE_FAILED",
     });
     expect(await subject.snapshot()).toEqual(before);
-    expect(await subject.publishedEvents()).toEqual([]);
+    expect(await subject.committedOutboxEvents()).toEqual([]);
   });
 
   it("[T-REC-006][REC-002] process receipt 저장 실패도 거래·execution과 두 공개 Event를 남기지 않는다", async () => {
@@ -127,7 +127,7 @@ describe("정기 거래 처리의 Finance Unit of Work 원자성 계약", () => 
       code: "PROCESS_RECEIPT_SAVE_FAILED",
     });
     expect(await subject.snapshot()).toEqual(before);
-    expect(await subject.publishedEvents()).toEqual([]);
+    expect(await subject.committedOutboxEvents()).toEqual([]);
   });
 
   it("[T-REC-006][REC-002] 실패가 해소된 같은 key 재실행은 거래·execution·receipt와 Event를 정확히 한 세트로 확정한다", async () => {
@@ -172,7 +172,7 @@ describe("정기 거래 처리의 Finance Unit of Work 원자성 계약", () => 
         ledgerTransactionId: result.ledgerTransactionId,
       },
     ]);
-    expect(await subject.publishedEvents()).toEqual([
+    expect(await subject.committedOutboxEvents()).toEqual([
       expect.objectContaining({
         eventType: "TransactionRecorded.v1",
         planId: "recurring-plan-1",
@@ -192,7 +192,7 @@ describe("정기 거래 처리의 Finance Unit of Work 원자성 계약", () => 
     const subject = createSubject();
     const first = await subject.processRecurringMonth(processInput);
     const beforeReplay = await subject.snapshot();
-    const eventsBeforeReplay = await subject.publishedEvents();
+    const eventsBeforeReplay = await subject.committedOutboxEvents();
 
     const replay = await subject.processRecurringMonth(processInput);
 
@@ -205,6 +205,6 @@ describe("정기 거래 처리의 Finance Unit of Work 원자성 계약", () => 
       ledgerTransactionId: first.ledgerTransactionId,
     });
     expect(await subject.snapshot()).toEqual(beforeReplay);
-    expect(await subject.publishedEvents()).toEqual(eventsBeforeReplay);
+    expect(await subject.committedOutboxEvents()).toEqual(eventsBeforeReplay);
   });
 });

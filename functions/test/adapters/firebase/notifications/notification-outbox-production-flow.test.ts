@@ -58,7 +58,6 @@ describe("Notifications 실제 Outbox dispatch와 Firebase 전달 저장소", ()
         unitOfWork: new FirebaseRecurringFinanceUnitOfWork(subject.database),
         clock: { now: () => now, localDate: () => "2026-09-06" },
         ids: { transactionId: key => `ledger-${key}`, eventId: (key, type) => `${key}-${type}` },
-        events: { async publish() {} },
       });
       expect(await application.processMonth({
         actor: { kind: "system", capabilities: ["recurring.process"] },

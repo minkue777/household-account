@@ -173,23 +173,6 @@ export class FirebaseRecurringFinanceUnitOfWork
     return householdId === undefined ? undefined : { householdId, planId };
   }
 
-  async read(): Promise<RecurringProcessingState> {
-    const [canonical, legacy] = await Promise.all([
-      this.database.collectionGroup("recurringPlans").get(),
-      this.database.collection("recurring_expenses").get(),
-    ]);
-    const plans = new Map<string, RecurringProcessPlan>();
-    for (const snapshot of legacy.docs) {
-      const plan = mapPlan(snapshot);
-      if (plan !== undefined) plans.set(`${plan.householdId}\u0000${plan.planId}`, plan);
-    }
-    for (const snapshot of canonical.docs) {
-      const plan = mapPlan(snapshot);
-      if (plan !== undefined) plans.set(`${plan.householdId}\u0000${plan.planId}`, plan);
-    }
-    return emptyState([...plans.values()]);
-  }
-
   async readPlanPage(input: { readonly afterPlanId?: string; readonly limit: number }) {
     let canonicalQuery = this.database.collectionGroup("recurringPlans").orderBy("planId").limit(input.limit);
     let legacyQuery = this.database.collection("recurring_expenses").orderBy("__name__").limit(input.limit);
@@ -219,13 +202,10 @@ export class FirebaseRecurringFinanceUnitOfWork
     const parts = executionParts(executionKey);
     if (parts === undefined) {
       return {
-        result: {
-          kind: "retryable-failure" as const,
-          planId: executionKey,
-          targetMonth: "",
-          code: "INVALID_RECURRING_EXECUTION_KEY",
-        },
-        committedEvents: [],
+        kind: "retryable-failure" as const,
+        planId: executionKey,
+        targetMonth: "",
+        code: "INVALID_RECURRING_EXECUTION_KEY",
       };
     }
     let location: PlanLocation | undefined;
@@ -233,21 +213,15 @@ export class FirebaseRecurringFinanceUnitOfWork
       location = await this.locatePlan(parts.planId);
     } catch {
       return {
-        result: {
-          kind: "retryable-failure" as const,
-          planId: parts.planId,
-          targetMonth: parts.targetMonth,
-          code: "RECURRING_PLAN_LOOKUP_FAILED",
-        },
-        committedEvents: [],
+        kind: "retryable-failure" as const,
+        planId: parts.planId,
+        targetMonth: parts.targetMonth,
+        code: "RECURRING_PLAN_LOOKUP_FAILED",
       };
     }
     if (location === undefined) {
       const decision = decide(emptyState());
-      return {
-        result: decision.result,
-        committedEvents: [],
-      };
+      return decision.result;
     }
     const household = this.database.collection("households").doc(location.householdId);
     const canonicalPlan = household.collection("recurringPlans").doc(location.planId);
@@ -285,7 +259,7 @@ export class FirebaseRecurringFinanceUnitOfWork
             if (canonicalSnapshot.exists) transaction.set(canonicalPlan, { processedThroughMonth: parts.targetMonth }, { merge: true });
             if (legacySnapshot.exists) transaction.set(legacyPlan, { processedThroughMonth: parts.targetMonth }, { merge: true });
           }
-          return { result: decision.result, committedEvents: [] };
+          return decision.result;
         }
         const createdLedger = decision.nextState.ledgerTransactions.find(
           (value) => value.recurringPlanId === location.planId &&
@@ -304,13 +278,10 @@ export class FirebaseRecurringFinanceUnitOfWork
           createdReceipt === undefined
         ) {
           return {
-            result: {
-              kind: "retryable-failure" as const,
-              planId: location.planId,
-              targetMonth: parts.targetMonth,
-              code: "RECURRING_UOW_DECISION_INCOMPLETE",
-            },
-            committedEvents: [],
+            kind: "retryable-failure" as const,
+            planId: location.planId,
+            targetMonth: parts.targetMonth,
+            code: "RECURRING_UOW_DECISION_INCOMPLETE",
           };
         }
         const canonicalLedger = household
@@ -319,13 +290,10 @@ export class FirebaseRecurringFinanceUnitOfWork
         const canonicalLedgerSnapshot = await transaction.get(canonicalLedger);
         if (canonicalLedgerSnapshot.exists) {
           return {
-            result: {
-              kind: "retryable-failure" as const,
-              planId: location.planId,
-              targetMonth: parts.targetMonth,
-              code: "RECURRING_LEDGER_ID_COLLISION",
-            },
-            committedEvents: [],
+            kind: "retryable-failure" as const,
+            planId: location.planId,
+            targetMonth: parts.targetMonth,
+            code: "RECURRING_LEDGER_ID_COLLISION",
           };
         }
         const ledgerDocument = recurringLedgerDocument(
@@ -435,17 +403,14 @@ export class FirebaseRecurringFinanceUnitOfWork
             },
           });
         }
-        return { result: decision.result, committedEvents: decision.events };
+        return decision.result;
       });
     } catch {
       return {
-        result: {
-          kind: "retryable-failure" as const,
-          planId: parts.planId,
-          targetMonth: parts.targetMonth,
-          code: "RECURRING_UOW_COMMIT_FAILED",
-        },
-        committedEvents: [],
+        kind: "retryable-failure" as const,
+        planId: parts.planId,
+        targetMonth: parts.targetMonth,
+        code: "RECURRING_UOW_COMMIT_FAILED",
       };
     }
   }

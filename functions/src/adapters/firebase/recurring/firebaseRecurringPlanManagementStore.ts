@@ -8,10 +8,11 @@ import type {
   CreatorMappedRecurringPlan,
   RecurringPlan,
   RecurringPlanCommandReceipt,
-  RecurringPlanManagementState,
 } from "../../../contexts/household-finance/recurring/domain/model/recurringPlan";
 import { FirebaseTransactionalOutbox } from "../outbox/firebaseTransactionalOutbox";
 import { firestoreTtlAfter } from "../shared/firestoreTtl";
+
+import { categoryCatalogReference, readCategoryCatalogDocument, resolveCatalogCategoryId } from "../categories/categoryCatalogDocument";
 
 const SCHEMA_VERSION = 2;
 
@@ -51,10 +52,11 @@ function numberValue(
 
 function mapPlan(
   householdId: string,
-  snapshot: firestore.QueryDocumentSnapshot,
+  snapshot: firestore.DocumentSnapshot,
   fallbackNow: string,
 ): RecurringPlan | undefined {
   const data = snapshot.data();
+  if (!data) return undefined;
   if (text(data, "householdId") !== householdId) return undefined;
   const merchant = text(data, "merchant");
   const categoryId = text(data, "categoryId", "category");
@@ -103,21 +105,6 @@ function mapReceipt(
     : undefined;
 }
 
-function signature(plan: RecurringPlan): string {
-  return JSON.stringify([
-    plan.merchant,
-    plan.amountInWon,
-    plan.categoryId,
-    plan.dayOfMonth,
-    plan.memo,
-    plan.active,
-    plan.creatorMemberId,
-    plan.firstApplicableMonth,
-    plan.lifecycleState,
-    plan.version,
-  ]);
-}
-
 export interface FirebaseRecurringPlanManagementStoreInput {
   readonly householdId: string;
   readonly requestedAt: string;
@@ -141,179 +128,71 @@ export class FirebaseRecurringPlanManagementStore
       .doc(hash(commandId));
   }
 
-  private async load(
-    reader: Pick<firestore.Transaction, "get">,
-  ): Promise<{
-    state: RecurringPlanManagementState;
-    canonicalIds: ReadonlySet<string>;
-    legacyIds: ReadonlySet<string>;
-  }> {
-    const [canonical, legacy, receipts] = await Promise.all([
-      reader.get(this.household().collection("recurringPlans")),
-      reader.get(
-        this.database
-          .collection("recurring_expenses")
-          .where("householdId", "==", this.input.householdId),
-      ),
-      reader.get(this.household().collection("recurringCommandReceipts")),
-    ]);
-    const canonicalPlans = canonical.docs.flatMap((snapshot) => {
-      const plan = mapPlan(this.input.householdId, snapshot, this.input.requestedAt);
-      return plan === undefined ? [] : [plan];
-    });
-    const canonicalIds = new Set(canonicalPlans.map(({ planId }) => planId));
-    const legacyPlans = legacy.docs.flatMap((snapshot) => {
-      const plan = mapPlan(this.input.householdId, snapshot, this.input.requestedAt);
-      return plan === undefined || canonicalIds.has(plan.planId) ? [] : [plan];
-    });
-    return {
-      state: {
-        plans: [...canonicalPlans, ...legacyPlans],
-        receipts: receipts.docs.flatMap((snapshot) => {
-          const receipt = mapReceipt(snapshot);
-          return receipt === undefined ? [] : [receipt];
-        }),
-        events: [],
-      },
-      canonicalIds: new Set(canonical.docs.map(({ id }) => id)),
-      legacyIds: new Set(legacy.docs.map(({ id }) => id)),
-    };
-  }
-
-  async read(): Promise<RecurringPlanManagementState> {
-    return this.database.runTransaction(async (transaction) =>
-      (await this.load(transaction)).state,
-    );
-  }
-
-  async readReceipt(
-    commandId: string,
-  ): Promise<RecurringPlanCommandReceipt | undefined> {
-    return mapReceipt(await this.receipt(commandId).get());
-  }
-
   async readForList() {
     try {
-      return { kind: "success" as const, state: await this.read() };
-    } catch {
-      return {
-        kind: "retryable-failure" as const,
-        code: "RECURRING_PLAN_REPOSITORY_UNAVAILABLE" as const,
-      };
-    }
+      const plans = await this.database.runTransaction(async transaction => {
+        const [canonical, legacy] = await Promise.all([
+          transaction.get(this.household().collection("recurringPlans")),
+          transaction.get(this.database.collection("recurring_expenses").where("householdId", "==", this.input.householdId)),
+        ]);
+        const byId = new Map<string, RecurringPlan>();
+        for (const doc of [...legacy.docs, ...canonical.docs]) {
+          const plan = mapPlan(this.input.householdId, doc, this.input.requestedAt);
+          if (plan) byId.set(plan.planId, plan);
+        }
+        return [...byId.values()];
+      });
+      return { kind: "success" as const, plans };
+    } catch { return { kind: "retryable-failure" as const, code: "RECURRING_PLAN_REPOSITORY_UNAVAILABLE" as const }; }
   }
 
-  async transact<T>(
-    operation: Parameters<RecurringPlanManagementStorePort["transact"]>[0],
-  ): Promise<T> {
-    return this.database.runTransaction(async (transaction) => {
-      const loaded = await this.load(transaction);
-      const mutation = operation(loaded.state);
-      const beforeById = new Map(
-        loaded.state.plans.map((plan) => [plan.planId, plan]),
-      );
-      for (const plan of mutation.state.plans) {
-        const before = beforeById.get(plan.planId);
-        if (before !== undefined && signature(before) === signature(plan)) continue;
-        const common = {
-          householdId: this.input.householdId,
-          planId: plan.planId,
-          merchant: plan.merchant,
-          amountInWon: plan.amountInWon,
-          categoryId: plan.categoryId,
-          dayOfMonth: plan.dayOfMonth,
-          memo: plan.memo,
-          active: plan.active,
-          ...(plan.creatorMemberId === undefined
-            ? {}
-            : { creatorMemberId: plan.creatorMemberId }),
-          firstApplicableMonth: plan.firstApplicableMonth,
-          lifecycleState: plan.lifecycleState,
-          version: plan.version,
-          aggregateVersion: plan.version,
-          schemaVersion: SCHEMA_VERSION,
-          updatedAt: Timestamp.fromDate(new Date(plan.updatedAt)),
-          ...(loaded.canonicalIds.has(plan.planId)
-            ? {}
-            : { createdAt: Timestamp.fromDate(new Date(plan.createdAt)) }),
-        };
-        transaction.set(
-          this.household().collection("recurringPlans").doc(plan.planId),
-          common,
-          { merge: true },
-        );
-        const legacyReference = this.database
-          .collection("recurring_expenses")
-          .doc(plan.planId);
-        if (plan.lifecycleState === "deleted") {
-          transaction.delete(legacyReference);
-        } else {
-          transaction.set(
-            legacyReference,
-            {
-            householdId: this.input.householdId,
-            merchant: plan.merchant,
-            amount: plan.amountInWon,
-            category: plan.categoryId,
-            dayOfMonth: plan.dayOfMonth,
-            memo: plan.memo,
-            isActive: plan.lifecycleState === "active" && plan.active,
-            ...(plan.creatorMemberId === undefined
-              ? {}
-              : { creatorMemberId: plan.creatorMemberId }),
-            firstApplicableMonth: plan.firstApplicableMonth,
-            lifecycleState: plan.lifecycleState,
-            aggregateVersion: plan.version,
-            schemaVersion: 1,
-            updatedAt: Timestamp.fromDate(new Date(plan.updatedAt)),
-            ...(loaded.legacyIds.has(plan.planId)
-              ? {}
-              : { createdAt: Timestamp.fromDate(new Date(plan.createdAt)) }),
-            },
-            { merge: true },
-          );
-        }
-      }
-
-      const existingReceipts = new Set(
-        loaded.state.receipts.map(({ commandId }) => commandId),
-      );
-      for (const receipt of mutation.state.receipts) {
-        if (existingReceipts.has(receipt.commandId)) continue;
-        transaction.create(this.receipt(receipt.commandId), {
-          ...receipt,
-          householdId: this.input.householdId,
-          status: "completed",
-          terminalAt: this.input.requestedAt,
-          expiresAt: firestoreTtlAfter(this.input.requestedAt),
-          schemaVersion: 1,
-          createdAt: FieldValue.serverTimestamp(),
-        });
-      }
-
-      const outbox = new FirebaseTransactionalOutbox(this.database);
-      for (const event of mutation.state.events) {
-        outbox.append(transaction, {
-          eventId: hash(
-            `${this.input.householdId}\u0000${event.planId}\u0000${event.planVersion}`,
-          ),
-          eventType: "RecurringPlanChanged.v1",
-          householdId: this.input.householdId,
-          aggregateId: event.planId,
-          aggregateVersion: event.planVersion,
-          occurredAt: this.input.requestedAt,
-          correlationId:
-            mutation.state.receipts.at(-1)?.commandId ?? event.planId,
-          causationId:
-            mutation.state.receipts.at(-1)?.commandId ?? event.planId,
-          payload: {
-            planId: event.planId,
-            active: event.active,
-            dayOfMonth: event.dayOfMonth,
-            changeKind: event.changeKind,
-          },
-        });
-      }
+  async transact<T>(planId: string, commandId: string,
+    operation: Parameters<RecurringPlanManagementStorePort["transact"]>[2]): Promise<T> {
+    const reference = this.household().collection("recurringPlans").doc(planId);
+    const legacyReference = this.database.collection("recurring_expenses").doc(planId);
+    const receiptReference = this.receipt(commandId);
+    return this.database.runTransaction(async transaction => {
+      const [canonical, legacy, receiptDoc] = await transaction.getAll(reference, legacyReference, receiptReference);
+      const mutation = await operation({
+        plan: mapPlan(this.input.householdId, canonical, this.input.requestedAt)
+          ?? mapPlan(this.input.householdId, legacy, this.input.requestedAt),
+        receipt: mapReceipt(receiptDoc),
+        categoryIsUsable: async categoryId => {
+          const snapshot = await transaction.get(categoryCatalogReference(this.database, this.input.householdId));
+          const catalog = readCategoryCatalogDocument(snapshot.data(), this.input.householdId);
+          const resolved = resolveCatalogCategoryId(catalog, categoryId);
+          return catalog.categories.some(category => category.categoryId === resolved && category.state === "active");
+        },
+      });
+      if (!mutation.change) return mutation.value as T;
+      if (legacy.exists && legacy.get("householdId") !== this.input.householdId) throw new Error("RECURRING_PLAN_SCOPE_MISMATCH");
+      const { plan, receipt, event } = mutation.change;
+      transaction.set(reference, {
+        householdId: this.input.householdId, planId, merchant: plan.merchant, amountInWon: plan.amountInWon,
+        categoryId: plan.categoryId, dayOfMonth: plan.dayOfMonth, memo: plan.memo, active: plan.active,
+        creatorMemberId: plan.creatorMemberId, firstApplicableMonth: plan.firstApplicableMonth,
+        lifecycleState: plan.lifecycleState, version: plan.version, aggregateVersion: plan.version, schemaVersion: SCHEMA_VERSION,
+        updatedAt: Timestamp.fromDate(new Date(plan.updatedAt)),
+        ...(canonical.exists ? {} : { createdAt: Timestamp.fromDate(new Date(plan.createdAt)) }),
+      }, { merge: true });
+      if (plan.lifecycleState === "deleted") transaction.delete(legacyReference);
+      else transaction.set(legacyReference, {
+        householdId: this.input.householdId, merchant: plan.merchant, amount: plan.amountInWon, category: plan.categoryId,
+        dayOfMonth: plan.dayOfMonth, memo: plan.memo, isActive: plan.active, creatorMemberId: plan.creatorMemberId,
+        firstApplicableMonth: plan.firstApplicableMonth, lifecycleState: plan.lifecycleState,
+        aggregateVersion: plan.version, schemaVersion: 1, updatedAt: Timestamp.fromDate(new Date(plan.updatedAt)),
+        ...(legacy.exists ? {} : { createdAt: Timestamp.fromDate(new Date(plan.createdAt)) }),
+      }, { merge: true });
+      transaction.create(receiptReference, { ...receipt, householdId: this.input.householdId, status: "completed",
+        terminalAt: this.input.requestedAt, expiresAt: firestoreTtlAfter(this.input.requestedAt), schemaVersion: 1,
+        createdAt: FieldValue.serverTimestamp() });
+      new FirebaseTransactionalOutbox(this.database).append(transaction, {
+        eventId: hash(`${this.input.householdId}\u0000${event.planId}\u0000${event.planVersion}`),
+        eventType: "RecurringPlanChanged.v1", householdId: this.input.householdId, aggregateId: planId,
+        aggregateVersion: event.planVersion, occurredAt: this.input.requestedAt,
+        correlationId: commandId, causationId: commandId,
+        payload: { planId, active: event.active, dayOfMonth: event.dayOfMonth, changeKind: event.changeKind },
+      });
       return mutation.value as T;
     });
   }

@@ -1,24 +1,27 @@
 import { createRecurringPlanManagementApplication } from "../../src/contexts/household-finance/recurring/application/recurringPlanManagementApplication";
 import type {
-  RecurringCategoryReferencePort,
-  RecurringCategoryReferenceResult,
   RecurringPlanClockPort,
   RecurringPlanIdentityPort,
   RecurringPlanListRead,
   RecurringPlanManagementStorePort,
-  RecurringPlanMutation,
 } from "../../src/contexts/household-finance/recurring/application/ports/out/recurringPlanManagementPorts";
 import type {
   CreatorMappedRecurringPlan,
   RecurringPlan,
   RecurringPlanCommandReceipt,
-  RecurringPlanManagementState,
+  RecurringPlanChangedEvent,
 } from "../../src/contexts/household-finance/recurring/domain/model/recurringPlan";
 import { hasRecurringPlanCreator } from "../../src/contexts/household-finance/recurring/domain/model/recurringPlan";
 import type {
   RecurringPlanManagementInputPort,
   RecurringPlanView,
 } from "../../src/contexts/household-finance/recurring/public";
+
+interface RecurringPlanManagementState {
+  plans: readonly RecurringPlan[];
+  receipts: readonly RecurringPlanCommandReceipt[];
+  events: readonly RecurringPlanChangedEvent[];
+}
 
 export interface RecurringPlanManagementFixture {
   now: string;
@@ -80,6 +83,7 @@ class FixtureRecurringPlanStore implements RecurringPlanManagementStorePort {
   constructor(
     plans: readonly RecurringPlanView[],
     private readonly failList: boolean,
+    private readonly usableCategoryIds?: readonly string[],
   ) {
     this.stateValue = {
       plans: plans.map(clonePlan),
@@ -93,16 +97,6 @@ class FixtureRecurringPlanStore implements RecurringPlanManagementStorePort {
     return cloneState(this.stateValue);
   }
 
-  async readReceipt(
-    commandId: string,
-  ): Promise<RecurringPlanCommandReceipt | undefined> {
-    const state = await this.read();
-    const receipt = state.receipts.find(
-      (candidate) => candidate.commandId === commandId,
-    );
-    return receipt === undefined ? undefined : cloneReceipt(receipt);
-  }
-
   async readForList(): Promise<RecurringPlanListRead> {
     if (this.failList) {
       return {
@@ -110,23 +104,25 @@ class FixtureRecurringPlanStore implements RecurringPlanManagementStorePort {
         code: "RECURRING_PLAN_REPOSITORY_UNAVAILABLE",
       };
     }
-    return { kind: "success", state: await this.read() };
+    return { kind: "success", plans: (await this.read()).plans };
   }
 
-  async transact<T>(
-    operation: (
-      current: RecurringPlanManagementState,
-    ) => RecurringPlanMutation<T>,
-  ): Promise<T> {
-    const transaction = this.serial.then(() => {
-      const mutation = operation(cloneState(this.stateValue));
-      this.stateValue = cloneState(mutation.state);
-      return mutation.value;
+  async transact<T>(planId: string, commandId: string,
+    operation: Parameters<RecurringPlanManagementStorePort["transact"]>[2]): Promise<T> {
+    const transaction = this.serial.then(async () => {
+      const mutation = await operation({
+        plan: this.stateValue.plans.find(plan => plan.planId === planId),
+        receipt: this.stateValue.receipts.find(receipt => receipt.commandId === commandId),
+        categoryIsUsable: async id => !!id && (this.usableCategoryIds === undefined || this.usableCategoryIds.includes(id)),
+      });
+      if (mutation.change) {
+        const { plan, receipt, event } = mutation.change;
+        this.stateValue = cloneState({ plans: [...this.stateValue.plans.filter(value => value.planId !== planId), plan],
+          receipts: [...this.stateValue.receipts, receipt], events: [...this.stateValue.events, event] });
+      }
+      return mutation.value as T;
     });
-    this.serial = transaction.then(
-      () => undefined,
-      () => undefined,
-    );
+    this.serial = transaction.then(() => undefined, () => undefined);
     return transaction;
   }
 }
@@ -149,25 +145,6 @@ class FixtureRecurringClock implements RecurringPlanClockPort {
 class FixtureRecurringPlanIdentities implements RecurringPlanIdentityPort {
   planId(commandId: string): string {
     return `plan-${commandId}`;
-  }
-}
-
-class FixtureRecurringCategories implements RecurringCategoryReferencePort {
-  private readonly usable: ReadonlySet<string> | undefined;
-
-  constructor(categoryIds: readonly string[] | undefined) {
-    this.usable =
-      categoryIds === undefined ? undefined : new Set(categoryIds);
-  }
-
-  async resolveUsableCategory(
-    _householdId: string,
-    categoryId: string,
-  ): Promise<RecurringCategoryReferenceResult> {
-    return categoryId.length > 0 &&
-      (this.usable === undefined || this.usable.has(categoryId))
-      ? { kind: "usable" }
-      : { kind: "not-usable" };
   }
 }
 
@@ -220,12 +197,12 @@ export function createRecurringPlanManagementFixtureSubject(
   const store = new FixtureRecurringPlanStore(
     fixture.plans ?? [],
     fixture.failList ?? false,
+    fixture.usableCategoryIds,
   );
   const application = createRecurringPlanManagementApplication({
     store,
     clock: new FixtureRecurringClock(fixture.now),
     identities: new FixtureRecurringPlanIdentities(),
-    categories: new FixtureRecurringCategories(fixture.usableCategoryIds),
   });
   return new FixtureRecurringPlanDriver(application, store);
 }

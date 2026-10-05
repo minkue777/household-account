@@ -7,7 +7,6 @@ import type {
 import type {
   RecurringFinanceUnitOfWork,
   RecurringProcessingClock,
-  RecurringProcessingEventPublisher,
   RecurringProcessingIds,
 } from "./ports/out/recurringProcessingPorts";
 
@@ -31,7 +30,6 @@ export function createRecurringSchedulerWorkflowApplication(dependencies: {
   unitOfWork: RecurringFinanceUnitOfWork;
   clock: RecurringProcessingClock;
   ids: RecurringProcessingIds;
-  events: RecurringProcessingEventPublisher;
 }): RecurringSchedulerWorkflowInputPort {
   const processTarget = async (input: {
     householdId: string;
@@ -40,7 +38,7 @@ export function createRecurringSchedulerWorkflowApplication(dependencies: {
     asOfDate: string;
   }) => {
     const executionKey = `${input.planId}:${input.targetMonth}`;
-    const outcome = await dependencies.unitOfWork.transact(
+    return dependencies.unitOfWork.transact(
       executionKey,
       (state) =>
         decideRecurringTarget({
@@ -59,10 +57,7 @@ export function createRecurringSchedulerWorkflowApplication(dependencies: {
           ),
         }),
     );
-    if (outcome.committedEvents.length > 0) {
-      await dependencies.events.publish(outcome.committedEvents);
-    }
-    return outcome.result;
+
   };
 
   return {
@@ -86,13 +81,7 @@ export function createRecurringSchedulerWorkflowApplication(dependencies: {
           if (cursor.asOfDate !== input.asOfDate || (cursor.afterPlanId !== undefined && typeof cursor.afterPlanId !== "string") || (cursor.resumePlanId !== undefined && typeof cursor.resumePlanId !== "string") || (cursor.afterMonth !== undefined && (typeof cursor.afterMonth !== "string" || !/^\d{4}-(0[1-9]|1[0-2])$/u.test(cursor.afterMonth)))) throw new Error();
         } catch { return { kind: "validation-error", code: "INVALID_CHECKPOINT" }; }
       }
-      const readPage = dependencies.unitOfWork.readPlanPage;
-      const page = readPage === undefined ? await (async () => {
-        const plans = (await dependencies.unitOfWork.read()).plans
-          .filter(plan => cursor.afterPlanId === undefined || plan.planId > cursor.afterPlanId)
-          .sort((left, right) => left.planId.localeCompare(right.planId));
-        return { plans: plans.slice(0, input.limit), ...(plans.length > input.limit ? { nextCursor: plans[input.limit - 1]!.planId } : {}) };
-      })() : await readPage.call(dependencies.unitOfWork, { afterPlanId: cursor.afterPlanId, limit: input.limit });
+      const page = await dependencies.unitOfWork.readPlanPage({ afterPlanId: cursor.afterPlanId, limit: input.limit });
       const results = [];
       let afterPlanId = cursor.afterPlanId;
       for (const plan of page.plans) {
