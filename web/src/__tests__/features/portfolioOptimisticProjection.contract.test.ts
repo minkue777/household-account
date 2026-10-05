@@ -42,7 +42,7 @@ describe('portfolio optimistic projection contract', () => {
       (left, right) => left.order - right.order
     );
     const first = projection.subscribe(jest.fn(), () => true, 'assets:house-1');
-    first.publish([asset()]);
+    first.publish([asset()], 'server');
     first.dispose();
 
     const restored = jest.fn();
@@ -58,12 +58,12 @@ describe('portfolio optimistic projection contract', () => {
     );
     const rendered: Asset[][] = [];
     const subscription = projection.subscribe((items) => rendered.push(items));
-    subscription.publish([asset()]);
+    subscription.publish([asset()], 'server');
 
     const updateId = projection.beginUpdate('asset-1', { name: '새 이름' });
     expect(rendered.at(-1)?.[0].name).toBe('새 이름');
 
-    subscription.publish([asset({ currentBalance: 1_200_000 })]);
+    subscription.publish([asset({ currentBalance: 1_200_000 })], 'server');
     projection.rollback(updateId);
     expect(rendered.at(-1)?.[0]).toMatchObject({
       name: '예금',
@@ -83,17 +83,17 @@ describe('portfolio optimistic projection contract', () => {
     );
     const rendered: Asset[][] = [];
     const subscription = projection.subscribe((items) => rendered.push(items));
-    subscription.publish([asset()]);
+    subscription.publish([asset()], 'server');
 
     const mutationId = projection.beginUpdate('asset-1', { name: '확정 이름' });
     projection.commitUpdate(mutationId, asset({ aggregateVersion: 4, name: '확정 이름' }));
-    subscription.publish([asset({ aggregateVersion: 3, name: '이전 이름' })]);
+    subscription.publish([asset({ aggregateVersion: 3, name: '이전 이름' })], 'server');
     expect(rendered.at(-1)?.[0]).toMatchObject({
       aggregateVersion: 4,
       name: '확정 이름',
     });
 
-    subscription.publish([asset({ aggregateVersion: 4, name: '확정 이름' })]);
+    subscription.publish([asset({ aggregateVersion: 4, name: '확정 이름' })], 'server');
     expect(rendered.at(-1)?.[0]).toMatchObject({
       aggregateVersion: 4,
       name: '확정 이름',
@@ -109,28 +109,28 @@ describe('portfolio optimistic projection contract', () => {
     const secondRendered: Asset[][] = [];
     const first = projection.subscribe((items) => firstRendered.push(items));
     const second = projection.subscribe((items) => secondRendered.push(items));
-    first.publish([asset()]);
-    second.publish([asset()]);
+    first.publish([asset()], 'server');
+    second.publish([asset()], 'server');
 
     const updateId = projection.beginUpdate('asset-1', { name: '다중 구독 수정' });
     projection.commitUpdate(
       updateId,
       asset({ aggregateVersion: 4, name: '다중 구독 수정' })
     );
-    first.publish([asset({ aggregateVersion: 4, name: '다중 구독 수정' })]);
+    first.publish([asset({ aggregateVersion: 4, name: '다중 구독 수정' })], 'server');
 
     expect(secondRendered.at(-1)?.[0]).toMatchObject({
       aggregateVersion: 4,
       name: '다중 구독 수정',
     });
 
-    second.publish([asset({ aggregateVersion: 4, name: '다중 구독 수정' })]);
+    second.publish([asset({ aggregateVersion: 4, name: '다중 구독 수정' })], 'server');
     const deleteId = projection.beginDelete('asset-1');
     projection.commitDelete(deleteId);
-    first.publish([]);
+    first.publish([], 'server');
 
     expect(secondRendered.at(-1)).toEqual([]);
-    second.publish([]);
+    second.publish([], 'server');
     expect(firstRendered.at(-1)).toEqual([]);
   });
 
@@ -149,8 +149,8 @@ describe('portfolio optimistic projection contract', () => {
       (items) => secondAsset.push(items),
       (item) => item.assetId === 'asset-2'
     );
-    first.publish([]);
-    second.publish([]);
+    first.publish([], 'server');
+    second.publish([], 'server');
 
     const mutationId = projection.beginCreate(holding());
     expect(firstAsset.at(-1)?.map(({ id }) => id)).toEqual(['position-1']);
@@ -170,7 +170,7 @@ describe('portfolio optimistic projection contract', () => {
       () => undefined,
       (item) => item.assetId === 'asset-1'
     );
-    first.publish([holding()]);
+    first.publish([holding()], 'server');
     const mutationId = projection.beginDelete('position-1');
     first.dispose();
     projection.commitDelete(mutationId);
@@ -180,10 +180,10 @@ describe('portfolio optimistic projection contract', () => {
       (items) => replacementRendered.push(items),
       (item) => item.assetId === 'asset-1'
     );
-    replacement.publish([holding()]);
+    replacement.publish([holding()], 'server');
     expect(replacementRendered.at(-1)).toEqual([]);
 
-    replacement.publish([]);
+    replacement.publish([], 'server');
 
     expect(() => projection.beginCreate(holding())).not.toThrow();
   });
@@ -197,7 +197,7 @@ describe('portfolio optimistic projection contract', () => {
       () => undefined,
       (item) => item.assetId === 'asset-1'
     );
-    original.publish([holding()]);
+    original.publish([holding()], 'server');
     const mutationId = projection.beginDelete('position-1');
     original.dispose();
     projection.commitDelete(mutationId);
@@ -206,7 +206,9 @@ describe('portfolio optimistic projection contract', () => {
       () => undefined,
       (item) => item.assetId === 'asset-1'
     );
-    firstRoute.publish([]);
+    firstRoute.publish([], 'cache');
+    firstRoute.publish([], 'cache');
+    firstRoute.publish([], 'cache');
     firstRoute.dispose();
 
     const staleRouteRendered: StockHolding[][] = [];
@@ -214,7 +216,7 @@ describe('portfolio optimistic projection contract', () => {
       (items) => staleRouteRendered.push(items),
       (item) => item.assetId === 'asset-1'
     );
-    staleRoute.publish([holding()]);
+    staleRoute.publish([holding()], 'cache');
 
     expect(staleRouteRendered.at(-1)).toEqual([]);
   });
@@ -225,7 +227,7 @@ describe('portfolio optimistic projection contract', () => {
       (left, right) => left.order - right.order
     );
     const first = projection.subscribe(() => undefined);
-    first.publish([asset()]);
+    first.publish([asset()], 'server');
 
     const mutationId = projection.beginUpdate('asset-1', { name: '확정 이름' });
     projection.commitUpdate(
@@ -236,13 +238,13 @@ describe('portfolio optimistic projection contract', () => {
 
     const replacementRendered: Asset[][] = [];
     const replacement = projection.subscribe((items) => replacementRendered.push(items));
-    replacement.publish([asset({ aggregateVersion: 3, name: '이전 이름' })]);
+    replacement.publish([asset({ aggregateVersion: 3, name: '이전 이름' })], 'cache');
     expect(replacementRendered.at(-1)?.[0]).toMatchObject({
       aggregateVersion: 4,
       name: '확정 이름',
     });
 
-    replacement.publish([asset({ aggregateVersion: 4, name: '확정 이름' })]);
+    replacement.publish([asset({ aggregateVersion: 4, name: '확정 이름' })], 'server');
     expect(replacementRendered.at(-1)?.[0]).toMatchObject({
       aggregateVersion: 4,
       name: '확정 이름',
@@ -264,8 +266,8 @@ describe('portfolio optimistic projection contract', () => {
       (items) => stockRendered.push(items),
       (item) => item.type === 'stock'
     );
-    savings.publish([asset()]);
-    stocks.publish([]);
+    savings.publish([asset()], 'server');
+    stocks.publish([], 'server');
 
     projection.beginUpdate('asset-1', { type: 'stock' });
 
@@ -290,19 +292,19 @@ describe('portfolio optimistic projection contract', () => {
       (items) => stockRendered.push(items),
       (item) => item.type === 'stock'
     );
-    savings.publish([asset()]);
-    stocks.publish([]);
+    savings.publish([asset()], 'server');
+    stocks.publish([], 'server');
 
     const mutationId = projection.beginUpdate('asset-1', { type: 'stock' });
     const canonical = asset({ aggregateVersion: 4, type: 'stock' });
     projection.commitUpdate(mutationId, canonical);
-    savings.publish([]);
-    stocks.publish([]);
+    savings.publish([], 'server');
+    stocks.publish([], 'server');
 
     expect(stockRendered.at(-1)).toEqual([canonical]);
     expect(projection.current('asset-1')).toEqual(canonical);
 
-    stocks.publish([canonical]);
+    stocks.publish([canonical], 'server');
     expect(stockRendered.at(-1)).toEqual([canonical]);
   });
 
@@ -315,14 +317,14 @@ describe('portfolio optimistic projection contract', () => {
       () => undefined,
       (item) => item.type === 'savings'
     );
-    savings.publish([asset()]);
+    savings.publish([asset()], 'server');
 
     const mutationId = projection.beginUpdate('asset-1', { type: 'stock' });
     const canonical = asset({ aggregateVersion: 4, type: 'stock' });
     projection.commitUpdate(mutationId, canonical);
 
     // The source query correctly removes the moved entity before the destination route exists.
-    savings.publish([]);
+    savings.publish([], 'server');
     savings.dispose();
 
     const destinationRendered: Asset[][] = [];
@@ -331,11 +333,11 @@ describe('portfolio optimistic projection contract', () => {
       (item) => item.type === 'stock'
     );
     // A route may first receive an old persistent-cache snapshot.
-    stocks.publish([]);
+    stocks.publish([], 'cache');
     expect(destinationRendered.at(-1)).toEqual([canonical]);
 
     // The authoritative destination snapshot then confirms and owns the value.
-    stocks.publish([canonical]);
+    stocks.publish([canonical], 'server');
     expect(destinationRendered.at(-1)).toEqual([canonical]);
   });
 
@@ -346,7 +348,7 @@ describe('portfolio optimistic projection contract', () => {
     );
     const rendered: Asset[][] = [];
     const subscription = projection.subscribe((items) => rendered.push(items));
-    subscription.publish([asset()]);
+    subscription.publish([asset()], 'server');
 
     const firstId = projection.beginUpdate('asset-1', { name: 'first committed name' });
     projection.commitUpdate(
@@ -376,7 +378,7 @@ describe('portfolio optimistic projection contract', () => {
     );
     const rendered: Asset[][] = [];
     const subscription = projection.subscribe((items) => rendered.push(items));
-    subscription.publish([asset({ aggregateVersion: 3 })]);
+    subscription.publish([asset({ aggregateVersion: 3 })], 'server');
 
     const mutationId = projection.beginUpdate('asset-1', {
       currentBalance: 1_200_000,
@@ -401,7 +403,7 @@ describe('portfolio optimistic projection contract', () => {
     );
     const rendered: Asset[][] = [];
     const subscription = projection.subscribe((items) => rendered.push(items));
-    subscription.publish([asset({ aggregateVersion: 3 })]);
+    subscription.publish([asset({ aggregateVersion: 3 })], 'server');
 
     const firstId = projection.beginQueuedUpdate('asset-1', {
       memo: 'temporary memo',
@@ -442,7 +444,7 @@ describe('portfolio optimistic projection contract', () => {
     );
     const rendered: Asset[][] = [];
     const subscription = projection.subscribe((items) => rendered.push(items));
-    subscription.publish([]);
+    subscription.publish([], 'server');
 
     const createId = projection.beginCreate(asset({ aggregateVersion: 1 }));
     projection.commitCreate(createId, asset({ aggregateVersion: 1 }));
@@ -451,8 +453,48 @@ describe('portfolio optimistic projection contract', () => {
 
     expect(rendered.at(-1)).toEqual([]);
 
-    subscription.publish([]);
+    subscription.publish([], 'server');
     expect(rendered.at(-1)).toEqual([]);
     expect(projection.current('asset-1')).toBeUndefined();
   });
+});
+
+
+test('새 구독의 첫 서버 snapshot이 삭제를 확정하므로 두 번째 발행을 기다리지 않는다', () => {
+  const projection = new OptimisticEntityProjection<Asset>('test', () => 0);
+  const original = projection.subscribe(() => {});
+  original.publish([asset()], 'server');
+  const mutation = projection.beginDelete('asset-1');
+  original.dispose();
+  projection.commitDelete(mutation);
+  const replacement = projection.subscribe(() => {});
+  replacement.publish([], 'server');
+  expect(() => projection.beginCreate(asset())).not.toThrow();
+});
+
+test('캐시의 누락은 아직 진행 중인 Native 수정을 취소하지 않는다', () => {
+  const projection = new OptimisticEntityProjection<Asset>('test', () => 0);
+  const rendered = jest.fn();
+  const source = projection.subscribe(rendered);
+  source.publish([asset()], 'server');
+  const mutation = projection.beginUpdate('asset-1', { memo: 'Native 수정' }, 3);
+  source.publish([], 'cache');
+  source.publish([asset()], 'cache');
+  expect(rendered.mock.calls.at(-1)?.[0][0].memo).toBe('Native 수정');
+  source.publish([], 'server');
+  projection.commitUpdate(mutation, asset({ aggregateVersion: 4, memo: 'Native 수정' }));
+  expect(rendered).toHaveBeenLastCalledWith([]);
+});
+
+test('생성 확정 결과는 오래된 같은 ID cache보다 우선하고 더 최신 서버 결과는 보존한다', () => {
+  const projection = new OptimisticEntityProjection<Asset>('test', () => 0);
+  const rendered = jest.fn();
+  const source = projection.subscribe(rendered);
+  source.publish([], 'server');
+  const mutation = projection.beginCreate(asset({ aggregateVersion: 1 }));
+  source.publish([asset({ aggregateVersion: 1 })], 'cache');
+  projection.commitCreate(mutation, asset({ aggregateVersion: 2, memo: '확정값' }));
+  expect(rendered.mock.calls.at(-1)?.[0][0]).toMatchObject({ aggregateVersion: 2, memo: '확정값' });
+  source.publish([asset({ aggregateVersion: 3, memo: '더 최신값' })], 'server');
+  expect(rendered.mock.calls.at(-1)?.[0][0]).toMatchObject({ aggregateVersion: 3, memo: '더 최신값' });
 });

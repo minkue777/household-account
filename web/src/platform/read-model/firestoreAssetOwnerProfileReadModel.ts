@@ -82,7 +82,7 @@ export function subscribeToAssetOwnerProfiles(
   const profiles = collection(db, 'households', householdId, 'assetOwnerProfiles');
   const stop = onSnapshot(
     profiles,
-    (snapshot) => {
+    {}, (snapshot) => {
       if (!active) return;
       const mappedProfiles = snapshot.docs
         .map((document, index) => mapProfile(householdId, document, index))

@@ -58,7 +58,7 @@ export function useAvailableHomeCurrencies(householdId: string | null) {
     setError(false);
     if (!householdId) return;
     let active = true;
-    const unsubscribe = onSnapshot(collection(db, 'households', householdId, 'localCurrencyBalances'), snapshot => {
+    const unsubscribe = onSnapshot(collection(db, 'households', householdId, 'localCurrencyBalances'), {}, snapshot => {
       if (active) setTypes(Array.from(new Set(snapshot.docs.map(document => document.data().localCurrencyType ?? document.id)
         .filter((value): value is string => typeof value === 'string' && value !== 'legacy-unknown'))).sort());
     }, () => { if (active) setError(true); });

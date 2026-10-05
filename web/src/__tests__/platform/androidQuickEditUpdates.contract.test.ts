@@ -31,7 +31,7 @@ describe('T-QE-009 actual Web bridge -> shared ledger projection', () => {
   function setup() {
     const render = jest.fn();
     const source = ledgerOptimisticProjection.subscribe(render, () => true, identity.householdId);
-    source.publish([original]);
+    source.publish([original], 'server');
     const stop = startAndroidQuickEditUpdates(getClientSessionScope()!);
     cleanup.push(stop, () => source.dispose());
     return { render, source, stop };
@@ -66,7 +66,7 @@ describe('T-QE-009 actual Web bridge -> shared ledger projection', () => {
     await tick();
     expect(requests[2]).toEqual(expect.objectContaining({ operation: 'quick-edit.ack-update-feedback',
       payload: { ...identity, nativeSessionGeneration: 91, commandIds: [pending.commandId] } }));
-    source.publish([original]);
+    source.publish([original], 'server');
     expect(render).toHaveBeenLastCalledWith([expect.objectContaining({ memo: '수정', aggregateVersion: 2 })]);
   });
 
@@ -101,7 +101,7 @@ describe('T-QE-009 actual Web bridge -> shared ledger projection', () => {
     const { render, source } = setup();
     reply(requests[0], {}, 'UNKNOWN_OPERATION');
     await tick();
-    source.publish([{ ...original, memo: '서버 변경', aggregateVersion: 2 }]);
+    source.publish([{ ...original, memo: '서버 변경', aggregateVersion: 2 }], 'server');
     expect(render).toHaveBeenLastCalledWith([expect.objectContaining({ memo: '서버 변경' })]);
     expect(requests).toHaveLength(1);
   });
@@ -115,7 +115,7 @@ describe('T-QE-009 actual Web bridge -> shared ledger projection', () => {
     const render = jest.fn();
     const source = ledgerOptimisticProjection.subscribe(render, () => true, identity.householdId);
     cleanup.push(() => source.dispose());
-    source.publish([original]);
+    source.publish([original], 'server');
     expect(render).toHaveBeenLastCalledWith([original]);
   });
 

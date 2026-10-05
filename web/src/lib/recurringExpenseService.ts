@@ -74,7 +74,7 @@ export function subscribeToRecurringExpenses(
 
   const unsubscribe = onSnapshot(
     q,
-    (snapshot) => {
+    {}, (snapshot) => {
       const expenses: RecurringExpense[] = snapshot.docs.map((doc) => {
         const data = doc.data();
         return {

@@ -127,7 +127,7 @@ function cryptoHolding(overrides: Partial<CryptoHolding> = {}): CryptoHolding {
 function snapshotAsset(value: Asset | StockHolding | CryptoHolding): { id: string; data: () => Record<string, unknown> } {
   if ('assetId' in value && !portfolioOptimisticProjection.current(value.assetId)) {
     const parents = portfolioOptimisticProjection.subscribe(() => {}, 'house-1');
-    parents.publish([asset({ id: value.assetId, type: 'stock' })]);
+    parents.publish([asset({ id: value.assetId, type: 'stock' })], 'server');
   }
   const { id, ...data } = value;
   return {

@@ -23,7 +23,7 @@ describe('Ledger optimistic projection contract', () => {
     const projection = new LedgerOptimisticProjection();
     const callback = jest.fn();
     const subscription = projection.subscribe(callback, () => true);
-    subscription.publish([]);
+    subscription.publish([], 'server');
 
     const mutationId = projection.beginCreate(expense());
     expect(callback).toHaveBeenLastCalledWith([expense()]);
@@ -44,8 +44,8 @@ describe('Ledger optimistic projection contract', () => {
       yearly,
       (item) => item.date.startsWith('2026-')
     );
-    monthlySubscription.publish([expense()]);
-    yearlySubscription.publish([expense()]);
+    monthlySubscription.publish([expense()], 'server');
+    yearlySubscription.publish([expense()], 'server');
     monthly.mockClear();
     yearly.mockClear();
 
@@ -65,8 +65,8 @@ describe('Ledger optimistic projection contract', () => {
     const yearly = jest.fn();
     const monthlySubscription = projection.subscribe(monthly, () => true);
     const yearlySubscription = projection.subscribe(yearly, () => true);
-    monthlySubscription.publish([expense()]);
-    yearlySubscription.publish([expense()]);
+    monthlySubscription.publish([expense()], 'server');
+    yearlySubscription.publish([expense()], 'server');
 
     const mutationId = projection.beginUpdate('expense-1', { memo: '확정 메모' });
     projection.commitUpdate(
@@ -75,7 +75,7 @@ describe('Ledger optimistic projection contract', () => {
     );
     monthlySubscription.publish([
       expense({ aggregateVersion: 4, memo: '확정 메모' }),
-    ]);
+    ], 'server');
 
     expect(yearly).toHaveBeenLastCalledWith([
       expect.objectContaining({ aggregateVersion: 4, memo: '확정 메모' }),
@@ -83,7 +83,7 @@ describe('Ledger optimistic projection contract', () => {
 
     yearlySubscription.publish([
       expense({ aggregateVersion: 4, memo: '확정 메모' }),
-    ]);
+    ], 'server');
     expect(yearly).toHaveBeenLastCalledWith([
       expect.objectContaining({ aggregateVersion: 4, memo: '확정 메모' }),
     ]);
@@ -96,7 +96,7 @@ describe('Ledger optimistic projection contract', () => {
       callback,
       (item) => item.date.startsWith('2026-07')
     );
-    subscription.publish([expense()]);
+    subscription.publish([expense()], 'server');
 
     projection.beginUpdate('expense-1', { date: '2026-08-01' });
 
@@ -107,7 +107,7 @@ describe('Ledger optimistic projection contract', () => {
     const projection = new LedgerOptimisticProjection();
     const callback = jest.fn();
     const subscription = projection.subscribe(callback, () => true);
-    subscription.publish([expense()]);
+    subscription.publish([expense()], 'server');
     callback.mockClear();
 
     projection.beginUpdate('expense-1', { memo: '새 메모', amount: 20_000 });
@@ -121,10 +121,10 @@ describe('Ledger optimistic projection contract', () => {
     const projection = new LedgerOptimisticProjection();
     const callback = jest.fn();
     const subscription = projection.subscribe(callback, () => true);
-    subscription.publish([expense()]);
+    subscription.publish([expense()], 'server');
 
     const mutationId = projection.beginUpdate('expense-1', { memo: '실패할 메모' });
-    subscription.publish([expense({ merchant: '다른 화면에서 바뀐 가맹점' })]);
+    subscription.publish([expense({ merchant: '다른 화면에서 바뀐 가맹점' })], 'server');
     projection.rollback(mutationId);
 
     expect(callback).toHaveBeenLastCalledWith([
@@ -139,7 +139,7 @@ describe('Ledger optimistic projection contract', () => {
     const projection = new LedgerOptimisticProjection();
     const callback = jest.fn();
     const subscription = projection.subscribe(callback, () => true);
-    subscription.publish([expense()]);
+    subscription.publish([expense()], 'server');
 
     const mutationId = projection.beginDelete('expense-1');
     expect(callback).toHaveBeenLastCalledWith([]);
@@ -152,16 +152,16 @@ describe('Ledger optimistic projection contract', () => {
     const projection = new LedgerOptimisticProjection();
     const callback = jest.fn();
     const subscription = projection.subscribe(callback, () => true);
-    subscription.publish([expense()]);
+    subscription.publish([expense()], 'server');
 
     const mutationId = projection.beginUpdate('expense-1', { memo: '새 메모' });
     projection.commitUpdate(mutationId, expense({ aggregateVersion: 4, memo: '새 메모' }));
-    subscription.publish([expense()]);
+    subscription.publish([expense()], 'server');
     expect(callback).toHaveBeenLastCalledWith([
       expect.objectContaining({ aggregateVersion: 4, memo: '새 메모' }),
     ]);
 
-    subscription.publish([expense({ aggregateVersion: 4, memo: '새 메모' })]);
+    subscription.publish([expense({ aggregateVersion: 4, memo: '새 메모' })], 'server');
     expect(callback).toHaveBeenLastCalledWith([
       expect.objectContaining({ aggregateVersion: 4, memo: '새 메모' }),
     ]);
@@ -182,8 +182,8 @@ describe('Ledger optimistic projection contract', () => {
     const secondHousehold = jest.fn();
     const first = projection.subscribe(firstHousehold, () => true, 'household-a');
     const second = projection.subscribe(secondHousehold, () => true, 'household-b');
-    first.publish([]);
-    second.publish([]);
+    first.publish([], 'server');
+    second.publish([], 'server');
 
     projection.beginCreate(expense(), 'household-a');
 
@@ -211,7 +211,7 @@ describe('Ledger optimistic projection contract', () => {
       splitTotal: 2,
     });
 
-    subscription.publish([restored, stalePart]);
+    subscription.publish([restored, stalePart], 'server');
 
     expect(callback).toHaveBeenLastCalledWith([restored]);
   });
@@ -229,7 +229,7 @@ describe('Ledger optimistic projection contract', () => {
       splitTotal: 2,
     });
 
-    subscription.publish([part]);
+    subscription.publish([part], 'server');
 
     expect(callback).toHaveBeenLastCalledWith([part]);
   });

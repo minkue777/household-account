@@ -8,6 +8,7 @@ jest.mock('@/platform/read-model/firestoreReadModel', () => ({
   getDocs: (...args: unknown[]) => mockGetDocs(...args),
   getDoc: (...args: unknown[]) => mockGetDoc(...args),
   onSnapshot: (...args: unknown[]) => mockOnSnapshot(...args),
+  onDocumentSnapshot: (...args: unknown[]) => mockOnSnapshot(...args),
 }));
 jest.mock('@/composition/clientSessionScope', () => ({ requireClientSessionScope: () => ({ householdId: 'house' }) }));
 
@@ -41,8 +42,8 @@ describe('[MER-003][MER-004] canonical 가맹점 규칙 조회', () => {
     const stop = subscribeToRules('house', publish, jest.fn());
     const meta = mockOnSnapshot.mock.calls.find(([reference]) => reference.path.endsWith('/merchant-rules'))!;
     const rules = mockOnSnapshot.mock.calls.find(([reference]) => reference.path.endsWith('/merchantRules'))!;
-    const publishRules = () => rules[1]({ docs: [ruleDocument] });
-    const publishMeta = () => meta[1](metadata);
+    const publishRules = () => rules[2]({ docs: [ruleDocument] });
+    const publishMeta = () => meta[2](metadata);
     (rulesFirst ? publishRules : publishMeta)();
     expect(publish).not.toHaveBeenCalled();
     (rulesFirst ? publishMeta : publishRules)();
@@ -55,16 +56,16 @@ describe('[MER-003][MER-004] canonical 가맹점 규칙 조회', () => {
     const failed = jest.fn();
     const stop = subscribeToRules('house', publish, failed);
     const [meta, rules] = mockOnSnapshot.mock.calls;
-    meta[1](metadata);
-    rules[1]({ docs: [ruleDocument] });
+    meta[2](metadata);
+    rules[2]({ docs: [ruleDocument] });
     const error = new Error('permission-denied');
-    mockOnSnapshot.mock.calls[index][2](error);
+    mockOnSnapshot.mock.calls[index][3](error);
     expect(failed).toHaveBeenCalledWith(error);
-    rules[1]({ docs: [] });
+    rules[2]({ docs: [] });
     expect(publish).toHaveBeenCalledTimes(1);
     expect(publish).toHaveBeenLastCalledWith([expect.objectContaining(expected)]);
     stop();
-    meta[1](metadata);
+    meta[2](metadata);
     expect(publish).toHaveBeenCalledTimes(1);
   });
 

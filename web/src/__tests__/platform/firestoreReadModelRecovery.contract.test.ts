@@ -25,51 +25,49 @@ jest.mock('@/platform/functions-api/firebaseCallableRecovery', () => ({
 
 jest.mock('@/lib/firebase', () => ({ db: {} }));
 
-import { onSnapshot } from '@/platform/read-model/firestoreReadModel';
+import { onSnapshot, onDocumentSnapshot, collection, doc, db } from '@/platform/read-model/firestoreReadModel';
 
-describe('Firestore listener 인증 복구 경계 계약', () => {
+describe.each(['query', 'document'])('Firestore %s listener 인증 복구 경계', kind => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockFirebaseOnSnapshot.mockReturnValue(jest.fn());
     mockRequestMembershipResolution.mockReturnValue(false);
   });
 
-  it('listener의 permission-denied는 Membership 복구만 시작해 Android 인증 복구와 경합하지 않는다', () => {
+  function subscribe(next: jest.Mock, error?: jest.Mock) {
+    return kind === 'query'
+      ? onSnapshot(collection(db, 'households'), { includeMetadataChanges: true }, next, error)
+      : onDocumentSnapshot(doc(db, 'households', 'one'), { includeMetadataChanges: true }, next, error);
+  }
+
+  test.each(['permission-denied', 'firestore/permission-denied'])('%s는 Membership 복구만 시작한다', code => {
     mockRequestMembershipResolution.mockReturnValue(true);
-    const originalError = jest.fn();
-    const subscribe = onSnapshot as unknown as (
-      query: unknown,
-      next: (snapshot: unknown) => void,
-      error: (failure: unknown) => void
-    ) => () => void;
-
-    subscribe({}, jest.fn(), originalError);
-    const wrappedError = mockFirebaseOnSnapshot.mock.calls[0][2] as (
-      error: unknown
-    ) => void;
-    const failure = { code: 'firestore/permission-denied' };
-    wrappedError(failure);
-
+    const failed = jest.fn();
+    subscribe(jest.fn(), failed);
+    const failure = { code };
+    mockFirebaseOnSnapshot.mock.calls[0][3](failure);
     expect(mockRequestMembershipResolution).toHaveBeenCalledWith(failure);
     expect(mockRequestRemoteSessionRecovery).not.toHaveBeenCalled();
-    expect(originalError).toHaveBeenCalledWith(failure);
+    expect(failed).toHaveBeenCalledWith(failure);
   });
 
-  it('Membership 권한 오류가 아닌 listener 실패는 Android 원격 인증 복구 경계로 전달한다', () => {
-    const subscribe = onSnapshot as unknown as (
-      query: unknown,
-      next: (snapshot: unknown) => void,
-      error: (failure: unknown) => void
-    ) => () => void;
+  test.each(['unauthenticated', 'firestore/unauthenticated', 'unavailable', 'deadline-exceeded', 'failed-precondition', 'internal'])('%s 오류를 전달하며 인증 만료만 원격 세션을 복구한다', code => {
+    const next = jest.fn(), failed = jest.fn();
+    const stop = subscribe(next, failed);
+    const failure = { code };
+    const [, options, callback, error] = mockFirebaseOnSnapshot.mock.calls[0];
+    expect(options).toEqual({ includeMetadataChanges: true });
+    expect(callback).toBe(next);
+    error(failure);
+    expect(failed).toHaveBeenCalledWith(failure);
+    expect(mockRequestRemoteSessionRecovery).toHaveBeenCalledTimes(code.endsWith('unauthenticated') ? 1 : 0);
+    stop();
+    expect(mockFirebaseOnSnapshot.mock.results[0].value).toHaveBeenCalledTimes(1);
+  });
 
-    subscribe({}, jest.fn(), jest.fn());
-    const wrappedError = mockFirebaseOnSnapshot.mock.calls[0][2] as (
-      error: unknown
-    ) => void;
-    const failure = { code: 'firestore/unauthenticated' };
-    wrappedError(failure);
-
-    expect(mockRequestMembershipResolution).toHaveBeenCalledWith(failure);
+  test('오류 callback 없는 구독도 복구를 요청한다', () => {
+    subscribe(jest.fn());
+    expect(() => mockFirebaseOnSnapshot.mock.calls[0][3]({ code: 'unauthenticated' })).not.toThrow();
     expect(mockRequestRemoteSessionRecovery).toHaveBeenCalledTimes(1);
   });
 });

@@ -26,7 +26,7 @@ function setup() {
   const projection = new LedgerOptimisticProjection();
   const render = jest.fn();
   const source = projection.subscribe(render, () => true, 'house-1', 'month');
-  source.publish([original]);
+  source.publish([original], 'server');
   const ack = jest.fn();
   const feedback = new QuickEditLedgerFeedback(projection, 'house-1', ack);
   return { projection, render, source, ack, feedback };
@@ -36,7 +36,7 @@ describe('T-QE-009 QuickEdit uses the ordinary ledger optimistic lifecycle', () 
   it('서버 응답 없이 메모·카테고리·금액·태그 제거를 월/연 목록에 즉시 표시한다', () => {
     const { projection, render, ack, feedback } = setup();
     const yearly = jest.fn();
-    projection.subscribe(yearly, () => true, 'house-1').publish([original]);
+    projection.subscribe(yearly, () => true, 'house-1').publish([original], 'server');
     feedback.receive(snapshot([pending]));
     const expected = [expect.objectContaining({ memo: '새 메모', category: '생활비', amount: 9_000, tags: [], aggregateVersion: 4 })];
     expect(render).toHaveBeenLastCalledWith(expected);
@@ -53,23 +53,23 @@ describe('T-QE-009 QuickEdit uses the ordinary ledger optimistic lifecycle', () 
     feedback.receive(snapshot([succeeded]));
     expect(ack).toHaveBeenLastCalledWith([pending.commandId], 19);
     feedback.receive(snapshot([])); // Native acknowledged and dropped its completion
-    source.publish([original]);
+    source.publish([original], 'server');
     expect(render).toHaveBeenLastCalledWith([expect.objectContaining({ memo: '새 메모', aggregateVersion: 4 })]);
     source.dispose();
     const next = projection.subscribe(render, () => true, 'house-1', 'month');
-    next.publish([original]);
+    next.publish([original], 'server');
     expect(render).toHaveBeenLastCalledWith([expect.objectContaining({ memo: '새 메모', aggregateVersion: 4 })]);
-    next.publish([{ ...original, memo: '다른 최신 수정', aggregateVersion: 5 }]);
+    next.publish([{ ...original, memo: '다른 최신 수정', aggregateVersion: 5 }], 'server');
     expect(render).toHaveBeenLastCalledWith([expect.objectContaining({ memo: '다른 최신 수정', aggregateVersion: 5 })]);
   });
 
   it('서버 충돌/거부는 해당 overlay만 제거하고 더 최신 원장과 다른 편집을 보존한다', () => {
     const { projection, render, source, feedback } = setup();
     const second = { ...original, id: 'expense-2' };
-    source.publish([original, second]);
+    source.publish([original, second], 'server');
     projection.beginUpdate(second.id, { memo: '일반 편집' }, 'house-1');
     feedback.receive(snapshot([pending]));
-    source.publish([{ ...original, memo: '다른 기기의 변경', aggregateVersion: 5 }, second]);
+    source.publish([{ ...original, memo: '다른 기기의 변경', aggregateVersion: 5 }, second], 'server');
     // Even before the conflict response, the old native patch cannot mask version 5.
     expect(render.mock.calls.at(-1)?.[0]).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: original.id, memo: '다른 기기의 변경', aggregateVersion: 5 }),
@@ -87,13 +87,13 @@ describe('T-QE-009 QuickEdit uses the ordinary ledger optimistic lifecycle', () 
     feedback.receive(snapshot([pending]));
     const render = jest.fn();
     const source = projection.subscribe(render, () => true, 'house-1');
-    source.publish([original]);
+    source.publish([original], 'server');
     expect(render).toHaveBeenLastCalledWith([expect.objectContaining({ memo: '새 메모', aggregateVersion: 4 })]);
   });
 
   it('화면이 없을 때 완료된 수정은 canonical로 반영하고 이미 최신이면 역전하지 않는다', () => {
     const { render, source, feedback } = setup();
-    source.publish([{ ...original, memo: '더 최신', aggregateVersion: 6 }]);
+    source.publish([{ ...original, memo: '더 최신', aggregateVersion: 6 }], 'server');
     feedback.receive(snapshot([succeeded]));
     expect(render).toHaveBeenLastCalledWith([expect.objectContaining({ memo: '더 최신', aggregateVersion: 6 })]);
   });
@@ -120,13 +120,13 @@ describe('T-QE-009 QuickEdit uses the ordinary ledger optimistic lifecycle', () 
   it.each(['before-pending', 'while-pending', 'after-success'])('다른 기기 삭제 뒤 늦은 Native 성공이 거래를 복원하지 않는다: %s', (timing) => {
     const { projection, render, source, feedback } = setup();
     const yearly = projection.subscribe(jest.fn(), () => true, 'house-1');
-    yearly.publish([original]); // A second read may still have an old row.
+    yearly.publish([original], 'server'); // A second read may still have an old row.
     if (timing !== 'before-pending') feedback.receive(snapshot([pending]));
     if (timing === 'after-success') feedback.receive(snapshot([succeeded]));
-    source.publish([]);
+    source.publish([], 'server');
     feedback.receive(snapshot([succeeded]));
     expect(render).toHaveBeenLastCalledWith([]);
-    source.publish([]);
+    source.publish([], 'server');
     expect(render).toHaveBeenLastCalledWith([]);
   });
 });

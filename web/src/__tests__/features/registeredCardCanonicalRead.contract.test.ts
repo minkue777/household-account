@@ -9,6 +9,7 @@ jest.mock('@/platform/read-model/firestoreReadModel', () => ({
   collection: (...segments: unknown[]) => mockCollection(...segments),
   doc: (...segments: unknown[]) => ({ kind: 'document', segments }),
   onSnapshot: (...args: unknown[]) => mockOnSnapshot(...args),
+  onDocumentSnapshot: (...args: unknown[]) => mockOnSnapshot(...args),
 }));
 
 jest.mock('@/features/payment-configuration/application/paymentConfigurationCommands', () => ({

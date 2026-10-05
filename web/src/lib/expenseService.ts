@@ -456,7 +456,7 @@ function subscribeToMonthlyTransactionSource(
     publish: snapshot => projection.publish(snapshot.docs.flatMap(document => {
       const data = document.data();
       return isVisibleLedgerReadDocument(data) ? [mapExpenseReadData(document.id, data)] : [];
-    })),
+    }), 'server'),
     listen: () => {
       recordClientStartupTiming('ledgerListenStarted');
       return onSnapshot(q, { includeMetadataChanges: true }, snapshot => {
@@ -465,7 +465,7 @@ function subscribeToMonthlyTransactionSource(
         // Lite does not seed the watch cache or its incremental cursor.
         if (!hasServerSnapshot && snapshot.metadata.fromCache) return;
         hasServerSnapshot = true;
-        projection.publish(readSnapshot(snapshot));
+        projection.publish(readSnapshot(snapshot), snapshot.metadata?.fromCache === false ? 'server' : 'cache');
       }, error => { if (active && getClientSessionScope() === scope) onError?.(error); });
     },
   });
@@ -568,14 +568,13 @@ export function subscribeToDateRangeExpenses(
 
   const readSnapshot = createExpenseSnapshotReader();
   recordClientStartupTiming('yearSummaryListenStarted');
-  const unsubscribe = onSnapshot(q, (snapshot) => {
-    if (active && getClientSessionScope() === scope) {
-      recordClientStartupTiming('yearSummaryFirstSnapshotReceived');
-      if (snapshot.metadata?.fromCache === false) recordClientStartupTiming('yearSummaryServerSnapshotReceived');
-    }
-    projection.publish(readSnapshot(snapshot));
+  const unsubscribe = onSnapshot(q, { includeMetadataChanges: true }, (snapshot) => {
+    if (!active || getClientSessionScope() !== scope) return;
+    recordClientStartupTiming('yearSummaryFirstSnapshotReceived');
+    if (!snapshot.metadata.fromCache) recordClientStartupTiming('yearSummaryServerSnapshotReceived');
+    projection.publish(readSnapshot(snapshot), snapshot.metadata?.fromCache === false ? 'server' : 'cache');
   }, (error) => {
-    options.onError?.(error);
+    if (active && getClientSessionScope() === scope) options.onError?.(error);
   });
 
   return () => {

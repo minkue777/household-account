@@ -235,7 +235,8 @@ export default function SearchModal({
           const searchResults = await searchExpenses(keyword, { transactionType, sourceWindow: session.sourceWindow });
           if (!isCurrentRequest()) return;
           if (preserveView) refreshScrollTopRef.current = resultsContainerRef.current?.scrollTop ?? null;
-          currentProjection.publish(searchResults);
+          // 검색창의 준비된 source는 재사용되므로 새로운 서버 확인으로 세지 않는다.
+          currentProjection.publish(searchResults, 'cache');
           if (preserveView) {
             setExpandedMonth(currentMonth => currentMonth === null
               || searchResults.some(expense => expense.date.substring(0, 7) === currentMonth)

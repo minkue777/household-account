@@ -1,5 +1,5 @@
 import { getClientSessionScope } from '@/composition/clientSessionScope';
-import { db, doc, onSnapshot, type DocumentData } from './firestoreReadModel';
+import { db, doc, onDocumentSnapshot as onSnapshot, type DocumentData } from './firestoreReadModel';
 import { subscribeWithInitialHomeRead } from './initialHomeRead';
 import { recordClientStartupTiming } from '@/platform/performance/clientStartupDiagnostics';
 

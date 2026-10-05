@@ -4,7 +4,7 @@
  * 이 모듈은 Query/listener API만 노출합니다. Command 측 변경 API와
  * transaction/batch API는 Functions 경계를 거치도록 의도적으로 제외합니다.
  */
-import { onSnapshot as firebaseOnSnapshot } from 'firebase/firestore';
+import { onSnapshot as firebaseOnSnapshot, type DocumentData, type DocumentReference, type DocumentSnapshot, type FirestoreError, type Query, type QuerySnapshot, type SnapshotListenOptions } from 'firebase/firestore';
 import { requestRemoteSessionRecovery } from '@/platform/functions-api/firebaseCallableRecovery';
 import { requestMembershipResolution } from '@/features/access-household/application/membershipResolutionRecovery';
 
@@ -31,58 +31,34 @@ export {
 
 export { db } from '@/lib/firebase';
 
-type FirestoreListener = (...args: unknown[]) => () => void;
+/** Listener 종료 뒤 필요한 권한/인증 복구만 요청하고 원래 오류를 전달한다. */
+function listenerError(onError?: (error: FirestoreError) => void) {
+  return (error: FirestoreError) => {
+    if (!requestMembershipResolution(error)
+      && (error.code === 'unauthenticated' || String(error.code) === 'firestore/unauthenticated')) {
+      requestRemoteSessionRecovery();
+    }
+    onError?.(error);
+  };
+}
 
-/**
- * Firestore listener는 error callback 뒤 자동 재개되지 않습니다. Android 인증이
- * 만료된 경우 Context의 단일 복구 경로를 깨우고, 복구 epoch가 모든 구독을 다시
- * 생성하도록 합니다. 원래 listener overload와 callback 동작은 그대로 보존합니다.
- */
-export const onSnapshot = ((...rawArguments: unknown[]) => {
-  const args = [...rawArguments];
-  const secondArgument = args[1];
-  const secondArgumentIsObserver =
-    typeof secondArgument === 'object'
-    && secondArgument !== null
-    && 'next' in secondArgument;
-  const callbackIndex =
-    typeof secondArgument === 'function' || secondArgumentIsObserver ? 1 : 2;
-  const callbackOrObserver = args[callbackIndex];
+export function onSnapshot<App extends DocumentData, Stored extends DocumentData>(
+  query: Query<App, Stored>,
+  options: SnapshotListenOptions,
+  next: (snapshot: QuerySnapshot<App, Stored>) => void,
+  onError?: (error: FirestoreError) => void,
+): () => void {
+  return firebaseOnSnapshot(query, options, next, listenerError(onError));
+}
 
-  if (
-    typeof callbackOrObserver === 'object'
-    && callbackOrObserver !== null
-    && 'next' in callbackOrObserver
-  ) {
-    const observer = callbackOrObserver as {
-      next?: unknown;
-      error?: (error: unknown) => void;
-      complete?: unknown;
-    };
-    args[callbackIndex] = {
-      ...observer,
-      error: (error: unknown) => {
-        if (!requestMembershipResolution(error)) {
-          requestRemoteSessionRecovery();
-        }
-        observer.error?.(error);
-      },
-    };
-  } else {
-    const errorIndex = callbackIndex + 1;
-    const originalError = args[errorIndex];
-    args[errorIndex] = (error: unknown) => {
-      if (!requestMembershipResolution(error)) {
-        requestRemoteSessionRecovery();
-      }
-      if (typeof originalError === 'function') {
-        (originalError as (value: unknown) => void)(error);
-      }
-    };
-  }
-
-  return (firebaseOnSnapshot as unknown as FirestoreListener)(...args);
-}) as typeof firebaseOnSnapshot;
+export function onDocumentSnapshot<App extends DocumentData, Stored extends DocumentData>(
+  document: DocumentReference<App, Stored>,
+  options: SnapshotListenOptions,
+  next: (snapshot: DocumentSnapshot<App, Stored>) => void,
+  onError?: (error: FirestoreError) => void,
+): () => void {
+  return firebaseOnSnapshot(document, options, next, listenerError(onError));
+}
 
 interface TimestampLike {
   toDate(): Date;

@@ -1,7 +1,7 @@
 import { subscribeWithInitialHomeRead } from '@/platform/read-model/initialHomeRead';
 import {
   doc,
-  onSnapshot,
+  onDocumentSnapshot as onSnapshot,
   db,
 } from '@/platform/read-model/firestoreReadModel';
 import { CategoryDocument } from '@/types/category';

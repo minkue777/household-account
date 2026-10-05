@@ -1033,7 +1033,7 @@ export function subscribeToAssets(
   captureStartupEntities(authoritativeState, initialAssets ?? []);
   const projection = portfolioOptimisticProjection.subscribe(callback, householdId);
   if (initialAssets !== undefined) {
-    projection.publish(initialAssets);
+    projection.publish(initialAssets, 'cache');
   }
 
   const q = collection(db, 'households', householdId, 'assets');
@@ -1065,7 +1065,7 @@ export function subscribeToAssets(
       onSourceSnapshot?.(assets, {
         fromCache: snapshot.metadata.fromCache,
       });
-      projection.publish(assets);
+      projection.publish(assets, snapshot.metadata.fromCache ? 'cache' : 'server');
     },
     (error) => {
       if (!active || queueGeneration !== assetUpdateQueueGeneration
@@ -1771,7 +1771,7 @@ export function subscribeToHouseholdStockHoldings(
           holdings
         );
       }
-      projection.publish(holdings);
+      projection.publish(holdings, snapshot.metadata.fromCache ? 'cache' : 'server');
     },
     (error) => {
       if (!active || queueGeneration !== assetUpdateQueueGeneration
@@ -1855,7 +1855,7 @@ export function subscribeToHouseholdCryptoHoldings(
           holdings
         );
       }
-      projection.publish(holdings);
+      projection.publish(holdings, snapshot.metadata.fromCache ? 'cache' : 'server');
     },
     (error) => {
       if (!active || queueGeneration !== assetUpdateQueueGeneration

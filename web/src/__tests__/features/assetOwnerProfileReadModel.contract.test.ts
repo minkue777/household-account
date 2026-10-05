@@ -26,6 +26,7 @@ const { collection: mockCollection, onSnapshot: mockOnSnapshot } = jest.requireM
   ) => ProfileReference>;
   onSnapshot: jest.MockedFunction<(
     reference: ProfileReference,
+    options: object,
     next: (snapshot: ProfileSnapshot) => void,
     error: (error: Error) => void,
   ) => () => void>;
@@ -41,7 +42,7 @@ describe('자산 명의자 Firestore 읽기 모델 계약', () => {
     const unsubscribe = jest.fn();
     let publish: ((snapshot: ProfileSnapshot) => void) | undefined;
     mockCollection.mockReturnValue(reference);
-    mockOnSnapshot.mockImplementation((_reference, next) => {
+    mockOnSnapshot.mockImplementation((_reference, _options, next) => {
       publish = next;
       return unsubscribe;
     });
@@ -161,7 +162,7 @@ describe('자산 명의자 Firestore 읽기 모델 계약', () => {
     const errorListener = jest.fn();
     let reject: ((error: Error) => void) | undefined;
     mockCollection.mockReturnValue({ path: 'households/house-1/assetOwnerProfiles' });
-    mockOnSnapshot.mockImplementation((_reference, _next, error) => {
+    mockOnSnapshot.mockImplementation((_reference, _options, _next, error) => {
       reject = error;
       return jest.fn();
     });

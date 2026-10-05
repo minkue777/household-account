@@ -2,6 +2,7 @@ import {
   collection,
   doc,
   onSnapshot,
+  onDocumentSnapshot,
   db,
   type QueryDocumentSnapshot,
 } from '@/platform/read-model/firestoreReadModel';
@@ -117,14 +118,14 @@ export function subscribeToRules(
   const publish = () => {
     if (active && latestRules !== undefined && versions !== undefined) callback(latestRules.map((rule) => ({ ...rule, collectionVersion: versions![`${householdId}:${rule.matchType}`] ?? 0 })));
   };
-  const stopMeta = onSnapshot(doc(db, 'households', householdId, 'paymentConfigurationMeta', 'merchant-rules'), (snapshot) => {
+  const stopMeta = onDocumentSnapshot(doc(db, 'households', householdId, 'paymentConfigurationMeta', 'merchant-rules'), {}, (snapshot) => {
     versions = snapshot.data()?.collectionVersions ?? {};
     publish();
   }, fail);
   let unsubscribe: () => void;
   try { unsubscribe = onSnapshot(
     q,
-    (snapshot) => {
+    {}, (snapshot) => {
       const rules: MerchantRule[] = snapshot.docs.map(mapDocToRule);
       latestRules = rules;
       publish();

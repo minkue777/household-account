@@ -3,7 +3,7 @@ import type { Expense } from '@/types/expense';
 import { onSnapshot } from '@/platform/read-model/firestoreReadModel';
 import { getDocsFromServer, limit, where, orderBy, documentId, startAfter } from '@/platform/read-model/firestoreServerReadModel';
 import { ledgerOptimisticProjection } from '@/features/ledger/application/ledgerOptimisticProjection';
-import { requireClientSessionScope } from '@/composition/clientSessionScope';
+import { requireClientSessionScope, setClientSessionScope, getClientSessionScope, clearClientSessionScope } from '@/composition/clientSessionScope';
 
 jest.mock('@/composition/clientSessionScope', () => ({
   ...jest.requireActual('@/composition/clientSessionScope'),
@@ -373,13 +373,15 @@ describe('ledger search visibility contract', () => {
   });
 
   test('range listener failure retains the last successful data and reports the error', () => {
+    setClientSessionScope(requireClientSessionScope());
+    (requireClientSessionScope as jest.Mock).mockReturnValue(getClientSessionScope());
     let receive: (value: unknown) => void = () => {};
     let fail: (error: unknown) => void = () => {};
-    (onSnapshot as jest.Mock).mockImplementation((_query, next, error) => { receive = next; fail = error; return jest.fn(); });
+    (onSnapshot as jest.Mock).mockImplementation((_query, _options, next, error) => { receive = next; fail = error; return jest.fn(); });
     const values: unknown[] = [];
     const onError = jest.fn();
     const dispose = subscribeToDateRangeExpenses('2026-08-01', '2026-08-31', items => values.push(items), { onError });
-    receive({ docs: [ledgerDocument('last-success')] });
+    receive({ metadata: { fromCache: false }, docs: [ledgerDocument('last-success')] });
     const last = values.at(-1);
     const error = new Error('UNAVAILABLE');
     fail(error);
@@ -387,6 +389,11 @@ describe('ledger search visibility contract', () => {
     expect((values.at(-1) as Array<{id: string}>)[0].id).toBe('last-success');
     expect(onError).toHaveBeenCalledWith(error);
     dispose();
+    receive({ metadata: { fromCache: false }, docs: [] });
+    fail(new Error('LATE'));
+    expect(values.at(-1)).toEqual(last);
+    expect(onError).toHaveBeenCalledTimes(1);
+    clearClientSessionScope();
   });
 
   test('search returns only active transactions and prefers authoritative categoryId', async () => {

@@ -30,6 +30,15 @@ jest.mock('@/platform/read-model/firestoreReadModel', () => ({
     listeners.set(reference.kind, { next, error });
     return reference.kind === 'balances' ? unsubscribeBalances : unsubscribePreference;
   },
+  onDocumentSnapshot: (
+    reference: { kind: string },
+    _options: { includeMetadataChanges: boolean },
+    next: (snapshot: any) => void,
+    error: (error: unknown) => void
+  ) => {
+    listeners.set(reference.kind, { next, error });
+    return reference.kind === 'balances' ? unsubscribeBalances : unsubscribePreference;
+  },
   timestampToDate: (value: unknown) => value instanceof Date ? value : undefined,
 }));
 

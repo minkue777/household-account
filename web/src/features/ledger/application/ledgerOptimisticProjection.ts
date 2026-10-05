@@ -1,4 +1,4 @@
-import { OptimisticEntityProjection } from '@/platform/read-model/optimisticEntityProjection';
+import { OptimisticEntityProjection, type ProjectionSource } from '@/platform/read-model/optimisticEntityProjection';
 import { registerClientSessionReset } from '@/composition/clientSessionResetRegistry';
 import { compareLedgerTransactions } from '@/features/ledger/domain/ledgerTransactionOrder';
 import type { Expense } from '@/types/expense';
@@ -45,8 +45,8 @@ export class LedgerOptimisticProjection {
       retentionKey
     );
     return {
-      publish: (expenses: readonly Expense[]) => {
-        subscription.publish(expenses);
+      publish: (expenses: readonly Expense[], source: ProjectionSource) => {
+        subscription.publish(expenses, source);
         this.notifyChanges();
       },
       dispose: () => subscription.dispose(),

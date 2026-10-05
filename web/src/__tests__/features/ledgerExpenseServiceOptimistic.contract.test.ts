@@ -111,7 +111,7 @@ describe('ledger expense service optimistic canonical contract', () => {
     const rendered: Expense[][] = [];
     const subscription = ledgerOptimisticProjection.subscribe(items => rendered.push(items), () => true, 'house-1');
     const original = expense({ tags: ['여행'] });
-    subscription.publish([original]);
+    subscription.publish([original], 'server');
     let resolve!: (result: LedgerTransactionCommandResult) => void;
     let reject!: (error: Error) => void;
     mockedCommands.delete.mockReturnValue(new Promise((yes, no) => { resolve = yes; reject = no; }));
@@ -120,7 +120,7 @@ describe('ledger expense service optimistic canonical contract', () => {
     if (outcome === '성공') {
       resolve(commandResult({ lifecycleState: 'deleted' }));
       await deletion;
-      subscription.publish([original]);
+      subscription.publish([original], 'server');
       expect(rendered.at(-1)).toEqual([]);
     } else {
       const rejected = expect(deletion).rejects.toThrow('DELETE_REJECTED');
@@ -147,7 +147,7 @@ describe('ledger expense service optimistic canonical contract', () => {
     const subscription = ledgerOptimisticProjection.subscribe(items => rendered.push(items),
       item => item.tags?.includes('2026부산여행') === true, 'house-1');
     const original = expense({ tags: ['2026부산여행'] });
-    subscription.publish([original]);
+    subscription.publish([original], 'server');
     let reject!: (error: Error) => void;
     mockedCommands.update.mockReturnValue(new Promise((_, no) => { reject = no; }));
     const operation = updateExpense(original.id, { tags: [] }, original.aggregateVersion);
@@ -163,7 +163,7 @@ describe('ledger expense service optimistic canonical contract', () => {
     const subscription = ledgerOptimisticProjection.subscribe(items => rendered.push(items), () => true, 'house-1');
     const target = expense({ id: 'target', tags: ['2026부산여행', '휴가'], mergedFrom: undefined });
     const source = expense({ id: 'source', tags: ['2026부산여행', '가족모임'], mergedFrom: undefined });
-    subscription.publish([target, source]);
+    subscription.publish([target, source], 'server');
     mockedCommands.merge.mockResolvedValue({ transactionId: 'merged:merge-command-default' });
     await mergeExpenses(target, source);
     expect(rendered.at(-1)?.[0].tags).toEqual(['2026부산여행', '휴가', '가족모임']);
@@ -179,7 +179,7 @@ describe('ledger expense service optimistic canonical contract', () => {
     let reject!: (error: Error) => void;
     const response = new Promise<LedgerTransactionCommandResult>((yes, no) => { resolve = yes; reject = no; });
     const oldSubscription = ledgerOptimisticProjection.subscribe(() => {}, () => true, 'house-1');
-    oldSubscription.publish([expense()]);
+    oldSubscription.publish([expense()], 'server');
     mockedCommands.update.mockReturnValue(response);
     mockedCommands.changeCategory.mockReturnValue(response);
     const operation = kind === 'update'
@@ -190,7 +190,7 @@ describe('ledger expense service optimistic canonical contract', () => {
     const rendered: Expense[][] = [];
     const newSubscription = ledgerOptimisticProjection.subscribe(items => rendered.push(items), () => true, 'house-1');
     const latest = expense({ aggregateVersion: 10, memo: 'new session', category: 'living' });
-    newSubscription.publish([latest]);
+    newSubscription.publish([latest], 'server');
     if (succeeds) {
       resolve(commandResult());
       await operation;
@@ -209,7 +209,7 @@ describe('ledger expense service optimistic canonical contract', () => {
       () => true,
       'house-1'
     );
-    subscription.publish([expense()]);
+    subscription.publish([expense()], 'server');
     mockedCommands.update.mockResolvedValue(commandResult());
     const lookup = jest.spyOn(OptimisticEntityProjection.prototype, 'current');
 
@@ -237,7 +237,7 @@ describe('ledger expense service optimistic canonical contract', () => {
       () => true,
       'house-1'
     );
-    subscription.publish([expense()]);
+    subscription.publish([expense()], 'server');
     mockedCommands.changeCategory.mockResolvedValue(
       commandResult({ categoryId: 'FOOD', memo: 'old memo' })
     );
@@ -280,7 +280,7 @@ describe('ledger expense service optimistic canonical contract', () => {
         amount: 6_000,
       }),
     ];
-    subscription.publish([original]);
+    subscription.publish([original], 'server');
     mockedCommands.split.mockResolvedValue(derived.map(({ id }) => id));
 
     await splitExpense(original, [
@@ -291,7 +291,7 @@ describe('ledger expense service optimistic canonical contract', () => {
     expect(rendered.at(-1)).toEqual([original]);
     expect(rendered).not.toContainEqual([]);
 
-    subscription.publish(derived);
+    subscription.publish(derived, 'server');
     expect(rendered.at(-1)).toHaveLength(2);
     expect(rendered.at(-1)).toEqual(expect.arrayContaining(derived));
     expect(rendered).not.toContainEqual([]);
@@ -315,7 +315,7 @@ describe('ledger expense service optimistic canonical contract', () => {
       splitIndex: 1,
       splitTotal: 2,
     });
-    subscription.publish([original]);
+    subscription.publish([original], 'server');
     mockedCommands.splitExistingMonthly.mockResolvedValue({
       transactionIds: [
         'monthly-split-derived-1',
@@ -331,7 +331,7 @@ describe('ledger expense service optimistic canonical contract', () => {
 
     // 현재 월 구독에는 첫 회차만 들어오며, Firestore transaction snapshot이
     // superseded 원본과 active 파생 항목을 한 번에 교체합니다.
-    subscription.publish([firstInstallment]);
+    subscription.publish([firstInstallment], 'server');
     expect(rendered.at(-1)).toEqual([firstInstallment]);
     expect(rendered).not.toContainEqual([]);
     subscription.dispose();
@@ -357,7 +357,7 @@ describe('ledger expense service optimistic canonical contract', () => {
       aggregateVersion: 5,
       mergedFrom: undefined,
     });
-    subscription.publish([target, source]);
+    subscription.publish([target, source], 'server');
     mockedCreateCommandId.mockReturnValue('merge-command-1');
     mockedCommands.merge.mockResolvedValue({
       transactionId: 'merged:merge-command-1',
@@ -401,7 +401,7 @@ describe('ledger expense service optimistic canonical contract', () => {
       amount: 6_000,
       mergedFrom: undefined,
     });
-    subscription.publish([target, source, third]);
+    subscription.publish([target, source, third], 'server');
     mockedCreateCommandId
       .mockReturnValueOnce('merge-command-1')
       .mockReturnValueOnce('merge-command-2');
@@ -445,7 +445,7 @@ describe('ledger expense service optimistic canonical contract', () => {
     );
     const target = expense({ id: 'target', amount: 10_000, mergedFrom: undefined });
     const source = expense({ id: 'source', amount: 4_000, mergedFrom: undefined });
-    subscription.publish([target, source]);
+    subscription.publish([target, source], 'server');
     mockedCreateCommandId.mockReturnValue('merge-command-rejected');
     mockedCommands.merge.mockRejectedValue(new Error('VERSION_MISMATCH'));
 

@@ -67,7 +67,7 @@ function asset(overrides: Partial<Asset> = {}): Asset {
 function holding(overrides: Partial<StockHolding> = {}): StockHolding {
   if (!portfolioOptimisticProjection.current(overrides.assetId ?? 'asset-1')) {
     const parents = portfolioOptimisticProjection.subscribe(() => {}, 'house-1');
-    parents.publish([asset({ id: overrides.assetId ?? 'asset-1', type: 'stock' })]);
+    parents.publish([asset({ id: overrides.assetId ?? 'asset-1', type: 'stock' })], 'server');
   }
   return replySource({
     id: 'position-1',
@@ -104,7 +104,7 @@ describe('portfolio asset service optimistic contract', () => {
       (items) => rendered.push(items),
       'house-1'
     );
-    subscription.publish([asset()]);
+    subscription.publish([asset()], 'server');
     const command = deferred<void>();
     mockedCommands.updateAsset.mockImplementation((...args) => { const reply = portfolioReplies.updateAsset(...args); return command.promise.then(() => reply); });
 
@@ -128,7 +128,7 @@ describe('portfolio asset service optimistic contract', () => {
       (items) => rendered.push(items),
       'house-1'
     );
-    subscription.publish([asset({ aggregateVersion: 3 })]);
+    subscription.publish([asset({ aggregateVersion: 3 })], 'server');
     const firstCommand = deferred<void>();
     mockedCommands.updateAsset.mockImplementationOnce((...args) => { const reply = portfolioReplies.updateAsset(...args); return firstCommand.promise.then(() => reply); });
 
@@ -177,7 +177,7 @@ describe('portfolio asset service optimistic contract', () => {
       (items) => rendered.push(items),
       'house-1'
     );
-    subscription.publish([asset({ aggregateVersion: 3 })]);
+    subscription.publish([asset({ aggregateVersion: 3 })], 'server');
     const firstCommand = deferred<void>();
     mockedCommands.updateAsset.mockImplementationOnce((...args) => { const reply = portfolioReplies.updateAsset(...args); return firstCommand.promise.then(() => reply); });
 
@@ -213,7 +213,7 @@ describe('portfolio asset service optimistic contract', () => {
       (items) => rendered.push(items),
       'house-1'
     );
-    subscription.publish([asset({ aggregateVersion: 3 })]);
+    subscription.publish([asset({ aggregateVersion: 3 })], 'server');
     const firstCommand = deferred<void>();
     const secondCommand = deferred<void>();
     mockedCommands.updateAsset
@@ -256,7 +256,7 @@ describe('portfolio asset service optimistic contract', () => {
     subscription.publish([
       asset({ id: 'asset-1', name: '첫 자산', order: 0 }),
       asset({ id: 'asset-2', name: '둘째 자산', order: 1 }),
-    ]);
+    ], 'server');
     const reorderCommand = deferred<void>();
     const updateCommand = deferred<void>();
     mockedCommands.reorderAssets.mockImplementationOnce((...args) => { const reply = portfolioReplies.reorderAssets(...args); return reorderCommand.promise.then(() => reply); });
@@ -294,7 +294,7 @@ describe('portfolio asset service optimistic contract', () => {
       (items) => firstRendered.push(items),
       'house-1'
     );
-    firstSubscription.publish([asset({ aggregateVersion: 3 })]);
+    firstSubscription.publish([asset({ aggregateVersion: 3 })], 'server');
     const oldFirstCommand = deferred<void>();
     const newFirstCommand = deferred<void>();
     const newSecondCommand = deferred<void>();
@@ -319,7 +319,7 @@ describe('portfolio asset service optimistic contract', () => {
       (items) => newRendered.push(items),
       'house-1'
     );
-    newSubscription.publish([asset({ aggregateVersion: 3 })]);
+    newSubscription.publish([asset({ aggregateVersion: 3 })], 'server');
     const newFirstPending = updateAsset('asset-1', { memo: '새 session 1' }, 3);
 
     oldFirstCommand.resolve();
@@ -355,7 +355,7 @@ describe('portfolio asset service optimistic contract', () => {
       (items) => rendered.push(items),
       'house-1'
     );
-    subscription.publish([asset()]);
+    subscription.publish([asset()], 'server');
     const command = deferred<void>();
     mockedCommands.updateAsset.mockImplementation((...args) => { const reply = portfolioReplies.updateAsset(...args); return command.promise.then(() => reply); });
 
@@ -373,7 +373,7 @@ describe('portfolio asset service optimistic contract', () => {
       (items) => rendered.push(items),
       'house-1'
     );
-    subscription.publish([asset()]);
+    subscription.publish([asset()], 'server');
 
     const precedingMutation = portfolioOptimisticProjection.beginUpdate('asset-1', {
       name: '다른 사용자의 이름',
@@ -418,8 +418,8 @@ describe('portfolio asset service optimistic contract', () => {
       (items) => holdings.push(items),
       (item) => item.assetId.startsWith('asset-')
     );
-    assetSubscription.publish([]);
-    holdingSubscription.publish([]);
+    assetSubscription.publish([], 'server');
+    holdingSubscription.publish([], 'server');
     mockedCommands.createAsset.mockImplementation(async (...args) => portfolioReplies.createAsset(...args));
     mockedCommands.addPosition.mockImplementation(async (...args) => portfolioReplies.addPosition(...args));
 
@@ -454,7 +454,7 @@ describe('portfolio asset service optimistic contract', () => {
       (items) => rendered.push(items),
       (item) => item.assetId === 'asset-1'
     );
-    subscription.publish([holding()]);
+    subscription.publish([holding()], 'server');
     const updateCommand = deferred<void>();
     mockedCommands.updatePosition.mockImplementation((...args) => { const reply = portfolioReplies.updatePosition(...args); return updateCommand.promise.then(() => reply); });
 
@@ -502,7 +502,7 @@ describe('portfolio asset service optimistic contract', () => {
       () => undefined,
       'house-1'
     );
-    oldSubscription.publish([asset()]);
+    oldSubscription.publish([asset()], 'server');
     const command = deferred<void>();
     mockedCommands.updateAsset.mockImplementation((...args) => { const reply = portfolioReplies.updateAsset(...args); return command.promise.then(() => reply); });
     const oldPending = updateAsset('asset-1', { memo: '이전 session 변경' }, 3);
@@ -515,7 +515,7 @@ describe('portfolio asset service optimistic contract', () => {
     );
     freshSubscription.publish([
       asset({ aggregateVersion: 10, name: '새 session 값', memo: '새 session 메모' }),
-    ]);
+    ], 'server');
 
     command.resolve();
     await oldPending;

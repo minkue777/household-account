@@ -33,8 +33,8 @@ describe('정기 지출의 읽기 실패와 정상 빈 목록 구분', () => {
     mockHousehold.remoteReadEpoch = 0;
     dispose = jest.fn();
     jest.mocked(onSnapshot).mockImplementation((...args: unknown[]) => {
-      emit = args[1] as typeof emit;
-      fail = args[2] as typeof fail;
+      emit = args[2] as typeof emit;
+      fail = args[3] as typeof fail;
       return dispose;
     });
   });

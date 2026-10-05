@@ -5,8 +5,8 @@ export interface VersionedEntity {
 
 interface ProjectionSubscription<Entity extends VersionedEntity> {
   base: Entity[];
-  hasPublished: boolean;
-  revision: number;
+  source: ProjectionSource;
+  serverRevision: number;
   readonly accept: (entity: Entity) => boolean;
   readonly callback: (entities: Entity[]) => void;
 }
@@ -16,15 +16,17 @@ interface PendingMutation<Entity extends VersionedEntity> {
   readonly kind: 'create' | 'update' | 'delete';
   readonly patch?: Partial<Entity>;
   readonly observedBy: ReadonlySet<number>;
-  readonly subscriptionRevisionAtBegin: ReadonlyMap<number, number>;
+  readonly serverRevisionAtBegin: ReadonlyMap<number, number>;
   readonly original?: Entity;
   canonical?: Entity;
   committed: boolean;
   readonly expectedVersion?: number;
 }
 
+export type ProjectionSource = 'server' | 'cache';
+
 export interface OptimisticProjectionSubscription<Entity> {
-  publish(entities: readonly Entity[]): void;
+  publish(entities: readonly Entity[], source: ProjectionSource): void;
   dispose(): void;
 }
 
@@ -56,8 +58,8 @@ export class OptimisticEntityProjection<Entity extends VersionedEntity> {
       : this.retainedSnapshots.get(retentionKey);
     const subscription: ProjectionSubscription<Entity> = {
       base: retained === undefined ? [] : [...retained],
-      hasPublished: retained !== undefined,
-      revision: 0,
+      source: 'cache',
+      serverRevision: 0,
       accept,
       callback,
     };
@@ -67,15 +69,15 @@ export class OptimisticEntityProjection<Entity extends VersionedEntity> {
       else this.emitAll();
     }
     return {
-      publish: (entities) => {
+      publish: (entities, source) => {
         const subscription = this.subscriptions.get(subscriptionId);
         if (!subscription) return;
         subscription.base = [...entities];
         if (retentionKey !== undefined) {
           this.retainedSnapshots.set(retentionKey, [...entities]);
         }
-        subscription.hasPublished = true;
-        subscription.revision += 1;
+        subscription.source = source;
+        if (source === 'server') subscription.serverRevision += 1;
         // A source read alone does not change other subscriptions. In the common
         // read-only path, avoid rendering every underlying screen behind a modal.
         if (this.pending.size === 0) this.emit(subscription);
@@ -219,9 +221,9 @@ export class OptimisticEntityProjection<Entity extends VersionedEntity> {
       : input.patch;
     const id = operationId(`${this.prefix}-optimistic`);
     const observedBy = new Set<number>();
-    const subscriptionRevisionAtBegin = new Map<number, number>();
+    const serverRevisionAtBegin = new Map<number, number>();
     this.subscriptions.forEach((subscription, subscriptionId) => {
-      subscriptionRevisionAtBegin.set(subscriptionId, subscription.revision);
+      serverRevisionAtBegin.set(subscriptionId, subscription.serverRevision);
       if (
         subscription.base.some(
           (entity) => entity.id === input.entityId && subscription.accept(entity)
@@ -237,7 +239,7 @@ export class OptimisticEntityProjection<Entity extends VersionedEntity> {
       ...(input.canonical ? { canonical: input.canonical } : {}),
       ...(original ? { original } : {}),
       observedBy,
-      subscriptionRevisionAtBegin,
+      serverRevisionAtBegin,
       committed: false,
       ...(input.expectedVersion === undefined ? {} : { expectedVersion: input.expectedVersion }),
     });
@@ -251,8 +253,8 @@ export class OptimisticEntityProjection<Entity extends VersionedEntity> {
       // only applies to its explicit expected-version hint, not Web date moves.
       if (mutation.expectedVersion !== undefined && mutation.original) {
         const removed = Array.from(this.subscriptions.entries()).some(([subscriptionId, subscription]) =>
-          mutation.observedBy.has(subscriptionId) && subscription.hasPublished
-          && subscription.revision > (mutation.subscriptionRevisionAtBegin.get(subscriptionId) ?? 0)
+          mutation.observedBy.has(subscriptionId) && subscription.source === 'server'
+          && subscription.serverRevision > (mutation.serverRevisionAtBegin.get(subscriptionId) ?? 0)
           && subscription.accept(mutation.canonical ?? mutation.original!)
           && !subscription.base.some((entity) => entity.id === mutation.entityId));
         if (removed) { this.pending.delete(id); return; }
@@ -272,17 +274,17 @@ export class OptimisticEntityProjection<Entity extends VersionedEntity> {
         if (relevantSubscriptions.length === 0) return;
         const confirmed = relevantSubscriptions.every(([
           subscriptionId,
-          { base, hasPublished, accept, revision },
+          { base, source, accept, serverRevision },
         ]) => {
-          if (!hasPublished) return false;
+          if (source !== 'server') return false;
           const current = base.find((entity) => entity.id === mutation.entityId);
           if (accept(mutation.canonical!)) {
             return current !== undefined
               && current.aggregateVersion >= mutation.canonical!.aggregateVersion;
           }
           if (!current) {
-            const revisionAtBegin = mutation.subscriptionRevisionAtBegin.get(subscriptionId);
-            return revisionAtBegin === undefined || revision > revisionAtBegin;
+            const serverRevisionAtBegin = mutation.serverRevisionAtBegin.get(subscriptionId);
+            return serverRevisionAtBegin === undefined || serverRevision > serverRevisionAtBegin;
           }
           return current.aggregateVersion >= mutation.canonical!.aggregateVersion
             && !accept(current);
@@ -293,7 +295,7 @@ export class OptimisticEntityProjection<Entity extends VersionedEntity> {
         // committed floor until at least one subscription has actually seen the canonical (or
         // a newer) entity; otherwise a route unsubscribe/resubscribe can resurrect stale data.
         const canonicalOrNewerObserved = Array.from(this.subscriptions.values()).some(
-          ({ base }) => base.some(
+          ({ base, source }) => source === 'server' && base.some(
             (entity) => entity.id === mutation.entityId
               && entity.aggregateVersion >= mutation.canonical!.aggregateVersion
           )
@@ -310,15 +312,11 @@ export class OptimisticEntityProjection<Entity extends VersionedEntity> {
         );
         if (observedSubscriptions.length === 0) return;
         const confirmed = observedSubscriptions.every(([subscriptionId, subscription]) => {
-          const revisionAtBegin = mutation.subscriptionRevisionAtBegin.get(subscriptionId);
-          // A subscription created after the mutation can emit an incomplete persistent-cache
-          // snapshot first. Absence in that first emission is not deletion confirmation. A
-          // second emission (normally the server snapshot) may confirm it; an already-observed
-          // subscription only needs a revision newer than the mutation.
-          const hasFreshSnapshot = revisionAtBegin === undefined
-            ? subscription.revision > 1
-            : subscription.revision > revisionAtBegin;
-          return subscription.hasPublished
+          const serverRevisionAtBegin = mutation.serverRevisionAtBegin.get(subscriptionId);
+          // 새 구독도 첫 서버 응답이면 충분하다. 캐시 발행 횟수로 확정을 추정하지 않는다.
+          const hasFreshSnapshot = serverRevisionAtBegin === undefined
+            || subscription.serverRevision > serverRevisionAtBegin;
+          return subscription.source === 'server'
             && hasFreshSnapshot
             && !subscription.base.some((entity) => entity.id === mutation.entityId);
         });
@@ -335,11 +333,12 @@ export class OptimisticEntityProjection<Entity extends VersionedEntity> {
     let projected = [...base];
     this.pending.forEach((mutation) => {
       if (mutation.kind === 'create') {
-        if (
-          mutation.canonical
-          && !projected.some((entity) => entity.id === mutation.entityId)
-        ) {
-          projected = [...projected, mutation.canonical];
+        if (mutation.canonical) {
+          const index = projected.findIndex(entity => entity.id === mutation.entityId);
+          if (index < 0) projected.push(mutation.canonical);
+          else if (projected[index].aggregateVersion < mutation.canonical.aggregateVersion) {
+            projected[index] = mutation.canonical;
+          }
         }
         return;
       }

@@ -2,6 +2,7 @@ import {
   collection,
   doc,
   onSnapshot,
+  onDocumentSnapshot,
   db,
 } from '@/platform/read-model/firestoreReadModel';
 import {
@@ -88,7 +89,7 @@ export function subscribeToRegisteredCards(
   const publish = () => {
     if (latestCards !== undefined && collectionVersion !== undefined) callback(sortRegisteredCards(latestCards.map((card) => ({ ...card, collectionVersion }))));
   };
-  const stopMeta = onSnapshot(doc(db, 'households', householdId, 'paymentConfigurationMeta', 'registered-cards'), { includeMetadataChanges: true }, (snapshot) => {
+  const stopMeta = onDocumentSnapshot(doc(db, 'households', householdId, 'paymentConfigurationMeta', 'registered-cards'), { includeMetadataChanges: true }, (snapshot) => {
     if (snapshot.metadata.fromCache) return;
     const versions = snapshot.data()?.collectionVersions;
     collectionVersion = versions?.[`${householdId}:${ownerMemberId}`] ?? 0;
