@@ -337,17 +337,20 @@ class QuickEditActivityInstrumentationTest {
         prepareLocalCommandSession()
         launchQuickEdit().use { scenario ->
             scenario.recreate()
-            runBlocking {
-                HouseholdPreferences.replaceAuthenticatedSession(
-                    context, "instrumentation-house", "other-member", "다른 사용자"
-                )
-            }
             scenario.onActivity { activity ->
                 activity.findViewById<EditText>(R.id.etMemo).setText("이전 화면의 초안")
-                activity.findViewById<Button>(R.id.btnSave).performClick()
+                // 세션 전환 뒤 포커스 callback이 화면을 닫을 수 있습니다. 같은 UI callback에서 저장까지
+                // 시도하여 ActivityScenario가 이미 닫힌 화면을 다시 찾는 경합을 피합니다.
+                runBlocking {
+                    HouseholdPreferences.replaceAuthenticatedSession(
+                        context, "instrumentation-house", "other-member", "다른 사용자"
+                    )
+                }
+                assertTrue(activity.findViewById<Button>(R.id.btnSave).performClick())
             }
             waitUntil("다른 세션의 QuickEdit 닫기") { scenario.state == Lifecycle.State.DESTROYED }
             assertTrue(AndroidKeystoreQuickEditCommandOutboxStore(context).load().isEmpty())
+            assertEquals("other-member", HouseholdPreferences.getMemberId(context))
         }
     }
 

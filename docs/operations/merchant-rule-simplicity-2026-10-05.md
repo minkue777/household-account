@@ -53,3 +53,11 @@ Web·APK 변경은 없습니다. 공개된 v1.2.33 APK는 덮어쓰지 않았고
 관측 보강 후 로컬 production build + 실제 Emulator + WebKit에서 준비 실행 1회와 진단 표본 1회의 전체 시나리오를 실행해 1 passed(1.8분), 33개 지표 66개 관측을 확인했습니다. 지출 추가·삭제와 기존 화면/저장 assertions를 통과했지만 간헐 실패가 재현되지 않아 원인 해결의 증거는 아닙니다. 로컬 진단 표본 수를 CI의 7회 성능 기준선과 혼동하지 않습니다. `tsc --noEmit`과 문서 링크 gate도 통과했습니다. 로그: `TEMP/household-simplicity-webkit-{prepare,diagnostics}-20261005.log`.
 
 2026-10-05 09:26 KST 확인에서 제품 SHA의 별도 실행 `37246241461`은 다섯 검사·CI 요약이 모두 success이며 실제 Android Emulator/Native Firebase E2E/성능 step도 실행 후 성공했습니다. `f33fefa`의 `37246929110`은 functions/web/android 성공, web-e2e/android-instrumentation 진행 중입니다. 앞선 실패는 유지하고 관측 보강 후 최신 SHA의 전체 CI를 후속 확인합니다.
+
+### QuickEdit 세션 전환 검사의 Activity 조회 경합
+
+`37246929110`의 기본 Android instrumentation은 44 passed / 1 failed였습니다. `recreatedQuickEditDoesNotSubmitAnOldDraftAsAnotherMember`가 세션을 다른 명의로 전환한 다음 `scenario.onActivity`로 화면을 다시 찾다가 `Cannot run onActivity since Activity has been destroyed already`로 실패했습니다. logcat에서 00:25:19.170 UTC의 DESTROYED 전이 뒤 19.437에 테스트 예외가 발생했습니다. 제품은 포커스를 받을 때 세션이 달라졌으면 닫도록 되어 있어, 전환과 다음 UI callback 사이에 먼저 닫힐 수 있습니다. 제품의 저장 실패나 crash가 아니라 이미 닫힌 화면을 조작하려는 테스트 순서 문제입니다.
+
+재생성한 화면에서 이전 초안을 입력하고, 같은 UI callback 안에서 실제 `replaceAuthenticatedSession`을 완료한 뒤 실제 저장 버튼을 누르도록 바꿨습니다. 화면 재조회 경합을 제거하면서 Activity 재생성·명의 전환·저장 시도·최종 DESTROYED·암호화 outbox 무기록 검증을 유지합니다. 저장 click listener 실행과 전환된 명의 유지도 확인합니다. 테스트를 건너뛰거나 제한 시간을 늘리지 않았으며 제품 코드는 바꾸지 않았습니다.
+
+API 36.1 실제 Emulator에서 수정된 해당 검사 1개 통과(실패·skip 0), 테스트 APK 빌드 성공을 확인했습니다. 원본 실패 자료는 `TEMP/household-simplicity-android-ci-37246929110`, 검증 로그는 `TEMP/household-simplicity-session-{build,instrumentation}-20261005.log`입니다. 이전 실패는 그대로 유지하며 후속 CI에서 실제 Android 검사를 다시 확인합니다. 테스트·문서만 바뀌므로 APK/Firebase/Web 재배포는 필요하지 않습니다.
