@@ -1,18 +1,18 @@
-import type { CaptureSubmissionCommand } from "../../src/contexts/payment-capture/android-payment-ingestion/public";
+import type {
+  CaptureBalanceObservation,
+  CaptureOriginChannel,
+  CapturePaymentObservation,
+  CaptureSubmissionCommand,
+} from "../../src/contexts/payment-capture/android-payment-ingestion/public";
 
-export function approvalCommand(input: {
+export function paymentCommand(input: {
   rootIdempotencyKey: string;
-  originChannel: "android-notification" | "ios-shortcut";
-  observationId?: string;
+  originChannel: CaptureOriginChannel;
+  observationType?: CapturePaymentObservation["observationType"];
   amountInWon?: number;
   merchant?: string;
-  card?: { companyLabel: string; maskedToken: string };
-  balance?: {
-    branchId: string;
-    currencyType: "gyeonggi" | "daejeon" | "sejong";
-    balanceInWon: number;
-    observedAt: string;
-  };
+  card?: CapturePaymentObservation["cardEvidence"];
+  balance?: CaptureBalanceObservation;
 }): CaptureSubmissionCommand {
   return {
     actor: {
@@ -24,8 +24,7 @@ export function approvalCommand(input: {
     rootIdempotencyKey: input.rootIdempotencyKey,
     envelope: {
       contractVersion: "capture-envelope.v1",
-      observationId:
-        input.observationId ?? `observation-${input.rootIdempotencyKey}`,
+      observationId: `observation-${input.rootIdempotencyKey}`,
       originChannel: input.originChannel,
       sourceEvidence:
         input.originChannel === "android-notification"
@@ -52,8 +51,8 @@ export function approvalCommand(input: {
       rawPayloadHash:
         "sha256:6666666666666666666666666666666666666666666666666666666666666666",
       paymentObservation: {
-        branchId: `payment-${input.observationId ?? input.rootIdempotencyKey}`,
-        observationType: "approval",
+        branchId: `payment-${input.rootIdempotencyKey}`,
+        observationType: input.observationType ?? "approval",
         amountInWon: input.amountInWon ?? 12_000,
         occurredLocalDate: "2026-07-19",
         occurredLocalTime: "10:05",
@@ -67,30 +66,6 @@ export function approvalCommand(input: {
       ...(input.balance === undefined
         ? {}
         : { balanceObservation: input.balance }),
-    },
-  };
-}
-
-export function cancellationCommand(
-  rootIdempotencyKey: string,
-): CaptureSubmissionCommand {
-  const command = approvalCommand({
-    rootIdempotencyKey,
-    originChannel: "android-notification",
-  });
-  const paymentObservation = command.envelope.paymentObservation;
-  if (paymentObservation === undefined) {
-    throw new Error("취소 명령에는 payment observation이 필요합니다.");
-  }
-
-  return {
-    ...command,
-    envelope: {
-      ...command.envelope,
-      paymentObservation: {
-        ...paymentObservation,
-        observationType: "cancellation",
-      },
     },
   };
 }

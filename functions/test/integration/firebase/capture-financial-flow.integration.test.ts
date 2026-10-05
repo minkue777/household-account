@@ -9,7 +9,7 @@ import { FirebaseCaptureSubmissionReceiptStore, Sha256CapturePayloadFingerprint 
 import { FirebaseLocalCurrencyBalanceStore } from '../../../src/adapters/firebase/local-currency/firebaseLocalCurrencyBalanceStore';
 import { createLocalCurrencyBalanceApplication } from '../../../src/contexts/household-finance/local-currency/application/localCurrencyBalanceApplication';
 import { createBalanceObservationIntakeApplication } from '../../../src/contexts/household-finance/local-currency/application/balanceObservationIntakeApplication';
-import { approvalCommand, cancellationCommand } from '../../support/capture-submission-command';
+import { paymentCommand } from '../../support/capture-submission-command';
 
 const projectId = 'demo-household-capture-financial-flow';
 const emulator = process.env.FIRESTORE_EMULATOR_HOST ? describe : describe.skip;
@@ -41,20 +41,20 @@ emulator('실제 SDK Capture와 원장·잔액·Outbox', () => {
 
   it('[T-IOS-001][IOS-011] 같은 root 동시 제출은 원장·Outbox 한 건이며 다른 payload는 receipt 충돌이다', async () => {
     const { application } = setup();
-    const command = approvalCommand({ rootIdempotencyKey: 'same', originChannel: 'ios-shortcut' });
+    const command = paymentCommand({ rootIdempotencyKey: 'same', originChannel: 'ios-shortcut' });
     const results = await Promise.all([application.submit(command), application.submit(command)]);
     expect(results[0]).toEqual(results[1]);
     expect(results[0]).toMatchObject({ kind: 'success', value: { transactionResult: { kind: 'created' } } });
     expect(await rows('households/household-1/ledgerTransactions')).toHaveLength(1);
     expect(await rows('outboxEvents')).toHaveLength(1);
-    expect(await application.submit(approvalCommand({ rootIdempotencyKey: 'same', originChannel: 'ios-shortcut', amountInWon: 13000 }))).toEqual({ kind: 'conflict', code: 'IDEMPOTENCY_PAYLOAD_MISMATCH' });
+    expect(await application.submit(paymentCommand({ rootIdempotencyKey: 'same', originChannel: 'ios-shortcut', amountInWon: 13000 }))).toEqual({ kind: 'conflict', code: 'IDEMPOTENCY_PAYLOAD_MISMATCH' });
     expect(await rows('households/household-1/ledgerTransactions')).toHaveLength(1);
     expect(await rows('outboxEvents')).toHaveLength(1);
   }, 30_000);
 
   it('[T-IOS-001][IOS-011] 같은 root의 서로 다른 payload가 경합하면 한 원장·이벤트만 확정한다', async () => {
     const { application } = setup();
-    const results = await Promise.all([12000, 13000].map(amountInWon => application.submit(approvalCommand({ rootIdempotencyKey: 'conflict', originChannel: 'ios-shortcut', amountInWon }))));
+    const results = await Promise.all([12000, 13000].map(amountInWon => application.submit(paymentCommand({ rootIdempotencyKey: 'conflict', originChannel: 'ios-shortcut', amountInWon }))));
     expect(results.map(result => result.kind).sort()).toEqual(['conflict', 'success']);
     expect(results).toContainEqual({ kind: 'conflict', code: 'IDEMPOTENCY_PAYLOAD_MISMATCH' });
     expect(await rows('households/household-1/ledgerTransactions')).toHaveLength(1);
@@ -63,7 +63,7 @@ emulator('실제 SDK Capture와 원장·잔액·Outbox', () => {
 
   it('[T-DUP-001][ING-SAVE-005][IOS-006] 서로 다른 채널·키·카드의 동시 결제는 실제 공통 fingerprint에서 한 거래로 수렴한다', async () => {
     const { application } = setup();
-    const commands = [approvalCommand({ rootIdempotencyKey: 'android', originChannel: 'android-notification' }), approvalCommand({ rootIdempotencyKey: 'ios', originChannel: 'ios-shortcut', merchant: '  가맹점   A ', card: { companyLabel: '농협', maskedToken: '9999' } })];
+    const commands = [paymentCommand({ rootIdempotencyKey: 'android', originChannel: 'android-notification' }), paymentCommand({ rootIdempotencyKey: 'ios', originChannel: 'ios-shortcut', merchant: '  가맹점   A ', card: { companyLabel: '농협', maskedToken: '9999' } })];
     const results = await Promise.all(commands.map(command => application.submit(command)));
     const kinds = results.map(result => result.kind === 'success' ? result.value.transactionResult?.kind : result.kind);
     expect(kinds.sort()).toEqual(['created', 'duplicate']);
@@ -77,14 +77,22 @@ emulator('실제 SDK Capture와 원장·잔액·Outbox', () => {
 
   it('[T-CAPTURE-LINEAGE-001][T-CAN-002][CAN-003][CAN-007] 원거래 없는 취소는 이후 승인을 막지 않고 승인 후 취소는 원장 제거·tombstone과 receipt를 재생한다', async () => {
     const { application } = setup();
-    const firstCancel = cancellationCommand('missing');
+    const firstCancel = paymentCommand({
+      rootIdempotencyKey: 'missing',
+      originChannel: 'android-notification',
+      observationType: 'cancellation',
+    });
     const missing = await application.submit(firstCancel);
     expect(missing).toMatchObject({ kind: 'success', value: { transactionResult: { kind: 'notFound' } } });
     expect(await application.submit(firstCancel)).toEqual(missing);
     expect(await rows('households/household-1/ledgerDedupKeys')).toEqual([]);
-    const approval = await application.submit(approvalCommand({ rootIdempotencyKey: 'later', originChannel: 'android-notification' }));
+    const approval = await application.submit(paymentCommand({ rootIdempotencyKey: 'later', originChannel: 'android-notification' }));
     expect(approval).toMatchObject({ kind: 'success', value: { transactionResult: { kind: 'created' } } });
-    const cancel = cancellationCommand('found');
+    const cancel = paymentCommand({
+      rootIdempotencyKey: 'found',
+      originChannel: 'android-notification',
+      observationType: 'cancellation',
+    });
     const cancelled = await application.submit(cancel);
     expect(cancelled).toMatchObject({ kind: 'success', value: { transactionResult: { kind: 'cancelled' } } });
     const after = await rows('households/household-1/ledgerTransactions');
@@ -100,7 +108,7 @@ emulator('실제 SDK Capture와 원장·잔액·Outbox', () => {
   it('[T-BAL-008][T-ING-BAL-001][BAL-005][ING-009] 잔액 실패 뒤 실제 원장을 다시 호출하지 않고 잔액만 저장하며 재전송은 version·이벤트를 보존한다', async () => {
     const { application, balance, transaction } = setup();
     balance.mockRejectedValueOnce(new Error('TEST_BALANCE_UNAVAILABLE'));
-    const command = approvalCommand({ rootIdempotencyKey: 'partial', originChannel: 'android-notification', balance: { branchId: 'partial-balance', currencyType: 'gyeonggi', balanceInWon: 55000, observedAt: '2026-07-19T10:05:01+09:00' } });
+    const command = paymentCommand({ rootIdempotencyKey: 'partial', originChannel: 'android-notification', balance: { branchId: 'partial-balance', currencyType: 'gyeonggi', balanceInWon: 55000, observedAt: '2026-07-19T10:05:01+09:00' } });
     expect(await application.submit(command)).toMatchObject({ kind: 'success', value: { completion: 'partial-retryable', transactionResult: { kind: 'created' }, balanceResult: { kind: 'retryableFailure' } } });
     const firstLedger = await rows('households/household-1/ledgerTransactions');
     expect(firstLedger).toHaveLength(1);

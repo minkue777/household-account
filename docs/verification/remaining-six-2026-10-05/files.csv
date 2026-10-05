@@ -1,0 +1,7 @@
+group,path,kind,baseline_sha,before_lines,after_lines,content_sha256_lf,inspection,decision,evidence
+A,functions/src/bootstrap/householdCommandRegistry.ts,runtime,921ef881ccd84641aa711416cde7f31bfddbfabb,58,52,314f8162b145291286b87718d0170bb7b46b305f55cdca08736f88231ea5614e,본문 전체 읽음,단일 항목 임시 Map과 래퍼 제거,registry.md
+A,functions/src/bootstrap/householdQueryRegistry.ts,runtime,921ef881ccd84641aa711416cde7f31bfddbfabb,79,79,9e35968d1592daa667f680299181eb267d634b1994364d6b99bac270a0d4afb4,본문 전체 읽음,지연 생성·재사용·오류 구분 유지,registry.md
+B,functions/test/integration/firebase/firestore-double-semantics.integration.test.ts,test,921ef881ccd84641aa711416cde7f31bfddbfabb,39,39,e5f5a1e2acd983d84a0e9f7bed161a61424b0f6971aa8dd2ed6378d003fe20b6,본문 전체 읽음,실제 SDK와 저장 대역 비교 유지,firestore-double.md
+C,functions/test/support/capture-branch-envelopes.ts,test-support,921ef881ccd84641aa711416cde7f31bfddbfabb,49,49,9c4aa273d31bd2ba7b83c7d1c4d72819a7816c26cad83376449e6621f98893c3,본문 전체 읽음,satisfies로 실제 branch 존재 타입 보존,capture-helpers.md
+C,functions/test/support/capture-submission-command.ts,test-support,921ef881ccd84641aa711416cde7f31bfddbfabb,97,72,43af049a248b603aac018ff94f1d309f0e8c136b01201c824b323657497209a2,본문 전체 읽음,관찰 유형별 중첩 재구성 제거,capture-helpers.md
+D,tools/performance/fixtures/historical-gate-report.json,test-data,921ef881ccd84641aa711416cde7f31bfddbfabb,197,123,a3e8327cffe0dd775f4c6b66dc6d3fb4a399d79e43d7ee6438b4f5121f9b8ebe,본문 전체 읽음,소비하지 않는 중복 원본 표본 제거,historical-report.md

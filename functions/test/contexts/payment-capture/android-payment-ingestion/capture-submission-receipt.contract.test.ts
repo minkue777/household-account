@@ -5,7 +5,7 @@ import type { CaptureTransactionGatewayPort } from "../../../../src/contexts/pay
 import type { BalanceObservationIntakeInputPort } from "../../../../src/contexts/household-finance/local-currency/public";
 import { Sha256CapturePayloadFingerprint } from "../../../../src/adapters/firebase/payment-capture/firebaseCaptureSubmissionReceiptStore";
 import { InMemoryCaptureSubmissionReceiptStore } from "../../../support/capture-branch-receipt-fixture";
-import { approvalCommand } from "../../../support/capture-submission-command";
+import { paymentCommand } from "../../../support/capture-submission-command";
 import { balanceOnlyEnvelope, combinedEnvelope } from "../../../support/capture-branch-envelopes";
 
 function setup() {
@@ -20,7 +20,7 @@ function setup() {
 describe('실제 Capture 조율과 downstream 호출 계약', () => {
   it('[T-ING-AUTH-001][ING-SAVE-001] 권한 없는 제출은 receipt나 downstream을 호출하지 않는다', async () => {
     const subject = setup();
-    const command = approvalCommand({ rootIdempotencyKey: 'forbidden', originChannel: 'android-notification' });
+    const command = paymentCommand({ rootIdempotencyKey: 'forbidden', originChannel: 'android-notification' });
     expect(await subject.application.submit({ ...command, actor: { ...command.actor, capabilities: [] } })).toEqual({ kind: 'Forbidden', code: 'CAPABILITY_REQUIRED' });
     expect(subject.receipts.list()).toEqual([]);
     expect(subject.transaction).not.toHaveBeenCalled();
@@ -29,7 +29,7 @@ describe('실제 Capture 조율과 downstream 호출 계약', () => {
 
   it('Android payment-only는 Ledger의 원자 receipt에 위임하고 외부 receipt를 중복 저장하지 않는다', async () => {
     const subject = setup();
-    const command = approvalCommand({ rootIdempotencyKey: 'single', originChannel: 'android-notification' });
+    const command = paymentCommand({ rootIdempotencyKey: 'single', originChannel: 'android-notification' });
     expect(await subject.application.submit(command)).toMatchObject({ kind: 'success', value: { transactionResult: { kind: 'created', transactionId: 'transaction' } } });
     expect(subject.transaction).toHaveBeenCalledTimes(1);
     expect(subject.transaction.mock.calls[0][0]).toMatchObject({ householdId: 'household-1', branch: { amountInWon: 12000, merchant: '가맹점 A' } });
@@ -42,7 +42,7 @@ describe('실제 Capture 조율과 downstream 호출 계약', () => {
     const first = await subject.branches.submit(balanceOnlyEnvelope);
     expect(await subject.branches.submit(balanceOnlyEnvelope)).toEqual(first);
     expect(subject.transaction).not.toHaveBeenCalled();
-    expect(subject.balance).toHaveBeenCalledExactlyOnceWith({ householdId: 'house-1', kind: 'system', capabilities: ['local-currency.record'] }, balanceOnlyEnvelope.balanceBranch!.observation);
+    expect(subject.balance).toHaveBeenCalledExactlyOnceWith({ householdId: 'house-1', kind: 'system', capabilities: ['local-currency.record'] }, balanceOnlyEnvelope.balanceBranch.observation);
     expect(subject.receipts.list()[0]).toMatchObject({ state: 'completed', transaction: { stage: 'absent' }, balance: { stage: 'terminal' } });
   });
 
@@ -67,7 +67,7 @@ describe('실제 Capture 조율과 downstream 호출 계약', () => {
     const completeBranch = branch === 'transaction' ? 'balance' : 'transaction';
     expect(before[completeBranch].stage).toBe('terminal');
     // A conflicting retry must not invoke either downstream or change the receipt.
-    expect(await subject.branches.submit({ ...combinedEnvelope, transactionBranch: { ...combinedEnvelope.transactionBranch!, amountInWon: 99999 } })).toEqual({ kind: 'conflict', code: 'IDEMPOTENCY_PAYLOAD_MISMATCH' });
+    expect(await subject.branches.submit({ ...combinedEnvelope, transactionBranch: { ...combinedEnvelope.transactionBranch, amountInWon: 99999 } })).toEqual({ kind: 'conflict', code: 'IDEMPOTENCY_PAYLOAD_MISMATCH' });
     expect(subject.receipts.list()).toEqual([before]);
     expect(subject.transaction).toHaveBeenCalledTimes(1);
     expect(subject.balance).toHaveBeenCalledTimes(1);

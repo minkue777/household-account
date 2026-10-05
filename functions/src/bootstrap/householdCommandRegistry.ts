@@ -17,10 +17,10 @@ import {
   createFirebaseShortcutCredentialLifecycle,
   createShortcutCredentialHouseholdCommandHandlers,
 } from "./commands/shortcutCredentialHouseholdCommandHandlers";
-import { HouseholdCommandRejection, type HouseholdCommandHandler } from "./commands/householdCommand";
+import { HouseholdCommandRejection } from "./commands/householdCommand";
 
-function accessReadHandlers(db: firestore.Firestore): ReadonlyMap<string, HouseholdCommandHandler> {
-  return new Map([
+export function createFirebaseHouseholdCommandRegistry(db: firestore.Firestore) {
+  return createManifestBackedHouseholdCommandRegistry([
     [
       "access.resolve-signed-in-user.v1",
       {
@@ -38,12 +38,6 @@ function accessReadHandlers(db: firestore.Firestore): ReadonlyMap<string, Househ
         },
       },
     ],
-  ]);
-}
-
-export function createFirebaseHouseholdCommandRegistry(db: firestore.Firestore) {
-  return createManifestBackedHouseholdCommandRegistry([
-    ...accessReadHandlers(db),
     ...createMemberAccessHouseholdCommandHandlers(db),
     ...createAccessHouseholdCommandHandlers(db),
     ...createLedgerHouseholdCommandHandlers(db),

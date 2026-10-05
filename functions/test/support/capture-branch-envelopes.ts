@@ -1,6 +1,6 @@
 import type { CaptureBranchEnvelope } from "../../src/contexts/payment-capture/android-payment-ingestion/public";
 
-export const balanceOnlyEnvelope: CaptureBranchEnvelope = {
+export const balanceOnlyEnvelope = {
   rootIdempotencyKey: "android:installation-1:observation-1",
   householdId: "house-1",
   balanceBranch: {
@@ -18,9 +18,9 @@ export const balanceOnlyEnvelope: CaptureBranchEnvelope = {
       },
     },
   },
-};
+} satisfies CaptureBranchEnvelope;
 
-export const combinedEnvelope: CaptureBranchEnvelope = {
+export const combinedEnvelope = {
   ...balanceOnlyEnvelope,
   rootIdempotencyKey: "android:installation-1:observation-2",
   transactionBranch: {
@@ -38,12 +38,12 @@ export const combinedEnvelope: CaptureBranchEnvelope = {
       "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   },
   balanceBranch: {
-    ...balanceOnlyEnvelope.balanceBranch!,
+    ...balanceOnlyEnvelope.balanceBranch,
     branchKey: "android:installation-1:observation-2:balance",
     observation: {
-      ...balanceOnlyEnvelope.balanceBranch!.observation,
+      ...balanceOnlyEnvelope.balanceBranch.observation,
       observationId: "observation-2:balance",
     },
   },
-};
+} satisfies CaptureBranchEnvelope;
 

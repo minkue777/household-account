@@ -84,7 +84,17 @@ test('saved historical verdicts render without re-evaluation', () => {
   assert.equal(rowAttribute(html, 'data-status'), 'pass');
   assert.equal(rowAttribute(html, 'data-ux'), 'fail');
   assert.equal(rowAttribute(html, 'data-ci-median'), '400');
+  assert.equal(rowAttribute(html, 'data-ci-repeat'), '650');
+  assert.equal(rowAttribute(html, 'data-ci-max'), '1000');
   assert.equal(rowAttribute(html, 'data-ux-median'), '300');
+  assert.equal(rowAttribute(html, 'data-ux-repeat'), '500');
+  assert.equal(rowAttribute(html, 'data-ux-max'), '1000');
+  assert.equal(rowAttribute(html, 'data-repeat'), '350');
+  assert.equal(rowAttribute(html, 'data-max'), '350');
+  assert.equal((measuredRow(html).match(/<span>350<\/span>/g) ?? []).length, 7);
+  assert.doesNotMatch(measuredRow(html), /10,000|10000/);
+  assert.match(html, /준비 실행 1개/);
+  assert.match(html, /WebKit · 검색어 변경 · 10,000 ms/);
   assert.equal(JSON.stringify(report), original);
 });
 
