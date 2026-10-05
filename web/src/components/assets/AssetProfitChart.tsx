@@ -4,11 +4,9 @@ import { memo, useMemo, useState } from 'react';
 import type { ChartOptions } from 'chart.js';
 import { Bar } from 'react-chartjs-2';
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp } from 'lucide-react';
-import { getSeoulCalendarParts, getTodayLocalDate, formatLocalDate } from '@/lib/utils/date';
-import type { AssetHistoryEntry } from '@/types/asset';
+import { getSeoulCalendarParts, formatLocalDate } from '@/lib/utils/date';
+import type { AssetBalancePoint } from '@/features/reporting/assetBalanceHistory';
 import { useChartMotion } from '@/components/common/useChartMotion';
-
-type BalancePoint = Pick<AssetHistoryEntry, 'date' | 'balance' | 'changeAmount'>;
 
 function formatSignedAmount(value: number) {
   const prefix = value > 0 ? '+' : value < 0 ? '-' : '';
@@ -21,10 +19,8 @@ function formatSignedRate(value: number | undefined) {
   return `${prefix}${Math.abs(value).toFixed(2)}%`;
 }
 
-function AssetProfitChart({ snapshotId = 'TOTAL', currentBalance, sourceHistory }: {
-  snapshotId?: string;
-  currentBalance?: number;
-  sourceHistory: readonly AssetHistoryEntry[];
+function AssetProfitChart({ sourceHistory }: {
+  sourceHistory: readonly AssetBalancePoint[];
 }) {
   const today = getSeoulCalendarParts();
   const chartMotion = useChartMotion();
@@ -32,31 +28,18 @@ function AssetProfitChart({ snapshotId = 'TOTAL', currentBalance, sourceHistory 
   const [year, setYear] = useState(today.year);
   const [month, setMonth] = useState(today.month);
   const [showProfitTable, setShowProfitTable] = useState(false);
-  const range = useMemo(() => ({
-    start: formatLocalDate(new Date(year, view === 'monthly' ? 0 : month - 1, 1)),
-    end: formatLocalDate(new Date(year, view === 'monthly' ? 12 : month, 0)),
-  }), [year, month, view]);
-  const chartHistory = useMemo(() => sourceHistory.filter(
-    entry => entry.assetId === snapshotId && entry.date <= range.end,
-  ), [sourceHistory, snapshotId, range.end]);
-  const currentDate = getTodayLocalDate();
-  const displayHistory = useMemo<readonly BalancePoint[]>(() => {
-    if (currentBalance === undefined || currentDate < range.start || currentDate > range.end) return chartHistory;
-    const previous = chartHistory.filter(entry => entry.date < currentDate).at(-1);
-    const todayEntry = chartHistory.find(entry => entry.date === currentDate);
-    const baseline = previous?.balance ?? (todayEntry ? todayEntry.balance - todayEntry.changeAmount : undefined);
-    // This display point comes from a confirmed asset read and is never saved.
-    const current: BalancePoint = {
-      date: currentDate,
-      balance: currentBalance,
-      changeAmount: baseline === undefined ? 0 : currentBalance - baseline,
-    };
-    return [...chartHistory.filter(entry => entry.date !== currentDate), current].sort((a, b) => a.date.localeCompare(b.date));
-  }, [currentBalance, currentDate, range.start, range.end, chartHistory]);
+  const endDate = useMemo(
+    () => formatLocalDate(new Date(year, view === 'monthly' ? 12 : month, 0)),
+    [year, month, view],
+  );
+  const displayHistory = useMemo(
+    () => sourceHistory.filter(entry => entry.date <= endDate),
+    [sourceHistory, endDate],
+  );
   const rows = useMemo(() => {
     const count = view === 'monthly' ? 12 : new Date(year, month, 0).getDate();
     let cursor = 0;
-    let baseline: BalancePoint | undefined;
+    let baseline: AssetBalancePoint | undefined;
     return Array.from({ length: count }, (_, index) => {
       const start = formatLocalDate(new Date(year, view === 'monthly' ? index : month - 1, view === 'monthly' ? 1 : index + 1));
       const end = view === 'monthly' ? formatLocalDate(new Date(year, index + 1, 0)) : start;

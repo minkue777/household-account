@@ -23,6 +23,7 @@ jest.mock('@/lib/assetService', () => ({
 }));
 jest.mock('@/platform/reporting/assetStatisticsReadModel', () => ({ readAssetStatisticsHistory: jest.fn(), peekAssetStatisticsHistory: jest.fn() }));
 const mockTrendOptions = jest.fn();
+const mockBarInputs = jest.fn();
 jest.mock('react-chartjs-2', () => {
   const React = jest.requireActual<typeof import('react')>('react');
   return {
@@ -30,7 +31,10 @@ jest.mock('react-chartjs-2', () => {
       mockTrendOptions(options);
       return <output data-testid="chart">{JSON.stringify(data)}</output>;
     }),
-    Bar: ({ data }: { data: unknown }) => <output data-testid="bar-chart">{JSON.stringify(data)}</output>,
+    Bar: ({ data }: { data: unknown }) => {
+      mockBarInputs(data);
+      return <output data-testid="bar-chart">{JSON.stringify(data)}</output>;
+    },
   };
 });
 const read = jest.mocked(readAssetStatisticsHistory);
@@ -181,6 +185,57 @@ describe('actual asset statistics page', () => {
     await screen.findByText('25');
     expect(read).toHaveBeenCalledTimes(2);
     expect(read).toHaveBeenLastCalledWith(expect.any(String), { cacheEpoch: 1 });
+  });
+  it('[STAT-AST-002] shares sparse series baselines and retains confirmed zero when excluding property and loans', async () => {
+    mockScope.isSessionVerified = true;
+    const today = getTodayLocalDate();
+    read.mockResolvedValue([
+      entry('TOTAL', '2019-01-01', 80), entry('FINANCIAL', '2019-01-01', 50),
+      entry('TYPE_stock', '2019-01-01', 50), entry('TYPE_property', '2019-01-01', 40),
+      entry('TYPE_loan', '2019-01-01', -10),
+      entry('TOTAL', today, 100), entry('FINANCIAL', today, 70),
+    ]);
+    render(<AssetStatsPage />);
+    await screen.findByText('마지막 기록 자산');
+    fireEvent.click(screen.getByRole('button', { name: '주식' }));
+    fireEvent.click(screen.getByRole('button', { name: '부동산' }));
+    fireEvent.click(screen.getByRole('button', { name: '대출' }));
+    const values = () => JSON.parse(screen.getByTestId('chart').textContent!).datasets
+      .map((dataset: { label: string; data: number[] }) => [dataset.label, dataset.data]);
+    expect(values()).toEqual([['전체', [80, 100]], ['주식', [50, 50]], ['부동산', [40, 40]], ['대출', [-10, -10]]]);
+
+    // A confirmed empty balance is a real zero, not a missing observation.
+    act(() => jest.mocked(subscribeToAssets).mock.calls.at(-1)![2]!([], { fromCache: false }));
+    expect(values()).toEqual([['전체', [80, 0]], ['주식', [50, 0]], ['부동산', [40, 0]], ['대출', [-10, 0]]]);
+    fireEvent.click(screen.getByRole('button', { name: '전체자산' }));
+    expect(values()).toEqual([['금융자산', [50, 0]], ['주식', [50, 0]]]);
+    expect(screen.queryByRole('button', { name: '부동산' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '대출' })).not.toBeInTheDocument();
+    expect(read).toHaveBeenCalledTimes(1);
+  });
+
+  it('[STAT-AST-002] keeps profit navigation independent from the trend period after composing the current balance', async () => {
+    mockScope.isSessionVerified = true;
+    const today = getTodayLocalDate();
+    const previousYear = Number(today.slice(0, 4)) - 1;
+    read.mockResolvedValue([
+      entry('TOTAL', `${previousYear}-01-01`, 80),
+      entry('TOTAL', `${previousYear}-02-01`, 120, { changeAmount: 40 }),
+      entry('TOTAL', today, 150, { changeAmount: 30 }),
+    ]);
+    render(<AssetStatsPage />);
+    await screen.findByText('마지막 기록 자산');
+    act(() => jest.mocked(subscribeToAssets).mock.calls.at(-1)![2]!([], { fromCache: false }));
+    const profit = screen.getByText('자산 변동 차트').closest('section')!;
+    fireEvent.click(within(profit).getByRole('button', { name: '월별' }));
+    fireEvent.click(within(profit).getByRole('button', { name: '이전 변동 기간' }));
+    expect(within(profit).getByText(`${previousYear}년`)).toBeInTheDocument();
+    const chart = within(profit).getByTestId('bar-chart');
+    expect(JSON.parse(chart.textContent!).datasets[0].data.slice(0, 3)).toEqual([0, 40, null]);
+    fireEvent.click(screen.getByRole('button', { name: '6개월' }));
+    expect(within(profit).getByTestId('bar-chart')).toBe(chart);
+    expect(JSON.parse(chart.textContent!).datasets[0].data.slice(0, 3)).toEqual([0, 40, null]);
+    expect(read).toHaveBeenCalledTimes(1);
   });
   it('paints the cached complete history on the first re-entry commit while verifying the server', async () => {
     mockScope.isSessionVerified = true;
@@ -385,6 +440,31 @@ describe('actual asset statistics page', () => {
     expect(JSON.parse(screen.getByTestId('chart').textContent!).datasets[0].data.at(-1)).toBe(200);
     act(() => onSourceSnapshot([{ ...asset, isActive: false }], { fromCache: false }));
     expect(screen.getByText('0')).toBeInTheDocument();
+  });
+  it('preserves profit inputs when names or type balances change without changing the total', async () => {
+    mockScope.isSessionVerified = true;
+    read.mockResolvedValue([entry('TOTAL', getTodayLocalDate(), 100)]);
+    render(<AssetStatsPage />);
+    await screen.findByText('100');
+    const onSourceSnapshot = jest.mocked(subscribeToAssets).mock.calls.at(-1)![2]!;
+    const stock: Asset = { id: 'stock', householdId: 'house-1', aggregateVersion: 1, name: '증권',
+      type: 'stock', currentBalance: 100, currency: 'KRW', isActive: true, order: 0,
+      createdAt: new Date(0), updatedAt: new Date(0), ownerRef: { kind: 'household' } };
+    await act(async () => onSourceSnapshot([stock], { fromCache: false }));
+    const renders = mockBarInputs.mock.calls.length;
+    act(() => onSourceSnapshot([{ ...stock, name: '새 이름' }], { fromCache: false }));
+    expect(mockBarInputs).toHaveBeenCalledTimes(renders);
+    act(() => onSourceSnapshot([
+      { ...stock, currentBalance: 60 },
+      { ...stock, id: 'savings', type: 'savings', currentBalance: 40 },
+    ], { fromCache: false }));
+    expect(mockBarInputs).toHaveBeenCalledTimes(renders);
+    fireEvent.click(screen.getByRole('button', { name: '주식' }));
+    expect(JSON.parse(screen.getByTestId('chart').textContent!).datasets.at(-1).data.at(-1)).toBe(60);
+    act(() => onSourceSnapshot([{ ...stock, currentBalance: 200 }], { fromCache: false }));
+    expect(screen.getByText('200')).toBeInTheDocument();
+    expect(mockBarInputs.mock.calls.length).toBeGreaterThan(renders);
+    expect(read).toHaveBeenCalledTimes(1);
   });
   it('failure stays distinct from NoData and zero and supports retry', async () => {
     mockScope.isSessionVerified = true; read.mockRejectedValueOnce(new Error('offline'));

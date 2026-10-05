@@ -43,7 +43,11 @@ Firebase Rules는 사용자·가구 읽기 범위를 검증합니다. 조회 ada
 
 화면 원천 key에는 Actor·가구·원격 epoch·조회 종료일만 포함하고, 자산 변경 revision은 재조회 trigger로 사용합니다. 같은 key의 완료 이력과 확인된 현재 자산은 revision 변경 중에도 유지하며 늦은 이전 요청은 effect cleanup에서 폐기합니다. 증감 차트는 전체 이력을 필수 입력으로 받아 계산·표시만 담당합니다. 별도 조회·실패·재시도 경로를 두지 않습니다.
 
+전체·금융·유형별 추이는 동일한 시리즈 구조로 계산합니다. 서버 읽기가 날짜순·같은 날짜의 중복 제거를 보장하며, 화면은 이력을 한 번 시리즈별로 분류하여 이 순서를 그대로 사용합니다. 각 시리즈의 전체 이력에 확인된 오늘 잔액을 한 번 합성한 뒤, 상단 추이는 선택 기간과 직전 baseline으로 잘라 사용하고 증감 차트는 전체 이력으로 독립적인 월·연도 탐색을 유지합니다. 현재 잔액을 확인하지 못하면 오늘 0원 지점을 만들지 않습니다. 전체 잔액 합성은 이력·합계·확정 여부·날짜·금융 모드에만 의존하여 이름 변경이나 합계가 같은 유형 재분배로 증감 차트 입력을 새로 만들지 않습니다. 과거 이력이나 현재 자산에 실제 존재하는 유형만 선택 목록에 포함하며, 합계 시리즈와 유형 시리즈는 같은 날짜·carry-forward·dataset 생성 경로를 사용합니다.
+
 배당 카드는 세션 확인 직후 mount하여 이력 조회와 병렬로 세 원천을 읽고, 이력 표시가 준비되기 전에는 DOM을 표시하지 않습니다. 숨겨진 동안의 focus·visibility 재조회도 억제하며, 카드 표시 전환 자체는 재조회 사유가 아닙니다. 선택 연도와 조회 수명은 카드가 소유하므로 부모의 Promise 선조회·전달·소비 상태가 필요하지 않습니다. 자산 변경 revision은 선택 연도만 재조회하고 같은 연도의 완료값·canvas·선택을 보존합니다. Actor·원격 epoch 변경은 카드를 교체하며, 연도 전환은 이전 연도 값을 즉시 숨깁니다. 내용이 같은 응답은 기존 데이터 참조를 유지합니다.
+
+배당 월별 합계는 snapshot.monthlyData의 확정액을 기준으로 예상액을 누적합니다. 상세 events의 재합산으로 확정액을 대체하지 않습니다. 확정·예상 상세를 합친 뒤 선택 월·연도를 한 번 필터링하며, 지급일 내림차순·확정 우선·종목명 순서를 보존합니다.
 
 ## 6. 외부 의존성과 저장 경계
 
@@ -72,7 +76,8 @@ Firebase Rules는 사용자·가구 읽기 범위를 검증합니다. 조회 ada
 | 기간·월말·서울 기준 | statisticsPeriod.contract.test.ts, 실제 StatsPage 기간 선택 |
 | 페이지 완료·상한·중복 cursor·오류·세션 | reportingReadAdapters.test.ts, assetStatisticsReadModel.contract.test.ts |
 | 0원·빈 결과·실패·편집/삭제·늦은 응답 | statisticsPage.test.tsx, expenseStatistics* 검사 |
-| baseline·과거 dimension·캐시·선택 보존 | assetStatsSessionRead.contract.test.tsx, assetStatisticsReadModel.contract.test.ts |
+| baseline·오늘 잔액·과거 dimension·독립 기간·캐시·선택 보존 | assetBalanceHistory.contract.test.ts, assetProfitSource.test.tsx, assetStatsSessionRead.contract.test.tsx, assetStatisticsReadModel.contract.test.ts |
+| 배당 canonical 월 합계·예상액·상세 정렬 | assetDividendChartIdentity.contract.test.tsx |
 | 실제 SDK 원천과 실제 화면 | finance-search-statistics.spec.ts, portfolio-reporting.spec.ts |
 | 배당 상태·동시 저장·정정·paid 보존 | firebase-dividend-schedule.integration.test.ts |
 

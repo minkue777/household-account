@@ -5,6 +5,7 @@ import type { ChartOptions } from 'chart.js';
 import { Bar } from 'react-chartjs-2';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { StockHolding } from '@/types/asset';
+import type { DividendSnapshotEventRecord } from '@/lib/assetService';
 import {
   readAssetDividendStatistics,
   type AssetDividendStatistics,
@@ -13,13 +14,7 @@ import ModalOverlay from '@/components/common/ModalOverlay';
 import { getSeoulCalendarParts, getTodayLocalDate } from '@/lib/utils/date';
 import { useChartMotion } from '@/components/common/useChartMotion';
 
-interface DividendSnapshotEvent {
-  stockCode: string;
-  stockName: string;
-  paymentDate: string;
-  perShareAmount: number;
-  quantity: number;
-  totalAmount: number;
+interface DividendSnapshotEvent extends DividendSnapshotEventRecord {
   recordDate?: string;
   isEstimated?: boolean;
 }
@@ -29,10 +24,6 @@ function supportsDividendInfo(holding: StockHolding) {
     (holding.holdingType || 'stock') === 'stock' &&
     /^[A-Z0-9]+$/i.test((holding.stockCode || '').trim())
   );
-}
-
-function createEmptyMonthlyData() {
-  return Array.from({ length: 12 }, () => 0);
 }
 
 function AssetDividendChart({ visible = true, revision = 0 }: { visible?: boolean; revision?: number } = {}) {
@@ -147,49 +138,35 @@ function AssetDividendChart({ visible = true, revision = 0 }: { visible?: boolea
       });
   }, [cachedDividendSnapshot?.events, dividendEvents, holdingQuantityByCode, today]);
 
-  const projectedMonthlyData = useMemo(() => {
-    const monthlyTotals = createEmptyMonthlyData();
-
-    projectedDividendEvents.forEach((event) => {
-      const [year, month] = event.paymentDate.split('-').map(Number);
-      if (year !== dividendYear || month < 1 || month > 12) {
-        return;
-      }
-
-      monthlyTotals[month - 1] += event.totalAmount;
-    });
-
-    return monthlyTotals;
-  }, [dividendYear, projectedDividendEvents]);
-
   const monthlyDividendData = useMemo(() => {
-    const monthlyTotals = cachedDividendSnapshot?.monthlyData || createEmptyMonthlyData();
-
-    return monthlyTotals.map((dividend, index) => ({
+    const months = Array.from({ length: 12 }, (_, index) => ({
       month: index + 1,
-      dividend,
-      estimatedDividend: projectedMonthlyData[index] || 0,
+      dividend: cachedDividendSnapshot?.monthlyData[index] ?? 0,
+      estimatedDividend: 0,
     }));
-  }, [cachedDividendSnapshot, projectedMonthlyData]);
+    for (const event of projectedDividendEvents) {
+      const [year, month] = event.paymentDate.split('-').map(Number);
+      const monthly = months[month - 1];
+      if (year === dividendYear && monthly) {
+        monthly.estimatedDividend += event.totalAmount;
+      }
+    }
+    return months;
+  }, [cachedDividendSnapshot, projectedDividendEvents, dividendYear]);
 
-  const selectedMonthEvents = useMemo(() => {
+  const selectedMonthEvents = useMemo<DividendSnapshotEvent[]>(() => {
     if (!selectedMonth) {
       return [];
     }
 
-    const confirmedEvents = Object.values(cachedDividendSnapshot?.events || {})
+    return [
+      ...Object.values(cachedDividendSnapshot?.events || {}).map(event => ({ ...event, isEstimated: false })),
+      ...projectedDividendEvents,
+    ]
       .filter((event) => {
         const [year, month] = event.paymentDate.split('-').map(Number);
         return year === dividendYear && month === selectedMonth;
       })
-      .map((event) => ({ ...event, isEstimated: false }));
-
-    const estimatedEvents = projectedDividendEvents.filter((event) => {
-      const [year, month] = event.paymentDate.split('-').map(Number);
-      return year === dividendYear && month === selectedMonth;
-    });
-
-    return [...confirmedEvents, ...estimatedEvents]
       .sort((left, right) => {
         if (left.paymentDate !== right.paymentDate) {
           return right.paymentDate.localeCompare(left.paymentDate);
@@ -200,7 +177,7 @@ function AssetDividendChart({ visible = true, revision = 0 }: { visible?: boolea
         }
 
         return left.stockName.localeCompare(right.stockName, 'ko');
-      }) as DividendSnapshotEvent[];
+      });
   }, [cachedDividendSnapshot?.events, dividendYear, projectedDividendEvents, selectedMonth]);
 
   const dividendChartData = useMemo(
@@ -295,9 +272,8 @@ function AssetDividendChart({ visible = true, revision = 0 }: { visible?: boolea
     },
   }), [monthlyDividendData, chartMotion]);
 
-  const totalDividend = monthlyDividendData.reduce((sum, item) => sum + item.dividend, 0);
-  const totalEstimatedDividend = monthlyDividendData.reduce(
-    (sum, item) => sum + item.estimatedDividend,
+  const annualDividend = monthlyDividendData.reduce(
+    (sum, item) => sum + item.dividend + item.estimatedDividend,
     0
   );
   const selectedMonthLabel = selectedMonth ? `${selectedMonth}월` : '';
@@ -345,7 +321,7 @@ function AssetDividendChart({ visible = true, revision = 0 }: { visible?: boolea
             {isCurrentYear ? '올해 누적 배당금' : '연간 배당금'}
           </span>
           <span className="text-lg font-bold text-red-500">
-            {isDividendLoading ? '조회 중' : !data ? '조회 실패' : cachedDividendSnapshot === null && dividendEvents.length === 0 ? '데이터 없음' : `${Math.round(totalDividend + totalEstimatedDividend).toLocaleString()}원`}
+            {isDividendLoading ? '조회 중' : !data ? '조회 실패' : cachedDividendSnapshot === null && dividendEvents.length === 0 ? '데이터 없음' : `${Math.round(annualDividend).toLocaleString()}원`}
           </span>
         </div>
 
@@ -353,7 +329,7 @@ function AssetDividendChart({ visible = true, revision = 0 }: { visible?: boolea
           <p className="mt-2 text-center text-xs text-slate-400">
             배당금 정보를 불러오는 중입니다.
           </p>
-        ) : dividendFailed ? <p role="alert" className="mt-2 text-sm text-red-600">{data ? '최신 배당금을 확인하지 못했습니다. 이전 내역을 표시합니다.' : '배당금 정보를 불러오지 못했습니다.'}</p> : totalDividend + totalEstimatedDividend === 0 ? (
+        ) : dividendFailed ? <p role="alert" className="mt-2 text-sm text-red-600">{data ? '최신 배당금을 확인하지 못했습니다. 이전 내역을 표시합니다.' : '배당금 정보를 불러오지 못했습니다.'}</p> : annualDividend === 0 ? (
           <p className="mt-2 text-center text-xs text-slate-400">
             {stockHoldings.length === 0
               ? '배당을 지원하는 국내 ETF 보유 종목이 없습니다'

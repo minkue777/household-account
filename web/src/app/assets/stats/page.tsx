@@ -5,7 +5,6 @@ import Link from 'next/link';
 import {
   Chart as ChartJS,
   type ChartData,
-  type ChartDataset,
   type ChartOptions,
   CategoryScale,
   LinearScale,
@@ -28,6 +27,7 @@ import AssetDividendChart from '@/components/assets/AssetDividendChart';
 import { getTodayLocalDate } from '@/lib/utils/date';
 import { peekAssetStatisticsHistory, readAssetStatisticsHistory } from '@/platform/reporting/assetStatisticsReadModel';
 import { resolveAssetStatisticsPeriod } from '@/features/reporting/statisticsPeriod';
+import { withCurrentAssetBalance, type AssetBalancePoint } from '@/features/reporting/assetBalanceHistory';
 import { sumSignedAssetBalances, sumSignedBalancesByAssetType } from '@/lib/assets/assetMath';
 import { getClientSessionScope } from '@/composition/clientSessionScope';
 import { assetStatisticsSessionKey, subscribeAssetStatisticsInvalidation } from '@/platform/reporting/assetStatisticsQueryCache';
@@ -49,7 +49,6 @@ ChartJS.register(
 type PeriodType = '3M' | '6M' | '1Y' | 'ALL';
 type TrendSeriesKey = 'all' | AssetType;
 
-const TYPE_SNAPSHOT_PREFIX = 'TYPE_';
 const EMPTY_ASSETS: Asset[] = [];
 const ASSET_TYPE_ORDER: AssetType[] = ['savings', 'stock', 'crypto', 'property', 'gold', 'loan'];
 
@@ -72,13 +71,9 @@ function formatKoreanUnit(value: number): string {
   return `${sign}${parts.join(' ')}`;
 }
 
-function isAssetType(value: string): value is AssetType {
-  return value in ASSET_TYPE_CONFIG;
-}
-
 function buildCarriedSeries(
   dates: string[],
-  entries: AssetHistoryEntry[],
+  entries: readonly AssetBalancePoint[],
   fallbackValue?: number
 ): Array<number | null> {
   if (entries.length === 0) {
@@ -101,33 +96,21 @@ function buildCarriedSeries(
   });
 }
 
-function upsertRealtimeSnapshot(
-  entries: AssetHistoryEntry[],
-  assetId: string,
-  currentBalance: number,
-  today: string
-): AssetHistoryEntry[] {
-  const sortedEntries = [...entries].sort((a, b) => a.date.localeCompare(b.date));
-  const previousEntry = [...sortedEntries].reverse().find((entry) => entry.date < today);
-  const todayEntry = sortedEntries.find((entry) => entry.date === today);
-  const baseline = previousEntry?.balance ?? (todayEntry ? todayEntry.balance - todayEntry.changeAmount : undefined);
-  const changeAmount = baseline === undefined ? 0 : currentBalance - baseline;
-  const householdId = sortedEntries[0]?.householdId ?? '';
-  const createdAt = previousEntry?.createdAt ?? sortedEntries[0]?.createdAt ?? new Date();
-
-  const realtimeEntry: AssetHistoryEntry = {
-    id: `realtime_${assetId}_${today}`,
-    householdId,
-    assetId,
-    balance: currentBalance,
-    date: today,
-    changeAmount,
-    memo: '실시간 계산',
-    createdAt,
-  };
-
-  return [...sortedEntries.filter((entry) => entry.date !== today), realtimeEntry]
-    .sort((a, b) => a.date.localeCompare(b.date));
+function selectHistoryPeriod(
+  history: readonly AssetBalancePoint[],
+  startDate: string | undefined,
+  endDate: string
+): AssetBalancePoint[] {
+  let baseline: AssetBalancePoint | undefined;
+  const points: AssetBalancePoint[] = [];
+  for (const point of history) {
+    if (startDate && point.date < startDate) baseline = point;
+    else if (point.date <= endDate) points.push(point);
+  }
+  if (baseline && startDate && points[0]?.date !== startDate) {
+    points.unshift({ ...baseline, date: startDate, changeAmount: 0 });
+  }
+  return points;
 }
 
 function areSameActiveElements(
@@ -267,204 +250,84 @@ export default function AssetStatsPage() {
   );
   const today = getTodayLocalDate();
   const snapshotType = financialOnly ? 'FINANCIAL' : 'TOTAL';
-  const latestRecordedTotal = allHistory.filter((entry) => entry.assetId === snapshotType).at(-1)?.balance;
+  const historyBySeries = useMemo(() => {
+    const grouped = new Map<string, AssetBalancePoint[]>();
+    for (const entry of allHistory) {
+      const points = grouped.get(entry.assetId);
+      if (points) points.push(entry);
+      else grouped.set(entry.assetId, [entry]);
+    }
+    return grouped;
+  }, [allHistory]);
+  const latestRecordedTotal = historyBySeries.get(snapshotType)?.at(-1)?.balance;
   const totalAssets = hasCurrentAssets ? sumSignedAssetBalances(visibleAssets) : latestRecordedTotal;
   const typeTotals = useMemo(() => sumSignedBalancesByAssetType(visibleAssets), [visibleAssets]);
-  const history = useMemo(() => {
-    const startDate = selectedPeriodRange.startDate;
-    const baselines = new Map<string, AssetHistoryEntry>();
-    const entries = allHistory.filter((entry) => {
-      if (entry.assetId !== 'TOTAL' && entry.assetId !== 'FINANCIAL'
-        && !entry.assetId.startsWith(TYPE_SNAPSHOT_PREFIX)) return false;
-      if (startDate && entry.date < startDate) {
-        baselines.set(entry.assetId, { ...entry, date: startDate, changeAmount: 0 });
-        return false;
-      }
-      return entry.date <= selectedPeriodRange.endDate;
-    });
-    const atStart = new Set(entries.filter((entry) => entry.date === startDate).map((entry) => entry.assetId));
-    return [...Array.from(baselines.values()).filter((entry) => !atStart.has(entry.assetId)), ...entries]
-      .sort((a, b) => a.date.localeCompare(b.date));
-  }, [allHistory, selectedPeriodRange.endDate, selectedPeriodRange.startDate]);
-
-  const totalSnapshots = useMemo(
-    () => history
-      .filter((entry) => entry.assetId === snapshotType)
-      .sort((a, b) => a.date.localeCompare(b.date)),
-    [history, snapshotType]
-  );
-
-  const typeSnapshots = useMemo(() => {
-    const result = {} as Record<AssetType, AssetHistoryEntry[]>;
-
-    ASSET_TYPE_ORDER.forEach((type) => {
-      result[type] = [];
-    });
-
-    history.forEach((entry) => {
-      if (!entry.assetId.startsWith(TYPE_SNAPSHOT_PREFIX)) {
-        return;
-      }
-
-      const typeKey = entry.assetId.slice(TYPE_SNAPSHOT_PREFIX.length);
-
-      if (!isAssetType(typeKey)) {
-        return;
-      }
-
-      if (financialOnly && (typeKey === 'property' || typeKey === 'loan')) {
-        return;
-      }
-
-      result[typeKey].push(entry);
-    });
-
-    ASSET_TYPE_ORDER.forEach((type) => {
-      result[type].sort((a, b) => a.date.localeCompare(b.date));
-    });
-
-    return result;
-  }, [financialOnly, history]);
-
-  const displayTypeSnapshots = useMemo(() => {
-    const result = {} as Record<AssetType, AssetHistoryEntry[]>;
-
-    ASSET_TYPE_ORDER.forEach((type) => {
-      result[type] = hasCurrentAssets
-        ? upsertRealtimeSnapshot(typeSnapshots[type], `TYPE_${type}`, typeTotals[type], today)
-        : typeSnapshots[type];
-    });
-
-    return result;
-  }, [hasCurrentAssets, today, typeSnapshots, typeTotals]);
-
-  const displayTotalSnapshots = useMemo(
-    () => hasCurrentAssets && totalAssets !== undefined
-      ? upsertRealtimeSnapshot(totalSnapshots, snapshotType, totalAssets, today)
-      : totalSnapshots,
-    [hasCurrentAssets, snapshotType, today, totalAssets, totalSnapshots]
-  );
-
-  const availableTypes = useMemo(() => {
-    const available = new Set<AssetType>();
-
-    visibleAssets.forEach((asset) => {
-      available.add(asset.type);
-    });
-    ASSET_TYPE_ORDER.forEach((type) => {
-      if (typeSnapshots[type].length > 0) available.add(type);
-    });
-
-    return ASSET_TYPE_ORDER.filter((type) => available.has(type));
-  }, [visibleAssets, typeSnapshots]);
+  const totalHistory = useMemo(() => withCurrentAssetBalance(
+    historyBySeries.get(snapshotType) ?? [], hasCurrentAssets ? totalAssets : undefined, today,
+  ), [historyBySeries, snapshotType, hasCurrentAssets, totalAssets, today]);
+  const series = useMemo(() => {
+    const availableTypes = ASSET_TYPE_ORDER.filter(type => (
+      (!financialOnly || (type !== 'property' && type !== 'loan'))
+      && (visibleAssets.some(asset => asset.type === type)
+        || historyBySeries.get(`TYPE_${type}`)?.some(entry => entry.date <= selectedPeriodRange.endDate))
+    ));
+    const definitions = [
+      { key: 'all' as const, snapshotId: snapshotType, label: financialOnly ? '금융자산' : '전체',
+        color: '#3B82F6', balance: totalAssets },
+      ...availableTypes.map(type => ({ key: type, snapshotId: `TYPE_${type}`,
+        label: ASSET_TYPE_CONFIG[type].label, color: ASSET_TYPE_CONFIG[type].color, balance: typeTotals[type] })),
+    ];
+    return definitions.map(({ snapshotId, ...definition }) => ({
+      ...definition,
+      history: definition.key === 'all' ? totalHistory
+        : withCurrentAssetBalance(historyBySeries.get(snapshotId) ?? [], hasCurrentAssets ? definition.balance : undefined, today),
+    }));
+  }, [historyBySeries, financialOnly, hasCurrentAssets, selectedPeriodRange.endDate, snapshotType, today, totalAssets, totalHistory, typeTotals, visibleAssets]);
 
   useEffect(() => {
-    const allowedKeys = new Set<TrendSeriesKey>(['all', ...availableTypes]);
-
-    setEnabledSeries((prev) => {
-      const next = new Set<TrendSeriesKey>(
-        Array.from(prev).filter((key) => allowedKeys.has(key))
-      );
-
-      if (next.size === 0) {
-        return new Set<TrendSeriesKey>(['all']);
-      }
-
-      return next.size === prev.size ? prev : next;
+    const allowedKeys = new Set(series.map(item => item.key));
+    setEnabledSeries(previous => {
+      const next = new Set(Array.from(previous).filter(key => allowedKeys.has(key)));
+      if (next.size === 0) return new Set<TrendSeriesKey>(['all']);
+      return next.size === previous.size ? previous : next;
     });
-  }, [availableTypes]);
+  }, [series]);
 
-  const summaryTotals = useMemo(() => {
-    if (displayTotalSnapshots.length > 0) {
-      return displayTotalSnapshots.map((entry) => ({
-        date: entry.date,
-        total: entry.balance,
-        change: entry.changeAmount,
-      }));
-    }
-
-    return [];
-  }, [displayTotalSnapshots]);
-
+  const periodSeries = useMemo(() => series.map(item => ({
+    ...item, points: selectHistoryPeriod(item.history, selectedPeriodRange.startDate, selectedPeriodRange.endDate),
+  })), [series, selectedPeriodRange.startDate, selectedPeriodRange.endDate]);
+  const selectedSeries = useMemo(() => periodSeries.filter(item => enabledSeries.has(item.key)), [periodSeries, enabledSeries]);
+  const periodTotals = periodSeries[0].points;
   const chartDates = useMemo(() => {
-    const dateSet = new Set<string>();
-
-    if (enabledSeries.has('all')) {
-      displayTotalSnapshots.forEach((entry) => dateSet.add(entry.date));
+    const dates = new Set<string>();
+    for (const item of selectedSeries) {
+      for (const point of item.points) dates.add(point.date);
     }
+    return dates.size ? Array.from(dates).sort() : [today];
+  }, [selectedSeries, today]);
 
-    availableTypes.forEach((type) => {
-      if (!enabledSeries.has(type)) {
-        return;
-      }
-
-      displayTypeSnapshots[type].forEach((entry) => dateSet.add(entry.date));
-    });
-
-    if (dateSet.size === 0) {
-      dateSet.add(today);
-    }
-
-    return Array.from(dateSet).sort();
-  }, [availableTypes, displayTotalSnapshots, displayTypeSnapshots, enabledSeries, today]);
-
-  const chartData = useMemo<ChartData<'line', Array<number | null>, string>>(() => {
-    const labels = chartDates.map((dateString) => {
-      const [, month, day] = dateString.split('-').map(Number);
+  const chartData = useMemo<ChartData<'line', Array<number | null>, string>>(() => ({
+    labels: chartDates.map(date => {
+      const [, month, day] = date.split('-').map(Number);
       return `${month}/${day}`;
-    });
-
-    const datasets: Array<ChartDataset<'line', Array<number | null>>> = [];
-
-    if (enabledSeries.has('all')) {
-      datasets.push({
-        label: financialOnly ? '금융자산' : '전체',
-        data: buildCarriedSeries(chartDates, displayTotalSnapshots, totalAssets),
-        borderColor: '#3B82F6',
-        backgroundColor: 'rgba(59, 130, 246, 0.10)',
-        borderWidth: 2,
-        fill: true,
+    }),
+    datasets: selectedSeries.map(item => {
+      const isTotal = item.key === 'all';
+      return {
+        label: item.label,
+        data: buildCarriedSeries(chartDates, item.points, item.balance),
+        borderColor: item.color,
+        backgroundColor: isTotal ? 'rgba(59, 130, 246, 0.10)' : `${item.color}20`,
+        borderWidth: isTotal ? 2 : 1.75,
+        fill: isTotal,
         tension: 0.3,
         cubicInterpolationMode: 'monotone',
         spanGaps: true,
-        pointRadius: chartDates.length > 14 ? 0 : 2.5,
+        pointRadius: chartDates.length > 14 ? 0 : (isTotal ? 2.5 : 2),
         pointHoverRadius: 4,
-      });
-    }
-
-    availableTypes.forEach((type) => {
-      if (!enabledSeries.has(type)) {
-        return;
-      }
-
-      const config = ASSET_TYPE_CONFIG[type];
-
-      datasets.push({
-        label: config.label,
-        data: buildCarriedSeries(chartDates, displayTypeSnapshots[type], typeTotals[type]),
-        borderColor: config.color,
-        backgroundColor: `${config.color}20`,
-        borderWidth: 1.75,
-        fill: false,
-        tension: 0.3,
-        cubicInterpolationMode: 'monotone',
-        spanGaps: true,
-        pointRadius: chartDates.length > 14 ? 0 : 2,
-        pointHoverRadius: 4,
-      });
-    });
-
-    return { labels, datasets };
-  }, [
-    availableTypes,
-    chartDates,
-    displayTotalSnapshots,
-    displayTypeSnapshots,
-    enabledSeries,
-    financialOnly,
-    totalAssets,
-    typeTotals,
-  ]);
+      };
+    }),
+  }), [chartDates, selectedSeries]);
 
   const chartOptions = useMemo<ChartOptions<'line'>>(
     () => ({
@@ -554,12 +417,12 @@ export default function AssetStatsPage() {
     [chartMotion]
   );
 
-  const periodChange = summaryTotals.length > 1
-    ? summaryTotals[summaryTotals.length - 1].total - summaryTotals[0].total
+  const periodChange = periodTotals.length > 1
+    ? periodTotals[periodTotals.length - 1].balance - periodTotals[0].balance
     : 0;
 
-  const periodChangeRate = summaryTotals.length > 1 && summaryTotals[0].total > 0
-    ? (periodChange / summaryTotals[0].total) * 100
+  const periodChangeRate = periodTotals.length > 1 && periodTotals[0].balance > 0
+    ? (periodChange / periodTotals[0].balance) * 100
     : 0;
 
   const toggleSeries = (key: TrendSeriesKey) => {
@@ -693,43 +556,23 @@ export default function AssetStatsPage() {
                 <h3 className="mb-4 text-sm font-semibold text-slate-700">자산 추이</h3>
 
                 <div className="mb-4 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    aria-pressed={enabledSeries.has('all')}
-                    onClick={() => toggleSeries('all')}
-                    className={`rounded-full px-3 py-1.5 text-sm font-medium transition-all ${
-                      enabledSeries.has('all')
-                        ? 'bg-blue-500 text-white shadow-md'
-                        : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                    }`}
-                  >
-                    {financialOnly ? '금융자산' : '전체 자산'}
-                  </button>
-
-                  {availableTypes.map((type) => {
-                    const config = ASSET_TYPE_CONFIG[type];
-                    const isEnabled = enabledSeries.has(type);
-
+                  {series.map(item => {
+                    const isEnabled = enabledSeries.has(item.key);
                     return (
                       <button
                         type="button"
-                        key={type}
+                        key={item.key}
                         aria-pressed={isEnabled}
-                        onClick={() => toggleSeries(type)}
+                        onClick={() => toggleSeries(item.key)}
                         className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-all ${
-                          isEnabled
-                            ? 'text-white shadow-md'
-                            : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                          isEnabled ? 'text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
                         }`}
-                        style={{
-                          backgroundColor: isEnabled ? config.color : undefined,
-                        }}
+                        style={{ backgroundColor: isEnabled ? item.color : undefined }}
                       >
-                        <span
-                          className="h-2 w-2 rounded-full"
-                          style={{ backgroundColor: isEnabled ? 'white' : config.color }}
-                        />
-                        {config.label}
+                        {item.key !== 'all' && (
+                          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: isEnabled ? 'white' : item.color }} />
+                        )}
+                        {item.key === 'all' && !financialOnly ? '전체 자산' : item.label}
                       </button>
                     );
                   })}
@@ -748,9 +591,7 @@ export default function AssetStatsPage() {
 
               <AssetProfitChart
                 key={`profit:${actorKey}:${remoteReadEpoch}`}
-                snapshotId={snapshotType}
-                currentBalance={hasCurrentAssets ? totalAssets : undefined}
-                sourceHistory={allHistory}
+                sourceHistory={series[0].history}
               />
 
             </>

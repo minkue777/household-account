@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import AssetProfitChart from '@/components/assets/AssetProfitChart';
+import { withCurrentAssetBalance } from '@/features/reporting/assetBalanceHistory';
 import type { AssetHistoryEntry } from '@/types/asset';
 import { getTodayLocalDate, getSeoulCalendarParts, formatLocalDate } from '@/lib/utils/date';
 const mockBarInputs = jest.fn();
@@ -24,7 +25,7 @@ it('distinguishes missing observations from a confirmed zero change', () => {
 
 it('preserves the observed change when today is the only snapshot and the live balance arrives', () => {
   const sourceHistory = [{ ...entry(getTodayLocalDate()), balance: 1000, changeAmount: 200 }];
-  render(<AssetProfitChart sourceHistory={sourceHistory} currentBalance={1000} />);
+  render(<AssetProfitChart sourceHistory={withCurrentAssetBalance(sourceHistory.filter(entry => entry.assetId === 'TOTAL'), 1000, getTodayLocalDate())} />);
   fireEvent.click(screen.getByRole('button', { name: '일별 자산 변동' }));
   expect(screen.getByText('+200원')).toBeInTheDocument();
   expect(screen.getByText('+25.00%')).toBeInTheDocument();
@@ -40,7 +41,7 @@ it('uses supplied history for local month, year and snapshot changes', () => {
     { ...entry(getTodayLocalDate()), balance: 1000, changeAmount: 200 },
     { ...entry(getTodayLocalDate()), assetId: 'FINANCIAL', balance: 400, changeAmount: 50 },
   ];
-  const { rerender } = render(<AssetProfitChart sourceHistory={sourceHistory} currentBalance={1000} />);
+  const { rerender } = render(<AssetProfitChart sourceHistory={withCurrentAssetBalance(sourceHistory.filter(entry => entry.assetId === 'TOTAL'), 1000, getTodayLocalDate())} />);
   expect(mockBarInputs.mock.calls.at(-1)![1].animation).toEqual({ duration: 150 });
   fireEvent.click(screen.getByRole('button', { name: '일별 자산 변동' }));
   expect(screen.getByText('+200원')).toBeInTheDocument();
@@ -55,7 +56,7 @@ it('uses supplied history for local month, year and snapshot changes', () => {
   expect(screen.getByText('+100원')).toBeInTheDocument();
 
   fireEvent.click(screen.getByRole('button', { name: '다음 변동 기간' }));
-  rerender(<AssetProfitChart sourceHistory={sourceHistory} snapshotId="FINANCIAL" currentBalance={400} />);
+  rerender(<AssetProfitChart sourceHistory={withCurrentAssetBalance(sourceHistory.filter(entry => entry.assetId === 'FINANCIAL'), 400, getTodayLocalDate())} />);
   expect(screen.getByText('+50원')).toBeInTheDocument();
   expect(screen.queryByText('+200원')).not.toBeInTheDocument();
   expect(screen.queryByText('변동 내역을 불러오는 중...')).not.toBeInTheDocument();

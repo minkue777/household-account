@@ -39,3 +39,21 @@ E2E 준비의 architecture 43개, 문서 링크·요구사항 추적성 13개와
 요구사항과 설계는 reporting의 `STAT-005`, `STAT-006`, `STAT-AST-002`에 연결했습니다. 미사용 독립 조회·TTL 검사는 제거/변경하고, +200원/+25% 계산·baseline·0원/NoData·진행 요청 공유·실패 보존·세션 격리·화면 유지 검사는 유지합니다. 동일 Actor로 돌아오는 요청, 종료일·epoch별 캐시 격리, 선택 연도 단일 조회와 새해 진입 검사를 보강했습니다.
 
 선택 연도만 갱신하는 새 검사는 수정 전 실패했습니다. 변경 후 관련 Jest 7개 파일 92개가 통과했고, 후속 새해 진입 검사까지 해당 파일 2개가 통과하여 총 93개를 확인했습니다. `tsc --noEmit`, E2E 준비의 architecture 43개, 문서 링크·추적성 13개도 통과했습니다. 실제 Emulator와 production build를 사용하는 `portfolio-reporting.spec.ts`의 7개 브라우저 검사가 48.5초에 통과했습니다. 서버 응답을 보류하는 기존 시나리오에서 canvas 3개·선택을 보존하며 실제 이력·배당 갱신값을 반영했습니다. 로그는 `TEMP/household-stats-simplicity-{before,unit,year,types,prepare,e2e}-20261005.log`입니다. Web만 Vercel Git 자동배포하며 전체 CI는 해당 커밋으로 추적합니다.
+
+## 시리즈·계산 계약의 추가 단순화
+
+전체·금융 합계와 유형별 추이를 같은 시리즈 구조로 계산합니다. 별도 분류·정렬·실시간 합성·날짜 수집·dataset 생성 경로를 통합하고, 사용하지 않는 요약 중간 객체를 제거했습니다. 시리즈 선택 버튼도 동일한 시리즈를 사용하며 기존 글꼴·색상·선택 의미를 보존합니다.
+
+`withCurrentAssetBalance`는 날짜순으로 분류된 단일 시리즈에 오늘 잔액을 한 번 반영합니다. 읽기 경계의 날짜순·날짜 중복 제거 계약을 사용하며, 화면은 전체 이력을 한 번만 분류합니다. 상단은 기간과 baseline을 잘라 표시하고 증감 차트는 전체 이력으로 독립적인 월·연도 탐색을 합니다. helper는 저장 문서의 가짜 id·createdAt을 생성하지 않으며 입력 이력을 변경하지 않습니다. 미확정 현재값과 확정된 0원을 구분하고, 오늘이 첫 이력일 때 원래 changeAmount에서 baseline을 복원합니다.
+
+배당은 확정 월 합계에 예상액을 직접 누적하고 상세 연월 필터·연간 합계를 한 번 계산합니다. snapshot.monthlyData와 상세 events 합계가 달라도 canonical 월 합계를 그대로 사용하며, 발표 상태·기준일·확정 ID 제외·반올림·지급일/확정 우선/종목명 정렬을 유지합니다.
+
+새 helper 25줄을 포함한 실행 코드 합계는 1,406줄입니다. 직전 1,581줄 대비 175줄, 최초 1,673줄 대비 267줄(16.0%) 감소입니다. 파일 이동·테스트·문서는 감소량에 포함하지 않으며 20% 달성으로 보고하지 않습니다.
+
+최종 관련 Jest 8개 파일 106개와 타입 검사가 통과했습니다. 새 시나리오는 희소한 유형별 baseline·확정 0원·금융자산 제외·상단 기간과 독립적인 과거 월/연도 탐색·원본 불변 및 배당 합계/상세 계약을 확인합니다. 페이지 검사 작성 중 현재 모드 버튼 이름을 반대로 선택한 테스트 오류를 실제 `전체자산` 버튼으로 수정했습니다. Jest role 선택자에 잘못 넣은 Playwright식 `exact` 옵션도 제거했습니다(문자열 name은 기본적으로 정확히 일치합니다). 변경 전후 실제 추이 계산을 추출한 최종 코드의 고정 seed 1,500개 입력 비교에서 값·선택·dataset 옵션이 모두 일치했습니다. 이 비교는 UI·SDK 검사를 대체하지 않습니다. 로그는 `TEMP/household-stats-series-{unit,types,page,equivalence,prepare,e2e}-20261005.log`입니다.
+
+중간 구현의 시리즈별 전체 필터·정렬이 긴 이력에서 반복되는 것을 측정으로 확인하여 한 번 분류·날짜 위치 삽입으로 정리했습니다. helper의 임의 비정렬 입력 지원은 내부 계약에서 제거하고, 날짜순·유일 원천을 보장하는 기존 SDK 조회 검사는 유지했습니다. 오늘 포인트의 맨 앞·중간·끝 삽입 검사를 추가했습니다. 자산 이름이나 유형별 금액만 바뀌어 전체 합계가 같을 때에는 전체 이력의 메모 참조를 유지합니다. 이 참조 회귀 검사는 중간 구현에서 실패했고 합계 합성의 의존성을 별도로 명시한 최종 구현에서 통과했습니다.
+
+실제 이전/현재 page 계산부와 helper를 추출한 데스크톱 Node 24 측정에서 365일 중앙값은 0.793→0.375ms, 1,825일은 1.555→1.305ms, 49,999일/599,988 entry는 21.173→21.322ms였습니다. 7개 시리즈를 모두 선택하고 3개월을 표시하며, 준비 실행 후 일반 이력 41회·상한 근처 11회를 교차 측정했습니다. 상한 근처에서도 더 빠르다고 주장하지 않으며, 기기·렌더·네트워크 시간을 포함하지 않은 로컬 계산 비교입니다. 스크립트는 `TEMP/household-asset-statistics-pipeline-performance-20261005.cjs`, 최종 결과는 `TEMP/household-stats-series-performance-final-20261005.log`입니다. 최종 Jest·타입 로그는 `TEMP/household-stats-series-{unit,types}-final-20261005.log`, 수정 전 참조 회귀는 `TEMP/household-stats-series-reference-before-20261005.log`입니다.
+
+최종 production build와 실제 Auth/Functions/Firestore Emulator 기반 Chromium `portfolio-reporting.spec.ts` 7개가 44.7초에 통과했습니다. 실제 시세 응답·이력 읽기를 보류한 동안 세 canvas와 기간·상세·배당 연도 선택을 유지하고 해제 후 저장된 갱신값을 반영했습니다. E2E 준비 architecture 43개, 최종 문서 링크·요구사항 추적성 13개도 통과했습니다. 로그는 `TEMP/household-stats-series-e2e-final-20261005.log`와 `TEMP/household-stats-series-docs-final-20261005.log`이며 로컬 Emulator는 정상 종료했습니다. 배포 대상은 Web Git 자동배포뿐입니다. 직전 `37f7d40`의 CI `37282200572` 다섯 검사·요약과 Web 배포 성공을 확인했습니다.
