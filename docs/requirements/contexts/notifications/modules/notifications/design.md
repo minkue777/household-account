@@ -379,7 +379,7 @@ contracts/schemas/read-models/notification-payload-v1.json
 contracts/fixtures/notifications/
 ```
 
-`public.ts`는 Input Port, wire DTO, Read Model, Event schema, 안정 오류 code만 export합니다. FID persistence DTO, Recipient Policy 구현, FCM provider DTO는 export하지 않습니다.
+`public.ts`는 Input Port, wire DTO, Read Model, Event schema, 안정 오류 code만 export합니다. FID persistence DTO, Recipient Policy 구현, FCM provider DTO는 export하지 않습니다. 설치 등록 서버는 요청의 검증된 actor binding을 사용하는 명령이며 클라이언트 세션 복원·OS 권한 상태를 흉내 내지 않습니다. 실제 PWA/Android lifecycle이 환경·권한·늦은 콜백을 관리합니다. [설치 등록 정비 및 실제 SDK 검사](../../../../../operations/mobile-endpoint-simplicity-2026-10-05.md)를 참조합니다.
 
 ## 11. 테스트 설계
 

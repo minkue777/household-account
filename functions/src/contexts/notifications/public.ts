@@ -21,21 +21,6 @@ export function createNotificationTargetPlanner(): NotificationTargetPlanner {
   return createDefaultNotificationTargetPlanner();
 }
 
-export {
-  type ClientCapabilityResult,
-  type ClientEndpointResult,
-  type MobileEndpointDeviceInfo,
-  type MobileFidRegistrationInputPort,
-  type MobilePlatform,
-  type MobileRuntime,
-  type MobileSessionScope,
-  type RegisterMobileFidInput,
-  type UnregisterMobileFidInput,
-} from "./application/ports/in/mobileFidRegistrationPort";
-
-
-
-
 
 export {
   type AcceptNotificationIntentResult,

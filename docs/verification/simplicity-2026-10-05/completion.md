@@ -67,7 +67,7 @@
 | [1. 운영에 연결되지 않은 configuration 메모리 application 3개 제거 검토](capture.md) | 구현·관련 검사 완료 | [카드·규칙 직접 변경 계산](../../operations/server-simplicity-2026-10-05.md) |
 | [2. Android 미사용 단건 capture 전달 API 제거](capture.md) | 이전 배포 완료 | [Android 1차](implementation.md) |
 | [3. capture ingress와 retry의 두 전달 알고리즘을 한 번의 attempt로 통일](capture.md) | 미착수 | |
-| [4. 서버 FID 등록에서 가상의 client session controller 제거](capture.md) | 미착수 | |
+| [4. 서버 FID 등록에서 가상의 client session controller 제거](capture.md) | 구현·실제 SDK 검사 완료 | [설치 등록 명령](../../operations/mobile-endpoint-simplicity-2026-10-05.md) |
 | [5. configuration의 transaction 내부 가상 store를 순수 mutation으로 축소](capture.md) | 구현·관련 검사 완료 | [카드·규칙 직접 변경 계산](../../operations/server-simplicity-2026-10-05.md) |
 | [6. 테스트만 소비하는 legacy Shortcut owner 추론은 운영 src와 분리](capture.md) | 미착수 | |
 | [7. QuickEdit의 original/draft/Intent 필드 복제를 한 snapshot과 draft로 정리](capture.md) | 미착수 | |

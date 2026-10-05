@@ -1,9 +1,3 @@
-export type MobileRuntime =
-  | "android-app"
-  | "ios-home-screen-pwa"
-  | "ios-browser"
-  | "desktop-web";
-
 export type MobilePlatform = "android" | "ios-pwa";
 
 export interface MobileEndpointDeviceInfo {

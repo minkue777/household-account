@@ -4,7 +4,7 @@ import {
   FirebaseMobileEndpointRegistrationStore,
   Sha256MobileEndpointIdentityAdapter,
 } from "../../adapters/firebase/notifications/firebaseMobileEndpointRegistrationStore";
-import { createMobileFidRegistrationController } from "../../contexts/notifications/application/mobileFidRegistrationController";
+import { createMobileEndpointCommands } from "../../contexts/notifications/application/mobileEndpointCommands";
 import type { MobileEndpointDeviceInfo } from "../../contexts/notifications/domain/model/mobileNotificationEndpoint";
 import {
   HouseholdCommandRejection,
@@ -46,41 +46,24 @@ function deviceInfo(value: unknown): MobileEndpointDeviceInfo {
   return result;
 }
 
-function controllerFor(
+function commandsFor(
   database: firestore.Firestore,
   context: HouseholdCommandExecutionContext,
 ) {
   if (context.actor === undefined) {
     throw new HouseholdCommandRejection("HOUSEHOLD_FORBIDDEN");
   }
-  const controller = createMobileFidRegistrationController(
+  return createMobileEndpointCommands(
     new FirebaseMobileEndpointRegistrationStore(database),
     new Sha256MobileEndpointIdentityAdapter(),
     { now: () => context.requestedAt },
+    { householdId: context.actor.householdId, memberId: context.actor.actingMemberId },
   );
-  controller.restoreSession({
-    principalUid: context.principalUid,
-    householdId: context.actor.householdId,
-    memberId: context.actor.actingMemberId,
-    sessionGeneration: 1,
-  });
-  return controller;
 }
 
-function resultValue(result: Awaited<ReturnType<ReturnType<typeof controllerFor>["onRegistered"]>>) {
-  if (
-    result.kind === "registered" ||
-    result.kind === "removed" ||
-    result.kind === "inactivated" ||
-    result.kind === "already-absent" ||
-    result.kind === "stale-ignored"
-  ) {
-    return result;
-  }
-  if (result.kind === "validation-error") {
-    throw new HouseholdCommandRejection(result.code);
-  }
-  throw new HouseholdCommandRejection(result.reason);
+function resultValue(result: Awaited<ReturnType<ReturnType<typeof commandsFor>["register"]>>) {
+  if (result.kind === "validation-error") throw new HouseholdCommandRejection(result.code);
+  return result;
 }
 
 export function createNotificationHouseholdCommandHandlers(
@@ -100,10 +83,8 @@ export function createNotificationHouseholdCommandHandlers(
           if (platform !== "android" && platform !== "ios-pwa") {
             throw new HouseholdCommandRejection("PLATFORM_NOT_SUPPORTED");
           }
-          const result = await controllerFor(database, context).onRegistered({
-            runtime:
-              platform === "android" ? "android-app" : "ios-home-screen-pwa",
-            osNotificationPermission: "granted",
+          const result = await commandsFor(database, context).register({
+            platform,
             fid: requiredString(payload, "fid"),
             deviceInfo: deviceInfo(payload.deviceInfo),
           });
@@ -122,9 +103,9 @@ export function createNotificationHouseholdCommandHandlers(
           }
           const fid = requiredString(payload, "fid");
           const reason = requiredString(payload, "reason");
-          const controller = controllerFor(database, context);
+          const commands = commandsFor(database, context);
           if (reason === "logout") {
-            return resultValue(await controller.logoutCurrentInstallation(fid));
+            return resultValue(await commands.logout(fid));
           }
           if (reason !== "sdk-unregistered") {
             throw new HouseholdCommandRejection("REMOVAL_REASON_INVALID");
@@ -139,7 +120,7 @@ export function createNotificationHouseholdCommandHandlers(
             );
           }
           return resultValue(
-            await controller.onUnregistered({
+            await commands.unregister({
               fid,
               expectedRegistrationVersion: payload.expectedRegistrationVersion,
             }),

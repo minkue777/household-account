@@ -134,6 +134,24 @@ describe('iPhone PWA FID endpoint 등록 계약', () => {
     localStorage.removeItem('pwa-fid-root-binding.v1');
     mockSubscriptionEndpoint = 'https://push.example/root-subscription';
     mockRegisterEndpoint.mockResolvedValue({ registrationVersion: 99 });
+    Object.assign(Notification, { permission: 'granted' });
+  });
+
+  it.each(['브라우저', '권한 거부', '로그인 전'])('[T-PUSH-008] %s이면 실제 PWA 등록 경로가 SDK·서버 호출 전에 거부한다', async mode => {
+    if (mode === '브라우저') {
+      const { Platform } = require('@/lib/utils/platform');
+      Platform.isIOSPWA.mockReturnValue(false);
+      await expect(activatePwaFidEndpoint()).resolves.toBe(false);
+    } else if (mode === '권한 거부') {
+      Object.assign(Notification, { permission: 'denied' });
+      await expect(activatePwaFidEndpoint()).resolves.toBe(false);
+    } else {
+      const { requireClientSessionScope } = require('@/composition/clientSessionScope');
+      requireClientSessionScope.mockImplementation(() => { throw new Error('SESSION_REQUIRED'); });
+      await expect(activatePwaFidEndpoint()).rejects.toThrow('SESSION_REQUIRED');
+    }
+    expect(mockRegister).not.toHaveBeenCalled();
+    expect(mockRegisterEndpoint).not.toHaveBeenCalled();
   });
 
   it('[T-PUSH-008] 권한 허용만으로 활성 처리하지 않고 같은 FID도 서버 재등록 성공 뒤 활성 처리한다', async () => {
