@@ -166,3 +166,88 @@ test('[T-DIV-005][DIV-002][DIV-005][DIV-006] 발표 배당 예상액을 표시�
   await page.reload();
   await expect(card.getByText('210원', { exact: true })).toBeVisible();
 });
+
+
+test('[STAT-005][STAT-006] 자산 목록의 늦은 시세 갱신 완료 뒤 통계 차트와 선택을 보존한다', async ({ page, request }) => {
+  const scope = await createHouseholdThroughUi(page);
+  const year = Number(monthsAgo(0).slice(0, 4));
+  await executeHouseholdCommand(request, { ...scope, command: 'portfolio.create-asset.v1', payload: {
+    asset: { name: '갱신 확인 예금', type: 'savings', owner: '공동', ownerRef: { kind: 'household' },
+      currency: 'KRW', currentBalance: 100_000, isActive: true, order: 1 },
+  } });
+  const writeHistory = (total: number) => fixture(request, `households/${scope.householdId}/assetSnapshots/${monthsAgo(4)}`, {
+    householdId: scope.householdId, localDate: monthsAgo(4), total, financial: total,
+    byType: { savings: total }, byOwnerRefKey: { household: total }, ownerDisplayNames: { household: '공동' },
+  });
+  const writeDividend = (value: number) => fixture(request, `dividend_snapshots/${scope.householdId}_${year - 1}`, {
+    householdId: scope.householdId, year: year - 1, monthlyData: [value, ...Array(11).fill(0)], events: {},
+  });
+  await writeHistory(80_000);
+  await writeDividend(50);
+  let releaseCommand!: () => void;
+  let releaseHistory!: () => void;
+  const commandGate = new Promise<void>(resolve => { releaseCommand = resolve; });
+  const historyGate = new Promise<void>(resolve => { releaseHistory = resolve; });
+  let commandHeld = false;
+  let historyHeld = false;
+  let pauseHistory = false;
+  await page.route('**/executeHouseholdCommand', async route => {
+    if (route.request().method() !== 'POST' || route.request().postDataJSON()?.data?.command !== 'portfolio.refresh-market-values.v1') {
+      await route.continue(); return;
+    }
+    // 실제 서버 실행·응답을 그대로 사용하고 전달 시점만 늦춥니다.
+    const response = await route.fetch();
+    expect((await response.json()).result.result.kind).toBe('succeeded');
+    commandHeld = true;
+    await commandGate;
+    await route.fulfill({ response });
+  });
+  await page.route(url => url.hostname === '127.0.0.1' && url.port === '8080' && url.pathname.endsWith(':runQuery'), async route => {
+    if (pauseHistory && (route.request().postData() ?? '').includes('assetSnapshots')) {
+      historyHeld = true;
+      await historyGate;
+    }
+    await route.continue();
+  });
+  try {
+    await page.goto('/assets');
+    await expect.poll(() => commandHeld).toBe(true);
+    await page.locator('a[href="/assets/stats"]').click();
+    await expect(page.locator('canvas')).toHaveCount(3);
+    await page.getByRole('button', { name: '6개월', exact: true }).click();
+    await expect(page.getByText('+20,000원 (+25.00%)', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: '월별', exact: true }).click();
+    const details = page.getByRole('button', { name: '월별 자산 변동', exact: true });
+    await details.click();
+    const dividend = page.locator('div.rounded-2xl').filter({ has: page.getByRole('heading', { name: '배당금 현황', exact: true }) }).last();
+    await dividend.locator('button').first().click();
+    await expect(dividend.getByText('50원', { exact: true })).toBeVisible();
+    await page.evaluate(() => {
+      const canvases = Array.from(document.querySelectorAll('canvas'));
+      let removed = false;
+      const observer = new MutationObserver(records => {
+        if (records.some(record => Array.from(record.removedNodes).some(node => canvases.some(canvas => node === canvas || node.contains(canvas))))) removed = true;
+      });
+      observer.observe(document.querySelector('main')!, { childList: true, subtree: true });
+      (window as typeof window & { e2eStableCharts: () => boolean }).e2eStableCharts = () => !removed && canvases.length === 3 && canvases.every(canvas => canvas.isConnected);
+    });
+    await writeHistory(60_000);
+    await writeDividend(75);
+    pauseHistory = true;
+    releaseCommand();
+    await expect.poll(() => historyHeld).toBe(true);
+    await expect(page.locator('main').getByRole('status')).toHaveCount(0);
+    await expect(details).toHaveAttribute('aria-expanded', 'true');
+    await expect(dividend.getByText(`${year - 1}년`, { exact: true })).toBeVisible();
+    expect(await page.evaluate(() => (window as typeof window & { e2eStableCharts: () => boolean }).e2eStableCharts())).toBe(true);
+    releaseHistory();
+    await expect(page.getByText('+40,000원 (+66.67%)', { exact: true })).toBeVisible();
+    await expect(dividend.getByText('75원', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: '6개월', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(details).toHaveAttribute('aria-expanded', 'true');
+    expect(await page.evaluate(() => (window as typeof window & { e2eStableCharts: () => boolean }).e2eStableCharts())).toBe(true);
+  } finally {
+    releaseCommand(); releaseHistory();
+    await page.unrouteAll({ behavior: 'wait' });
+  }
+});

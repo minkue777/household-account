@@ -51,6 +51,7 @@ type PeriodType = '3M' | '6M' | '1Y' | 'ALL';
 type TrendSeriesKey = 'all' | AssetType;
 
 const TYPE_SNAPSHOT_PREFIX = 'TYPE_';
+const EMPTY_ASSETS: Asset[] = [];
 const ASSET_TYPE_ORDER: AssetType[] = ['savings', 'stock', 'crypto', 'property', 'gold', 'loan'];
 
 function formatKoreanUnit(value: number): string {
@@ -153,9 +154,7 @@ export default function AssetStatsPage() {
     remoteReadEpoch = 0,
     currentMember,
   } = useHousehold();
-  const [assets, setAssets] = useState<Asset[]>([]);
-  const [hasCurrentAssets, setHasCurrentAssets] = useState(false);
-  const [assetReadFailed, setAssetReadFailed] = useState(false);
+  const [assetRead, setAssetRead] = useState<{ key: string; assets?: Asset[]; failed: boolean }>({ key: '', failed: false });
   const [historyRead, setHistoryRead] = useState<{ key: string; history?: AssetHistoryEntry[]; failed: boolean }>({ key: '', failed: false });
   const [dividendPrefetch, setDividendPrefetch] = useState<{ key: string; source: AssetDividendPrefetch } | null>(null);
   const [revision, setRevision] = useState(0);
@@ -170,9 +169,13 @@ export default function AssetStatsPage() {
   const actorKey = sessionScope ? assetStatisticsSessionKey(sessionScope) : null;
   const canRead = isSessionVerified && !!householdKey && sessionScope?.householdId === householdKey
     && (sessionScope.accessMode === 'administrator-readonly' || sessionScope.memberId === currentMember?.id);
-  const sourceKey = JSON.stringify([actorKey, householdKey, currentMember?.id, remoteReadEpoch, selectedPeriodRange.endDate, revision]);
+  const sourceKey = JSON.stringify([actorKey, householdKey, currentMember?.id, remoteReadEpoch, selectedPeriodRange.endDate]);
   const cachedHistory = useMemo(() => canRead ? peekAssetStatisticsHistory(undefined, selectedPeriodRange.endDate, { cacheEpoch: remoteReadEpoch }) : undefined,
-    [canRead, sourceKey, remoteReadEpoch, selectedPeriodRange.endDate]);
+    [canRead, sourceKey, remoteReadEpoch, selectedPeriodRange.endDate, revision]);
+  const currentAssetRead = assetRead.key === sourceKey ? assetRead : undefined;
+  const assets = currentAssetRead?.assets ?? EMPTY_ASSETS;
+  const hasCurrentAssets = currentAssetRead?.assets !== undefined;
+  const assetReadFailed = currentAssetRead?.failed ?? false;
   const currentHistoryRead = historyRead.key === sourceKey ? historyRead : undefined;
   const completeHistory = currentHistoryRead?.history ?? cachedHistory;
   const allHistory = completeHistory ?? [];
@@ -183,9 +186,8 @@ export default function AssetStatsPage() {
 
   useEffect(() => {
     let active = true;
-    setAssets([]);
-    setHasCurrentAssets(false);
-    setAssetReadFailed(false);
+    setAssetRead(previous => previous.key === sourceKey
+      ? { ...previous, failed: false } : { key: sourceKey, failed: false });
     if (!canRead) return undefined;
 
     try {
@@ -193,23 +195,24 @@ export default function AssetStatsPage() {
       // observed zero balance. Only confirmed source snapshots replace history.
       const unsubscribe = subscribeToAssets(() => {}, undefined, (nextAssets, metadata) => {
         if (active && !metadata.fromCache) {
-          setAssets(previous => JSON.stringify(previous) === JSON.stringify(nextAssets) ? previous : [...nextAssets]);
-          setHasCurrentAssets(true);
-          setAssetReadFailed(false);
+          setAssetRead(previous => {
+            const unchanged = previous.key === sourceKey && JSON.stringify(previous.assets) === JSON.stringify(nextAssets);
+            if (unchanged && !previous.failed) return previous;
+            return { key: sourceKey, assets: unchanged ? previous.assets : [...nextAssets], failed: false };
+          });
         }
-      }, () => { if (active) setAssetReadFailed(true); });
+      }, () => { if (active) setAssetRead(previous => ({ ...previous, failed: true })); });
       return () => { active = false; unsubscribe(); };
     } catch (error) {
-      setAssetReadFailed(true);
+      setAssetRead(previous => ({ ...previous, failed: true }));
       console.error('자산 통계의 자산 목록을 불러오지 못했습니다.', error);
       return undefined;
     }
-  }, [householdKey, canRead, actorKey, remoteReadEpoch, revision]);
+  }, [canRead, sourceKey, revision]);
 
   useEffect(() => {
     let active = true;
-    setDividendPrefetch(null);
-    if (!canRead) return;
+    if (!canRead) { setDividendPrefetch(null); return; }
 
     // Dividend reads do not depend on history. Start them now and hand the
     // complete source to the card once the existing history display gate opens.
@@ -222,7 +225,7 @@ export default function AssetStatsPage() {
     void result.catch(() => {});
     setDividendPrefetch({ key: sourceKey, source: { year, result } });
     return () => { active = false; };
-  }, [canRead, sourceKey]);
+  }, [canRead, sourceKey, revision]);
 
   useEffect(() => {
     if (!canRead) return;
@@ -255,7 +258,7 @@ export default function AssetStatsPage() {
 
     void fetchHistory();
     return () => { active = false; };
-  }, [canRead, remoteReadEpoch, selectedPeriodRange.endDate, sourceKey, cachedHistory, refreshRevision]);
+  }, [canRead, remoteReadEpoch, selectedPeriodRange.endDate, sourceKey, cachedHistory, refreshRevision, revision]);
 
   useEffect(() => {
     const refresh = () => {

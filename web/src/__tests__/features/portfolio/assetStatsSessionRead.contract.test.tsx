@@ -274,6 +274,96 @@ describe('actual asset statistics page', () => {
     expect(read).toHaveBeenLastCalledWith(undefined, expect.any(String), { cacheEpoch: 0, forceRefresh: true });
   });
 
+  it('[STAT-005][STAT-006] keeps completed charts and selections when a late portfolio command invalidates statistics', async () => {
+    mockScope.isSessionVerified = true;
+    const today = getTodayLocalDate();
+    read.mockResolvedValueOnce([entry('TOTAL', today, 100)]);
+    jest.mocked(getDividendSnapshot).mockResolvedValueOnce(dividendSnapshot(1000));
+    const commits: string[] = [];
+    render(<Profiler id="late-portfolio-refresh" onRender={() => commits.push(document.body.textContent ?? '')}><AssetStatsPage /></Profiler>);
+    await screen.findByText('1,000원');
+    const asset: Asset = { id: 'cash', householdId: 'house-1', aggregateVersion: 1, name: '예금', type: 'savings',
+      currentBalance: 120, currency: 'KRW', isActive: true, order: 0,
+      createdAt: new Date(0), updatedAt: new Date(0), ownerRef: { kind: 'household' } };
+    act(() => jest.mocked(subscribeToAssets).mock.calls.at(-1)![2]!([asset], { fromCache: false }));
+    fireEvent.click(screen.getByRole('button', { name: '6개월' }));
+    fireEvent.click(screen.getByRole('button', { name: '월별' }));
+    const toggle = screen.getByRole('button', { name: '월별 자산 변동' });
+    fireEvent.click(toggle);
+    const trend = screen.getByTestId('chart');
+    const bars = screen.getAllByTestId('bar-chart');
+    const history = deferred<AssetHistoryEntry[]>();
+    const dividend = deferred<DividendSnapshotData>();
+    read.mockReturnValueOnce(history.promise);
+    jest.mocked(getDividendSnapshot).mockReturnValueOnce(dividend.promise);
+    commits.length = 0;
+
+    act(() => invalidateAssetStatisticsCache());
+    expect(commits.length).toBeGreaterThan(0);
+    expect(commits.every(text => text.includes('현재 총 자산') && text.includes('120') && !text.includes('불러오는 중'))).toBe(true);
+    expect(screen.getByTestId('chart')).toBe(trend);
+    screen.getAllByTestId('bar-chart').forEach((bar, index) => expect(bar).toBe(bars[index]));
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('button', { name: '6개월' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('1,000원')).toBeInTheDocument();
+
+    await act(async () => { history.resolve([entry('TOTAL', today, 200)]); dividend.resolve(dividendSnapshot(2000)); });
+    expect(screen.getByText('2,000원')).toBeInTheDocument();
+    expect(screen.getByText('120')).toBeInTheDocument();
+    act(() => jest.mocked(subscribeToAssets).mock.calls.at(-1)![2]!([{ ...asset, currentBalance: 220 }], { fromCache: false }));
+    expect(screen.getByText('220')).toBeInTheDocument();
+    expect(screen.getByTestId('chart')).toBe(trend);
+    screen.getAllByTestId('bar-chart').forEach((bar, index) => expect(bar).toBe(bars[index]));
+    expect(screen.getByRole('button', { name: '월별 자산 변동' })).toBe(toggle);
+  });
+
+  it('[STAT-006] preserves the selected dividend year through portfolio refresh and never restores the initial prefetch', async () => {
+    mockScope.isSessionVerified = true;
+    read.mockResolvedValue([]);
+    jest.mocked(getDividendSnapshot).mockResolvedValueOnce(dividendSnapshot(1000))
+      .mockResolvedValueOnce(dividendSnapshot(2000));
+    render(<AssetStatsPage />);
+    await screen.findByText('1,000원');
+    const year = jest.mocked(getDividendSnapshot).mock.calls[0][0];
+    const card = screen.getByText('배당금 현황').closest('.rounded-2xl') as HTMLElement;
+    fireEvent.click(within(card).getAllByRole('button')[0]);
+    await screen.findByText('2,000원');
+    const canvas = within(card).getByTestId('bar-chart');
+    const refreshedYear = deferred<DividendSnapshotData>();
+    jest.mocked(getDividendSnapshot).mockResolvedValueOnce(dividendSnapshot(3000)).mockReturnValueOnce(refreshedYear.promise);
+    act(() => invalidateAssetStatisticsCache());
+    expect(within(card).getByText(`${year - 1}년`)).toBeInTheDocument();
+    expect(within(card).getByText('2,000원')).toBeInTheDocument();
+    expect(within(card).getByTestId('bar-chart')).toBe(canvas);
+    await act(async () => refreshedYear.resolve(dividendSnapshot(4000)));
+    expect(within(card).getByText('4,000원')).toBeInTheDocument();
+    expect(jest.mocked(getDividendSnapshot).mock.calls.map(([value]) => value)).toEqual([year, year - 1, year, year - 1]);
+  });
+
+  it('[STAT-005] keeps completed dividends during a failed refresh and recovers without replacing the canvas', async () => {
+    mockScope.isSessionVerified = true;
+    read.mockResolvedValue([entry('TOTAL', getTodayLocalDate(), 100)]);
+    jest.mocked(getDividendSnapshot).mockResolvedValueOnce(dividendSnapshot(1000));
+    render(<AssetStatsPage />);
+    await screen.findByText('1,000원');
+    const bars = screen.getAllByTestId('bar-chart');
+    const dividend = deferred<DividendSnapshotData>();
+    jest.mocked(getDividendSnapshot).mockReturnValueOnce(dividend.promise);
+    fireEvent(window, new Event('focus'));
+    fireEvent(document, new Event('visibilitychange'));
+    expect(getDividendSnapshot).toHaveBeenCalledTimes(2);
+    expect(screen.getByText('1,000원')).toBeInTheDocument();
+    screen.getAllByTestId('bar-chart').forEach((bar, index) => expect(bar).toBe(bars[index]));
+    await act(async () => dividend.reject(new Error('offline')));
+    expect(screen.getByText('최신 배당금을 확인하지 못했습니다. 이전 내역을 표시합니다.')).toBeInTheDocument();
+    expect(screen.getByText('1,000원')).toBeInTheDocument();
+    jest.mocked(getDividendSnapshot).mockResolvedValueOnce(dividendSnapshot(3333));
+    fireEvent(window, new Event('focus'));
+    await screen.findByText('3,333원');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    screen.getAllByTestId('bar-chart').forEach((bar, index) => expect(bar).toBe(bars[index]));
+  });
+
   it('avoids rebuilding charts for identical confirmed assets but accepts changed values even with the same version', async () => {
     mockScope.isSessionVerified = true;
     read.mockResolvedValue([entry('TOTAL', getTodayLocalDate(), 100)]);

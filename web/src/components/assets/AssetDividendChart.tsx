@@ -6,10 +6,6 @@ import { Bar } from 'react-chartjs-2';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { StockHolding } from '@/types/asset';
 import {
-  DividendEventRecord,
-  DividendSnapshotData,
-} from '@/lib/assetService';
-import {
   readAssetDividendStatistics,
   type AssetDividendPrefetch,
   type AssetDividendStatistics,
@@ -46,42 +42,46 @@ function AssetDividendChart({ prefetchedSource }: { prefetchedSource?: AssetDivi
   const chartMotion = useChartMotion();
   const initialSource = useRef(prefetchedSource);
   const [dividendYear, setDividendYear] = useState(prefetchedSource?.year ?? CURRENT_YEAR);
-  const [stockHoldings, setStockHoldings] = useState<StockHolding[]>([]);
-  const [cachedDividendSnapshot, setCachedDividendSnapshot] = useState<DividendSnapshotData | null>(
-    null
-  );
-  const [dividendEvents, setDividendEvents] = useState<DividendEventRecord[]>([]);
-  const [isDividendLoading, setIsDividendLoading] = useState(true);
-  const [dividendFailed, setDividendFailed] = useState(false);
+  const [dividendRead, setDividendRead] = useState<{ year: number; data?: AssetDividendStatistics; failed: boolean }>({ year: dividendYear, failed: false });
+  const currentRead = dividendRead.year === dividendYear ? dividendRead : undefined;
+  const data = currentRead?.data;
+  const dividendFailed = currentRead?.failed ?? false;
+  const isDividendLoading = !data && !dividendFailed;
+  const stockHoldings = useMemo(() => data?.allHoldings.filter(supportsDividendInfo) ?? [], [data]);
+  const cachedDividendSnapshot = data?.snapshot ?? null;
+  const dividendEvents = data?.events ?? [];
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
+
+  // A new parent prefetch refreshes the current source without remounting the card.
+  useEffect(() => { initialSource.current = prefetchedSource; }, [prefetchedSource]);
 
   useEffect(() => {
     let isCancelled = false;
-    let revision = 0;
+    let pending = false;
     if (initialSource.current?.year !== dividendYear) initialSource.current = undefined;
 
     const loadDividendData = async (prefetched?: Promise<AssetDividendStatistics>) => {
-      const requestRevision = ++revision;
-      setIsDividendLoading(true);
-      setDividendFailed(false);
+      if (pending) return;
+      pending = true;
+      setDividendRead(previous => previous.year === dividendYear
+        ? { ...previous, failed: false } : { year: dividendYear, failed: false });
 
       try {
-        const { allHoldings, snapshot, events } = await (prefetched ?? readAssetDividendStatistics(dividendYear));
+        const result = await (prefetched ?? readAssetDividendStatistics(dividendYear));
 
-        if (isCancelled || revision !== requestRevision) {
+        if (isCancelled) {
           return;
         }
 
-        setStockHoldings(allHoldings.filter(supportsDividendInfo));
-        setCachedDividendSnapshot(snapshot);
-        setDividendEvents(events);
+        setDividendRead(previous => ({ year: dividendYear, failed: false,
+          data: previous.year === dividendYear && JSON.stringify(previous.data) === JSON.stringify(result) ? previous.data : result }));
       } catch (error) {
-        if (!isCancelled && revision === requestRevision) setDividendFailed(true);
-        console.error('배당금 현황 조회 오류:', error);
-      } finally {
-        if (!isCancelled && revision === requestRevision) {
-          setIsDividendLoading(false);
+        if (!isCancelled) {
+          setDividendRead(previous => ({ ...previous, failed: true }));
+          console.error('배당금 현황 조회 오류:', error);
         }
+      } finally {
+        pending = false;
       }
     };
 
@@ -103,7 +103,7 @@ function AssetDividendChart({ prefetchedSource }: { prefetchedSource?: AssetDivi
       window.removeEventListener('focus', handleRefresh);
       document.removeEventListener('visibilitychange', handleRefresh);
     };
-  }, [dividendYear]);
+  }, [dividendYear, prefetchedSource]);
 
   const isCurrentYear = dividendYear === CURRENT_YEAR;
   const today = getTodayLocalDate();
@@ -342,7 +342,7 @@ function AssetDividendChart({ prefetchedSource }: { prefetchedSource?: AssetDivi
         </div>
 
         <div className="mb-4 h-[180px]">
-          {!dividendFailed && !isDividendLoading && <Bar data={dividendChartData} options={dividendChartOptions} />}
+          {data && <Bar data={dividendChartData} options={dividendChartOptions} />}
         </div>
 
         <div className="flex items-center justify-between border-t border-slate-100 pt-3">
@@ -350,7 +350,7 @@ function AssetDividendChart({ prefetchedSource }: { prefetchedSource?: AssetDivi
             {isCurrentYear ? '올해 누적 배당금' : '연간 배당금'}
           </span>
           <span className="text-lg font-bold text-red-500">
-            {isDividendLoading ? '조회 중' : dividendFailed ? '조회 실패' : cachedDividendSnapshot === null && dividendEvents.length === 0 ? '데이터 없음' : `${Math.round(totalDividend + totalEstimatedDividend).toLocaleString()}원`}
+            {isDividendLoading ? '조회 중' : !data ? '조회 실패' : cachedDividendSnapshot === null && dividendEvents.length === 0 ? '데이터 없음' : `${Math.round(totalDividend + totalEstimatedDividend).toLocaleString()}원`}
           </span>
         </div>
 
@@ -358,7 +358,7 @@ function AssetDividendChart({ prefetchedSource }: { prefetchedSource?: AssetDivi
           <p className="mt-2 text-center text-xs text-slate-400">
             배당금 정보를 불러오는 중입니다.
           </p>
-        ) : dividendFailed ? <p role="alert" className="mt-2 text-sm text-red-600">배당금 정보를 불러오지 못했습니다.</p> : totalDividend + totalEstimatedDividend === 0 ? (
+        ) : dividendFailed ? <p role="alert" className="mt-2 text-sm text-red-600">{data ? '최신 배당금을 확인하지 못했습니다. 이전 내역을 표시합니다.' : '배당금 정보를 불러오지 못했습니다.'}</p> : totalDividend + totalEstimatedDividend === 0 ? (
           <p className="mt-2 text-center text-xs text-slate-400">
             {stockHoldings.length === 0
               ? '배당을 지원하는 국내 ETF 보유 종목이 없습니다'
