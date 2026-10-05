@@ -20,7 +20,7 @@ jest.mock('@/platform/performance/clientStartupDiagnostics', () => ({ recordClie
 
 function Probe() {
   const preference = useHomePreferences();
-  return <output data-testid="cards" data-version={preference.version} data-error={String(preference.error)}>
+  return <output data-testid="cards" data-version={preference.version} data-error={String(preference.error)} data-ready={String(preference.ready)}>
     {preference.configuration.leftCard}/{preference.configuration.rightCard}
   </output>;
 }
@@ -40,7 +40,11 @@ afterEach(clearClientSessionScope);
 it('[T-HOME-003] 실제 조회 hook이 기본값에서 전달받은 canonical 구성·버전으로 갱신한다', () => {
   render(<Probe />);
   expect(screen.getByTestId('cards')).toHaveTextContent('monthlySpent/monthlyRemainingBudget');
+  expect(screen.getByTestId('cards')).toHaveAttribute('data-ready', 'false');
+  next(0, { left: 'YEARLY_EXPENSE' }, true);
+  expect(screen.getByTestId('cards')).toHaveAttribute('data-ready', 'false');
   next(0, { left: 'YEARLY_EXPENSE', right: 'LOCAL_CURRENCY_BALANCE', aggregateVersion: 4 });
+  expect(screen.getByTestId('cards')).toHaveAttribute('data-ready', 'true');
   expect(screen.getByTestId('cards')).toHaveTextContent('yearlySpent/localCurrencyBalance');
   expect(screen.getByTestId('cards')).toHaveAttribute('data-version', '4');
   next(0, { left: 'MONTHLY_EXPENSE', aggregateVersion: 1 }, true);
@@ -81,10 +85,23 @@ it('[T-SYS-008][T-HOME-003] 다른 가구로 이동하면 이전 callback과 오
   mockHousehold = { ...mockHousehold, householdKey: 'house-b' };
   view.rerender(<Probe />);
   expect(screen.getByTestId('cards')).toHaveTextContent('monthlySpent/monthlyRemainingBudget');
+  expect(screen.getByTestId('cards')).toHaveAttribute('data-ready', 'false');
   next(0, { left: 'YEARLY_EXPENSE', right: 'LOCAL_CURRENCY_BALANCE', aggregateVersion: 10 });
   act(() => mockListen.mock.calls[0][3](new Error('late')));
   expect(screen.getByTestId('cards')).toHaveTextContent('monthlySpent/monthlyRemainingBudget');
   expect(screen.getByTestId('cards')).toHaveAttribute('data-error', 'false');
   next(1, { left: 'MONTHLY_EXPENSE', right: 'YEARLY_EXPENSE', aggregateVersion: 1 });
   expect(screen.getByTestId('cards')).toHaveTextContent('monthlySpent/yearlySpent');
+  expect(screen.getByTestId('cards')).toHaveAttribute('data-ready', 'true');
+});
+
+it('[T-HOME-003] 홈 설정 문서가 없다는 서버 응답도 정상 준비 완료이며 오류는 준비 완료가 아니다', () => {
+  render(<Probe />);
+  act(() => mockListen.mock.calls[0][3](new Error('unavailable')));
+  expect(screen.getByTestId('cards')).toHaveAttribute('data-ready', 'false');
+  expect(screen.getByTestId('cards')).toHaveAttribute('data-error', 'true');
+  next(0);
+  expect(screen.getByTestId('cards')).toHaveAttribute('data-ready', 'true');
+  expect(screen.getByTestId('cards')).toHaveAttribute('data-error', 'false');
+  expect(screen.getByTestId('cards')).toHaveTextContent('monthlySpent/monthlyRemainingBudget');
 });

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { useLedgerYearSummary } from '@/features/ledger/useLedgerYearSummary';
 import { useLedgerHomeReadiness } from '@/features/ledger/useLedgerHomeReadiness';
 import { useLedgerEditLink } from '@/features/ledger/useLedgerEditLink';
@@ -87,7 +87,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
     transactionType,
   });
 
-  const { configuration: homeSummaryConfig } = useHomePreferences();
+  const { configuration: homeSummaryConfig, ready: preferencesReady, error: preferencesError } = useHomePreferences();
   const needsYearlyTotal =
     isIncome ||
     homeSummaryConfig.leftCard === 'yearlySpent' ||
@@ -97,6 +97,19 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
     year: currentYear, transactionType, householdKey, enabled: needsYearlyTotal,
     ready: isSessionVerified && serverSnapshotReady, readRefreshKey,
   });
+  const homeReady = isSessionVerified && serverSnapshotReady && categoriesServerSnapshotReady
+    && localCurrencyReady && preferencesReady && (!needsYearlyTotal || yearlyTotal !== null);
+  const [displayedHousehold, setDisplayedHousehold] = useState<string | null>(null);
+  const homeVisible = isSessionVerified && householdKey !== null && (homeReady || displayedHousehold === householdKey);
+  useLayoutEffect(() => {
+    setDisplayedHousehold(current => {
+      if (!isSessionVerified) return null;
+      if (homeReady) return householdKey;
+      return current === householdKey ? current : null;
+    });
+  }, [homeReady, householdKey, isSessionVerified]);
+  const initialReadFailed = readError != null || categoriesError != null || preferencesError
+    || (localCurrencySettled && !localCurrencyReady) || (needsYearlyTotal && yearlyError);
   const availableTags = useMemo(() => Array.from(new Set(
     [...expenses, ...yearlyExpenses].flatMap((expense) => normalizeExpenseTags(expense.tags))
   )), [expenses, yearlyExpenses]);
@@ -105,6 +118,7 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
     setShowSearchModal(true);
   };
   useLedgerHomeReadiness({
+    visible: homeVisible,
     periodKey: `${transactionType}:${currentYear}:${currentMonth}`,
     ledgerReady: serverSnapshotReady, categoriesLoading, categoriesReady: categoriesServerSnapshotReady,
     currencySettled: localCurrencySettled, currencyReady: localCurrencyReady,
@@ -247,6 +261,19 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
     const { unmergeExpense } = await import('@/lib/expenseService');
     await unmergeExpense(expense);
   };
+
+  if (!homeVisible) {
+    return (
+      <main className="flex min-h-[60vh] items-center justify-center p-4" aria-busy={!initialReadFailed}>
+        {initialReadFailed ? (
+          <div role="alert" className="text-center text-sm text-slate-600">
+            <p>가계부를 불러오지 못했습니다.</p>
+            <button onClick={() => window.location.reload()} className="mt-3 rounded-lg px-4 py-2 text-blue-600 hover:bg-blue-50">다시 시도</button>
+          </div>
+        ) : <p role="status" className="text-sm text-slate-400">가계부를 불러오는 중입니다.</p>}
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen p-4 md:p-6 lg:p-8">

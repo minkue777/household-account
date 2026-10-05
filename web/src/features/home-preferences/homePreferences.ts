@@ -32,5 +32,5 @@ export function useHomePreferences() {
     return () => { active = false; unsubscribe(); };
   }, [householdKey, remoteReadEpoch, fallback.leftCard, fallback.rightCard, household?.homeSummaryConfigVersion, household?.selectedLocalCurrencyType]);
   const current = snapshot?.householdId === householdKey ? snapshot : undefined;
-  return { configuration: current?.configuration ?? fallback, version: current?.version, selectedType: current?.selectedType ?? household?.selectedLocalCurrencyType, error };
+  return { configuration: current?.configuration ?? fallback, version: current?.version, selectedType: current?.selectedType ?? household?.selectedLocalCurrencyType, ready: current !== undefined, error };
 }

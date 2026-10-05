@@ -18,7 +18,7 @@ describe('ledger home readiness diagnostic timing', () => {
     jest.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => window.setTimeout(() => callback(performance.now()), 16));
     jest.spyOn(window, 'cancelAnimationFrame').mockImplementation((id) => window.clearTimeout(id));
     const input = {
-      periodKey: 'expense:2026:9', ledgerReady: false, categoriesLoading: true,
+      visible: false, periodKey: 'expense:2026:9', ledgerReady: false, categoriesLoading: true,
       categoriesReady: false, currencySettled: false, currencyReady: false,
       yearSummaryReady: false, yearSummaryRequired: true, readRefreshKey: 'current',
       prefetchAdjacentPeriods: jest.fn(() => jest.fn()),
@@ -34,9 +34,9 @@ describe('ledger home readiness diagnostic timing', () => {
     const loaded = { ...input, ledgerReady: true, categoriesLoading: false, categoriesReady: true, currencyReady: true, currencySettled: true };
     view.rerender(loaded);
     act(() => jest.advanceTimersByTime(32));
-    expect(markWebFirstLedgerPaint).toHaveBeenCalledTimes(1);
+    expect(markWebFirstLedgerPaint).not.toHaveBeenCalled();
     expect(markWebFirstHomeCompletePaint).not.toHaveBeenCalled();
-    view.rerender({ ...loaded, yearSummaryReady: true });
+    view.rerender({ ...loaded, visible: true, yearSummaryReady: true });
     expect(markWebHomeReadiness).toHaveBeenLastCalledWith({
       ledgerReady: true, categoriesReady: true, currencyReady: true, yearSummaryReady: true, yearSummaryRequired: true,
     });

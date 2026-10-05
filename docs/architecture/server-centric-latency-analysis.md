@@ -79,7 +79,7 @@ Domain, Use Case, Port, Adapter의 경계는 유지했습니다. 제거한 것�
 
 | 사용자 동작 | 리팩토링 전 | 최적화 전 서버 권위형 구조 | 최신 작업 트리 |
 |---|---|---|---|
-| 첫 가계부 화면 | localStorage 가구 키와 Firestore cache로 표시 | 큰 root bundle 평가와 Membership·가구 확인이 첫 구독과 경쟁 | 같은 UID의 Membership·Household metadata는 즉시 복원하고 업무 구독을 시작하되 원장·카테고리·지역화폐는 각각 첫 서버 snapshot 도착 순서대로 해당 영역을 채움 |
+| 첫 가계부 화면 | localStorage 가구 키와 Firestore cache로 표시 | 큰 root bundle 평가와 Membership·가구 확인이 첫 구독과 경쟁 | 같은 UID의 Membership·Household metadata로 업무 구독을 병렬 시작하고 원장·카테고리·지역화폐·홈 설정과 필요한 연간 합계를 모두 받은 뒤 첫 화면 표시 |
 | 캐시 없는 로그인 | 가구 키 확인 후 가구 read | Auth → Membership 해석 → Web의 별도 Household read → 화면 구독 | Membership 해석 응답에 최소 Household read model 포함, Web의 중복 read 제거 |
 | 일반 모달 첫 클릭 | 컴포넌트가 이미 bundle에 있어 즉시 표시 | 클릭 후 동적 chunk 다운로드·평가, `Portal` effect 뒤 표시 | route에 완성 모달을 정적으로 포함하고 `Portal`은 같은 React commit에서 표시 |
 | 검색 | 입력 즉시 로컬 조회 | 100ms focus timer + 300ms 고정 debounce | 즉시 focus, 입력 즉시 검색 계약 실행 |
@@ -97,7 +97,7 @@ Domain, Use Case, Port, Adapter의 경계는 유지했습니다. 제거한 것�
 2. 마지막 검증 cache가 Firebase Auth UID와 일치하면 Membership scope와 Household metadata를 즉시 화면에 적용하고 월 원장·카테고리·지역화폐 서버 구독을 시작합니다.
 3. cache hit 뒤 Household 한 문서 서버 refresh는 구독과 병렬로 실행하고 정규화 결과가 실제로 다를 때만 UI·cache를 교체합니다. cache miss와 Rules `permission-denied`만 Membership 권위 조회를 실행하며 주기적 Membership 해석은 없습니다.
 4. 월 원장·카테고리·지역화폐의 로컬 표시 snapshot은 제거했고 Household metadata bootstrap만 보존합니다.
-5. 헤더와 본문 골격은 같은 첫 렌더에서 표시합니다. 월 원장·카테고리·지역화폐를 하나의 `ready` 조건으로 묶지 않고, 각 서버 snapshot이 도착하면 그 데이터에 의존하는 영역만 즉시 채웁니다. 따라서 가구 이름과 상단 버튼만 먼저 뜨는 중간 화면도, 가장 늦은 조회 때문에 이미 도착한 값까지 숨기는 대기도 없습니다.
+5. 2026-10-05 사용자 요청으로 첫 화면 표시를 전체 대기로 변경했습니다. 병렬 조회는 유지하며 월 원장·카테고리·지역화폐·홈 설정과 선택된 연간 합계가 모두 준비되면 헤더·카드·달력을 함께 표시합니다. 첫 오류는 재시도를 제공하고 같은 가구의 후속 갱신은 화면 전체를 숨기지 않습니다.
 6. signed-out 로그인 UI와 실제 사용 기능의 projection을 root bundle에서 분리했습니다.
 7. 원장·자산 route의 클릭 UI는 각 route 번들에 포함합니다. 첫 원장 paint 뒤 idle 시점에 `/income`, `/assets`, `/settings`, `/stats`의 route code를 미리 받고 원장 mutation runtime도 준비합니다. 이 route prefetch는 Firestore Query, 자산 시세 갱신, 종목 catalog warm-up을 시작하지 않습니다.
 8. 모바일·데스크톱 홈을 동시에 mount하던 두 벌의 UI를 반응형 한 벌로 합쳤습니다. 월 원장과 지역화폐 listener도 화면 크기와 무관하게 각각 하나만 엽니다.
@@ -105,7 +105,7 @@ Domain, Use Case, Port, Adapter의 경계는 유지했습니다. 제거한 것�
 10. 지역화폐는 가구 하위 Canonical balance를 직접 구독하고 최초 Firestore cache 결과를 건너뛴 뒤 서버 잔액부터 표시합니다. 지역화폐가 하나뿐이면 별도 Home Preferences listener도 열지 않습니다.
 11. root service worker는 첫 원장 서버 paint 뒤에만 등록·갱신하고 install precache는 0건으로 줄였습니다. 필요한 build hash 정적 파일만 실제 요청 시 runtime cache하며 Android WebView는 worker를 등록하지 않습니다.
 
-첫 가계부 화면은 최신성 혼동을 피하기 위해 과거 원장·카테고리·지역화폐 값을 그리지 않습니다. 화면 골격은 즉시 만들고 각 최신 서버 결과를 도착 순서대로 반영합니다. 세 결과가 모두 정착한 뒤 idle 시점에는 현재 월의 앞뒤 한 달 원장을 일회성으로 읽어 SessionScope 메모리에만 보관합니다. 월 이동 시 보관값을 즉시 표시하면서 실시간 listener는 새 선택 월 하나로 교체하고, 이동 뒤에는 이미 가진 안쪽 월 대신 새 바깥쪽 한 달만 보충합니다. 첫 화면 준비 전에는 이 조회를 시작하지 않으며 인접 월 listener나 영속 화면 cache는 만들지 않습니다. 첫 원장 paint 이후에는 주요 내부 route code와 원장 mutation runtime만 idle에 준비하고, 다른 route의 외부 시세·종목 catalog 같은 원격 업무는 실제 navigation 뒤 시작합니다.
+첫 가계부 화면은 최신성 혼동을 피하기 위해 과거 원장·카테고리·지역화폐 값을 그리지 않습니다. 첫 홈은 필수 서버 결과가 모두 준비된 뒤 함께 표시합니다. 세 결과가 모두 정착한 뒤 idle 시점에는 현재 월의 앞뒤 한 달 원장을 일회성으로 읽어 SessionScope 메모리에만 보관합니다. 월 이동 시 보관값을 즉시 표시하면서 실시간 listener는 새 선택 월 하나로 교체하고, 이동 뒤에는 이미 가진 안쪽 월 대신 새 바깥쪽 한 달만 보충합니다. 첫 화면 준비 전에는 이 조회를 시작하지 않으며 인접 월 listener나 영속 화면 cache는 만들지 않습니다. 첫 원장 paint 이후에는 주요 내부 route code와 원장 mutation runtime만 idle에 준비하고, 다른 route의 외부 시세·종목 catalog 같은 원격 업무는 실제 navigation 뒤 시작합니다.
 
 ### 5.2 모든 클릭·모달·검색
 

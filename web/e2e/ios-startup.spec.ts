@@ -2,7 +2,7 @@ import { expect, test, type Page, type Request, type Response } from '@playwrigh
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { observeIndexedDbOpens, readFirestoreCollection, readIndexedDbOpens, resetTestAccount, writeFirestoreFixture } from './emulator';
-import { createFinanceHousehold, addExpenseThroughUi, seoulDate } from './finance-helpers';
+import { createFinanceHousehold, addCategoryThroughUi, addExpenseThroughUi, seoulDate } from './finance-helpers';
 
 const COMPLETE_PAINT = 'household-account:startup:home:first-complete-paint';
 
@@ -190,6 +190,75 @@ test.beforeEach(async () => { await resetTestAccount(); });
 
 test.describe('첫 홈 별도 서버 조회', () => {
   test.use({ serviceWorkers: 'block' });
+  test('[T-LED-001][T-HOME-003][T-WEBVIEW-004] 첫 홈은 마지막 잔액 응답까지 기다려 예산·잔액·날짜별 금액을 함께 표시한다', async ({ page, context, request }, testInfo) => {
+    await observeIndexedDbOpens(page, true);
+    const householdId = await createFinanceHousehold(page, request);
+    await addCategoryThroughUi(page, request, '첫 화면 예산', 100000);
+    await addExpenseThroughUi(page, request, { merchant: '전체 준비 검사', category: '첫 화면 예산', amount: 12300, date: seoulDate(0, 1) });
+    await page.close();
+    await writeFirestoreFixture(request, `households/${householdId}/homePreferences/home`, {
+      left: { stringValue: 'MONTHLY_REMAINING_BUDGET' }, right: { stringValue: 'LOCAL_CURRENCY_BALANCE' },
+      aggregateVersion: { integerValue: '1' }, selectedLocalCurrencyType: { stringValue: 'gyeonggi' },
+    });
+    const balancePath = `households/${householdId}/localCurrencyBalances/gyeonggi`;
+    await writeFirestoreFixture(request, balancePath, {
+      localCurrencyType: { stringValue: 'gyeonggi' }, balanceInWon: { integerValue: '36890' },
+    });
+    const restarted = await context.newPage();
+    await observeIndexedDbOpens(restarted, true);
+    let release!: () => void;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    let heldBalanceResponses = 0;
+    // 실제 Lite 서버 응답과 live 전달을 모두 보류하므로 750ms fallback도 값을 우회 전달할 수 없습니다.
+    await restarted.route('**/google.firestore.v1.Firestore/Listen/channel**', async route => {
+      await held;
+      await route.continue();
+    });
+    await restarted.route(/\/documents(?::batchGet|(?:\/[^?]+)?:runQuery)/, async route => {
+      if (!route.request().postData()?.includes('localCurrencyBalances')) return route.continue();
+      const response = await route.fetch();
+      expect(response.ok()).toBe(true);
+      heldBalanceResponses += 1;
+      await held;
+      await route.fulfill({ response });
+    });
+    try {
+      await restarted.goto('/');
+      await expect.poll(() => heldBalanceResponses).toBeGreaterThan(0);
+      await expect.poll(() => restarted.evaluate(() => ['ledger:ready', 'categories:ready'].every(phase =>
+        performance.getEntriesByName(`household-account:startup:${phase}`).length === 1))).toBe(true);
+      await expect(restarted.getByRole('status')).toHaveText('가계부를 불러오는 중입니다.');
+      await expect(restarted.locator('.calendar-glass')).toHaveCount(0);
+      await expect(restarted.locator('.balance-card-glass')).toHaveCount(0);
+      expect(await restarted.evaluate(() => performance.getEntriesByName('household-account:startup:ledger:first-paint').length)).toBe(0);
+      expect(await restarted.evaluate(name => performance.getEntriesByName(name).length, COMPLETE_PAINT)).toBe(0);
+      release();
+      const calendar = restarted.locator('.calendar-glass');
+      const budget = restarted.locator('.balance-card-glass').filter({ hasText: '월 잔여 예산' });
+      const balance = restarted.locator('.balance-card-glass').filter({ hasText: '지역화폐 잔액' });
+      await expect(calendar).toHaveAttribute('aria-busy', 'false');
+      await expect(budget).toContainText('87,700');
+      await expect(balance).toContainText('36,890');
+      await expect(restarted.getByTestId(`calendar-day-${seoulDate(0, 1)}`)).toContainText('12,300');
+      await expect(restarted.getByText('가계부를 불러오는 중입니다.', { exact: true })).toHaveCount(0);
+      await expect.poll(() => restarted.evaluate(name => performance.getEntriesByName(name).length, COMPLETE_PAINT)).toBe(1);
+      const originalCalendar = await calendar.elementHandle();
+      await writeFirestoreFixture(request, balancePath, {
+        localCurrencyType: { stringValue: 'gyeonggi' }, balanceInWon: { integerValue: '0' },
+      });
+      await expect(balance.getByText('0', { exact: true })).toBeVisible();
+      expect(await originalCalendar!.evaluate(node => node.isConnected)).toBe(true);
+      const marks = await restarted.evaluate(() => Object.fromEntries(performance.getEntriesByType('mark')
+        .filter(entry => entry.name.startsWith('household-account:startup:')).map(entry => [entry.name, entry.startTime])));
+      expect(marks['household-account:startup:ledger:first-paint']).toBeGreaterThanOrEqual(marks['household-account:startup:local-currency:ready']);
+      await testInfo.attach('home-initial-complete-display', { contentType: 'application/json',
+        body: Buffer.from(JSON.stringify({ heldBalanceResponses, marks }, null, 2)) });
+    } finally {
+      release();
+      await restarted.unrouteAll({ behavior: 'wait' });
+    }
+  });
+
   test('[T-WEBVIEW-004][T-SYS-008][T-ADM-005][AND-012] 실제 Listen 대기 중 Lite로 최신 홈을 표시하고 구독 전환 뒤 변경·삭제를 반영한다', async ({ page, context, request }, testInfo) => {
     await observeIndexedDbOpens(page, true);
     const householdId = await createFinanceHousehold(page, request);

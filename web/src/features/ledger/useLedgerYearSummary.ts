@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import type { Expense, TransactionType } from '@/types/expense';
 
-/** 연간 요약의 구독·실패·범위 폐기를 소유하며, 월 원장의 첫 표시 뒤에 시작합니다. */
+/** 연간 요약의 구독·실패·범위 폐기를 소유하며, 월 원장 수신 뒤에 시작합니다. */
 export function useLedgerYearSummary({ year, transactionType, householdKey, enabled, ready, readRefreshKey }: {
   year: number;
   transactionType: TransactionType;

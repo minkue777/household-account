@@ -32,7 +32,7 @@ jest.mock('@/contexts/LedgerReadModelContext', () => ({
   }),
 }));
 jest.mock('@/features/home-preferences/homePreferences', () => ({
-  useHomePreferences: () => ({ configuration: { leftCard: 'monthlySpent', rightCard: 'monthlyRemainingBudget' } }),
+  useHomePreferences: () => ({ configuration: { leftCard: 'monthlySpent', rightCard: 'monthlyRemainingBudget' }, ready: true, error: false }),
 }));
 jest.mock('@/features/ledger/useLedgerYearSummary', () => ({
   useLedgerYearSummary: () => ({ expenses: [], total: null, error: null }),
