@@ -22,3 +22,5 @@ Web 생성·수정·재정렬은 반환된 업무 상태를 동일 read-model ma
 
 - Web 타입 검사 및 관련 Jest 3파일 55개 통과. 기존 FIFO/실패 복구/세션/재정렬 검증과 함께 실제 응답 버전·정규화 필드·최신 snapshot 우선·구형 receipt 대기·부모 자산 버전·계좌 경계 회귀를 확인했다.
 - 실제 Emulator + production build의 portfolio-journeys 브라우저 검사 5개가 통과했다(43.6초). 로그: `TEMP/household-simplicity-web-confirmation-e2e-20261005.log`.
+
+- Web CI 37257797226은 927개 행동 검사 통과 후 `__tests__` 아래의 DTO 보조 파일을 테스트 suite로 수집해 실패했다. 실행 검증을 생략하지 않고 보조 파일을 `web/test-support`로 옮겨 기본 Jest 전체 수집에서 보조 suite가 사라짐을 확인했다. 제품 결함으로 분류하지 않으며 과거 실패 이력은 보존한다.

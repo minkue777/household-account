@@ -7,6 +7,7 @@ jest.mock('@/platform/read-model/firestoreReadModel', () => ({
   query: (...constraints: unknown[]) => ({ constraints }),
   where: (...constraint: unknown[]) => ({ constraint }),
   onSnapshot: (...args: unknown[]) => mockOnSnapshot(...args),
+  onDocumentSnapshot: (...args: unknown[]) => mockOnSnapshot(...args),
   getDocFromServer: (...args: unknown[]) => mockGetDocFromServer(...args),
   timestampToDate: (value: unknown) => value instanceof Date ? value : undefined,
 }));
@@ -187,13 +188,13 @@ describe('[T-ADM-005][ADM-006] 홈 read 서비스의 시작 단계 관측 계약
       currencyPreferencesServerSnapshotReceived: 200, currencyBalancesServerSnapshotReceived: 300 });
   });
 
-  it('연간 합계는 기존 metadata 옵션과 cache 표시를 유지하며 최초 callback과 서버 도착을 분리한다', () => {
+  it('연간 합계는 metadata 변경을 수신하고 cache 첫 표시와 서버 도착을 분리한다', () => {
     const value = subject();
     observe(value);
     const callback = jest.fn(() => { events.push('callback'); });
     clock = 100;
     value.ledger.subscribeToDateRangeExpenses('2026-01-01', '2026-12-31', callback);
-    expect(typeof mockOnSnapshot.mock.calls[0][1]).toBe('function');
+    expect(mockOnSnapshot.mock.calls[0][1]).toEqual({ includeMetadataChanges: true });
     clock = 150; next()(ledgerSnapshot(true));
     expect(events).toEqual(['yearSummaryListenStarted', 'listen', 'yearSummaryFirstSnapshotReceived', 'map', 'callback']);
     clock = 200; next()(ledgerSnapshot());

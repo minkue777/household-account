@@ -31,7 +31,7 @@ function listen(kind: 'month' | 'range', callback: (items: Expense[]) => void) {
     ? subscribeToMonthlyTransactions(2026, 9, callback)
     : subscribeToDateRangeExpenses('2026-01-01', '2026-12-31', callback);
   const args = mockOnSnapshot.mock.calls.at(-1)!;
-  return { dispose, next: args[kind === 'month' ? 2 : 1] as (value: ReturnType<typeof event>) => void };
+  return { dispose, next: args[2] as (value: ReturnType<typeof event>) => void };
 }
 beforeEach(() => {
   clearClientSessionScope();

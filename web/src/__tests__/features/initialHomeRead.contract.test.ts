@@ -4,6 +4,7 @@ jest.mock('@/platform/read-model/firestoreReadModel', () => ({
   db: {}, doc: (...path: unknown[]) => path, collection: (...path: unknown[]) => path,
   query: (...parts: unknown[]) => parts, where: (...parts: unknown[]) => parts,
   onSnapshot: (...args: unknown[]) => mockListen(...args),
+  onDocumentSnapshot: (...args: unknown[]) => mockListen(...args),
   timestampToDate: () => undefined,
 }));
 jest.mock('@/platform/read-model/firestoreServerReadModel', () => ({

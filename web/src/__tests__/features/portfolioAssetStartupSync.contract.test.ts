@@ -1,4 +1,4 @@
-import { portfolioReplies, replySource, resetReplySources, confirmedReply, assetView, positionView } from './portfolioCommandReplies';
+import { portfolioReplies, replySource, resetReplySources, confirmedReply, assetView, positionView } from '../../../test-support/portfolioCommandReplies';
 const mockOnSnapshot = jest.fn();
 
 jest.mock('@/platform/read-model/firestoreReadModel', () => ({

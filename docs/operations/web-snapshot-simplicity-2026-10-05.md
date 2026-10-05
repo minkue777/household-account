@@ -17,3 +17,5 @@ unknown 인자 배열에서 SDK observer/overload를 해석하고 함수 전체�
 - 구독/인증/검색/설정 관련 23파일의 182개 중 대역 인자 위치 변경 누락 1개를 교정했다. 해당 검색 파일 58개가 후속 통과했고 다른 22파일 124개는 최초 통과했다. 기대 결과를 축소하지 않았다.
 - 실제 Emulator·production build 원장과 자산 브라우저 검사 14개 통과(1.2분). 로그: `TEMP/household-simplicity-web-snapshot-e2e-20261005.log`.
 - 로그: `TEMP/household-simplicity-projection-jest-20261005.log`, `TEMP/household-simplicity-listener-jest-20261005.log`, `TEMP/household-simplicity-listener-followup-20261005.log`.
+
+- 전체 기본 Jest 실행은 128파일 958개 중 변경된 문서 구독 mock/metadata 위치에 맞추지 않은 관측 3개가 실패했다. production 실패와 구분하고 mock API를 정정했으며 해당 2파일 19개 후속 통과했다. 나머지 126파일은 최초 전체 실행에서 통과했다. 최종 원격 CI 전체 결과는 별도 추적한다. 로그: `TEMP/household-simplicity-web-all-20261005.log`, `TEMP/household-simplicity-web-all-followup-20261005.log`.

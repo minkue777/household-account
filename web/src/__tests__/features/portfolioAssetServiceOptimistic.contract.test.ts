@@ -1,4 +1,4 @@
-import { portfolioReplies, replySource, resetReplySources } from './portfolioCommandReplies';
+import { portfolioReplies, replySource, resetReplySources } from '../../../test-support/portfolioCommandReplies';
 import { portfolioCommands } from '@/features/portfolio/application/portfolioCommands';
 import {
   portfolioOptimisticProjection,

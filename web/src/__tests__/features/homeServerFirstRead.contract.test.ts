@@ -14,6 +14,7 @@ jest.mock('@/platform/read-model/firestoreReadModel', () => ({
   where: (...args: unknown[]) => mockWhere(...args),
   orderBy: jest.fn((...args: unknown[]) => ({ kind: 'orderBy', args })),
   onSnapshot: (...args: unknown[]) => mockOnSnapshot(...args),
+  onDocumentSnapshot: (...args: unknown[]) => mockOnSnapshot(...args),
   timestampToDate: (value: unknown) => value instanceof Date ? value : undefined,
 }));
 
