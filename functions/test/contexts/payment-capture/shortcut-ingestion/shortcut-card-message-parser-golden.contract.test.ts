@@ -70,28 +70,6 @@ describe("Shortcut 카드 문자 비식별 raw parser 공개 계약", () => {
     },
   );
 
-  it("[T-PARSE-004][IOS-003] 지원 카드사 표 전체를 인식하고 BC·NH만 표준 라벨로 정규화한다", () => {
-    const expectedLabels = new Map([
-      ["samsung", "삼성"],
-      ["shinhan", "신한"],
-      ["kb", "국민"],
-      ["hyundai", "현대"],
-      ["lotte", "롯데"],
-      ["hana", "하나"],
-      ["woori", "우리"],
-      ["bc-normalized", "비씨"],
-      ["nh-normalized", "농협"],
-    ]);
-
-    for (const [caseId, companyLabel] of expectedLabels) {
-      const testCase = fixture.cases.find((item) => item.caseId === caseId);
-      if (!testCase) throw new Error(`Shortcut parser case 없음: ${caseId}`);
-      expect(testCase.expected).toMatchObject({
-        kind: "Parsed",
-        cardEvidence: { companyLabel },
-      });
-    }
-  });
 
   it.each([
     {

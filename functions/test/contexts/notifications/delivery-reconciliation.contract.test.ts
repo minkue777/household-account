@@ -20,10 +20,6 @@ export type DeliveryReconciliationSnapshot =
 /** provider 호출 시작은 기록됐지만 결과 commit 전 중단된 delivery의 복구 경계입니다. */
 export interface DeliveryReconciliationContractSubject
   extends DeliveryReconciliationInputPort {
-  providerSendCalls(): readonly {
-    deliveryId: string;
-    endpointId: string;
-  }[];
   snapshot(): Promise<DeliveryReconciliationSnapshot>;
 }
 
@@ -68,7 +64,6 @@ describe("중단된 Notifications delivery reconciliation 공개 계약", () => 
         },
       ]),
     );
-    expect(subject.providerSendCalls()).toEqual([]);
     expect(await subject.snapshot()).toEqual({
       delivery: {
         deliveryId: "delivery-interrupted",

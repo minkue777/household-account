@@ -108,7 +108,7 @@ function caseById(caseId: string): AndroidProviderGoldenCase {
 }
 
 describe("Android 공급자별 비식별 raw parser 공개 계약", () => {
-  it("[T-PARSE-001][T-PARSE-002] 모든 지원 공급자는 실제 raw 승인·지원 취소 결과를 golden snapshot으로 가진다", () => {
+  it("[T-PARSE-001][T-PARSE-002] fixture는 모든 지원 공급자·승인·취소를 포함하고 case ID가 고유하다", () => {
     const coveredIds = new Set(fixture.cases.flatMap(({ requirementIds }) => requirementIds));
 
     expect(fixture.fixtureVersion).toBe(1);
@@ -137,21 +137,6 @@ describe("Android 공급자별 비식별 raw parser 공개 계약", () => {
     },
   );
 
-  it("[T-PARSE-001][PARSE-TOSS-001] 토스는 가승인을 저장하지 않고 승인 cashback만 차감하며 취소는 총액을 보존한다", () => {
-    expect(caseById("toss-preauthorization-ignored").expected).toEqual({
-      kind: "Ignored",
-      code: "PREAUTHORIZATION",
-    });
-    expect(caseById("toss-check-card-cashback").expected).toMatchObject({
-      payment: { type: "approval", amountInWon: 2_500 },
-    });
-    expect(caseById("toss-cashback-clamped-to-zero").expected).toMatchObject({
-      payment: { type: "approval", amountInWon: 0 },
-    });
-    expect(caseById("toss-cancellation-total").expected).toMatchObject({
-      payment: { type: "cancellation", amountInWon: 3_000 },
-    });
-  });
 
   it.each([
     ["naver-approval-posted-time", "com.naverfin.payapp"],
@@ -257,90 +242,6 @@ describe("Android 공급자별 비식별 raw parser 공개 계약", () => {
     ).toEqual({ kind: "Ignored", code: "UNSUPPORTED_SOURCE" });
   });
 
-  it("[T-PARSE-001][T-ING-BAL-001] 지역화폐 parser가 검증한 유형과 거래·잔액은 서로 독립된 결과로 보존된다", () => {
-    for (const caseId of [
-      "gyeonggi-payment-and-balance",
-      "daejeon-detail-payment-and-balance",
-      "sejong-payment-and-balance",
-    ]) {
-      const expected = caseById(caseId).expected;
-      if (expected.kind !== "Parsed") throw new Error("지역화폐 fixture 오류");
 
-      expect(expected.payment?.localCurrencyType).toBe(
-        expected.balance?.localCurrencyType,
-      );
-      expect(expected.payment).toBeDefined();
-      expect(expected.balance).toBeDefined();
-    }
 
-    for (const caseId of ["gyeonggi-balance-only", "sejong-balance-only"]) {
-      const expected = caseById(caseId).expected;
-      if (expected.kind !== "Parsed") throw new Error("잔액 전용 fixture 오류");
-
-      expect(expected.payment).toBeUndefined();
-      expect(expected.balance).toBeDefined();
-    }
-  });
-
-  it("[T-PARSE-001][PARSE-SMSBILL-001] 문자 청구 parser는 정상 납부 완료만 승인하고 납부 예정 문장은 무시한다", () => {
-    expect(caseById("sms-bill-approved").expected).toMatchObject({
-      kind: "Parsed",
-      payment: { type: "approval", amountInWon: 182_000 },
-    });
-    expect(caseById("sms-bill-similar-message-ignored").expected).toEqual({
-      kind: "Ignored",
-      code: "NOT_COMPLETED_PAYMENT",
-    });
-  });
-
-  it("카카오톡은 current text와 누적 본문의 최신 완전 카드 블록만 선택한다", () => {
-    expect(caseById("kakao-talk-current-text-priority").expected).toMatchObject({
-      kind: "Parsed",
-      payment: { amountInWon: 78_120, occurredLocalTime: "13:33" },
-    });
-    expect(
-      caseById("kakao-talk-accumulated-latest-complete-block").expected,
-    ).toMatchObject({
-      kind: "Parsed",
-      payment: { amountInWon: 78_120, occurredLocalTime: "13:33" },
-    });
-    expect(
-      caseById("kakao-talk-export-blocks-do-not-borrow-fields").expected,
-    ).toEqual({ kind: "Ignored", code: "PARSE_FAILED" });
-    expect(
-      caseById("kakao-talk-latest-complete-skips-incomplete-tail").expected,
-    ).toMatchObject({
-      kind: "Parsed",
-      payment: { amountInWon: 198_000, occurredLocalTime: "13:23" },
-    });
-    expect(
-      caseById("kakao-talk-title-does-not-complete-card-body").expected,
-    ).toEqual({ kind: "Ignored", code: "PARSE_FAILED" });
-    expect(
-      caseById("kakao-talk-samsung-cumulative-only-ignored").expected,
-    ).toEqual({ kind: "Ignored", code: "PARSE_FAILED" });
-    expect(
-      caseById("sms-samsung-cumulative-only-ignored").expected,
-    ).toEqual({ kind: "Ignored", code: "NOT_COMPLETED_PAYMENT" });
-    expect(
-      caseById("kakao-talk-samsung-approval-cancellation").expected,
-    ).toMatchObject({
-      kind: "Parsed",
-      payment: {
-        type: "cancellation",
-        amountInWon: 78_120,
-        maskedCardToken: "8481",
-      },
-    });
-    expect(
-      caseById("sms-samsung-spaced-approval-cancellation").expected,
-    ).toMatchObject({
-      kind: "Parsed",
-      payment: {
-        type: "cancellation",
-        amountInWon: 78_120,
-        maskedCardToken: "8481",
-      },
-    });
-  });
 });

@@ -27,6 +27,19 @@ describe("household command runtime registry", () => {
     ]);
   });
 
+  it("[T-CAT-003][CAT-002] 실제 서버에는 카테고리 재활성화·물리 삭제 명령이 없다", () => {
+    const names = [...createFirebaseHouseholdCommandRegistry(getFirestore(app)).keys()]
+      .filter(name => name.startsWith("category."));
+    expect(names).toEqual([
+      "category.create.v1",
+      "category.update.v1",
+      "category.archive.v1",
+      "category.set-budget.v1",
+      "category.reorder.v1",
+      "category.set-default.v1"
+]);
+  });
+
   it("공개 manifest의 모든 command와 런타임 registry가 정확히 일치한다", () => {
     const manifest = readContractJson<Manifest>(
       "fixtures/system/household-command-manifest.v1.json",

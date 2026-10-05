@@ -134,7 +134,6 @@ export interface AssetLifecycleWorkflowDriver {
   recordedEvents(): readonly LifecycleEvent[];
   auditRecords(): readonly AssetLifecycleAuditRecord[];
   purgeParticipantCalls(): readonly AssetPurgeParticipant[];
-  physicalDeleteAttemptsFromUserDelete(): number;
 }
 
 function cloneLifecycleAsset(
@@ -522,10 +521,6 @@ class DefaultAssetLifecycleWorkflowDriver
 
   purgeParticipantCalls(): readonly AssetPurgeParticipant[] {
     return [...this.participantCalls];
-  }
-
-  physicalDeleteAttemptsFromUserDelete(): number {
-    return 0;
   }
 
   private removeParticipantData(participant: AssetPurgeParticipant): void {

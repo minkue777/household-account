@@ -130,7 +130,6 @@ describe("Portfolio 자산 전체 lifecycle Workflow 계약", () => {
         }),
       }),
     );
-    expect(subject.physicalDeleteAttemptsFromUserDelete()).toBe(0);
     expect(subject.receipts()).toEqual([
       expect.objectContaining({ commandId: "delete-1", operation: "delete" }),
     ]);

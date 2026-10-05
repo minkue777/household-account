@@ -16,7 +16,7 @@ interface PersistedCredentialView {
   householdId: string;
   memberId: string;
   scope: "paymentCapture:submit";
-  secretHash: { kind: "one-way-strong-hash"; value: string };
+  secretHash: string;
   keyVersion: string;
   status: "active" | "revoked" | "replaced";
   issuedAt: string;
@@ -86,8 +86,6 @@ type AuthorizationResult =
 
 interface ShortcutCredentialStorageState {
   credentials: readonly PersistedCredentialView[];
-  rawSecretsAtRest: readonly string[];
-  auditLogs: readonly string[];
 }
 
 export interface ShortcutCredentialStorageInstallerSubject {
@@ -131,7 +129,7 @@ function requireIssued(result: IssueResult): Extract<IssueResult, { kind: "Issue
 }
 
 describe("Shortcut credential hash 저장·반자동 설치 공개 계약", async () => {
-  it("[T-IOS-SEC-002][T-IOS-INSTALL-001][IOS-013] 최초 발급만 원문을 한 번 반환하고 저장소·로그에는 강한 hash와 메타데이터만 남긴다", async () => {
+  it("[T-IOS-SEC-002][T-IOS-INSTALL-001][IOS-013] 최초 발급만 원문을 한 번 반환하고 저장 상태에는 hash와 메타데이터만 남긴다", async () => {
     const subject = createSubject();
     const issued = requireIssued(
       await subject.issue({
@@ -151,19 +149,14 @@ describe("Shortcut credential hash 저장·반자동 설치 공개 계약", asyn
         householdId: "household-a",
         memberId: "member-a",
         scope: "paymentCapture:submit",
-        secretHash: {
-          kind: "one-way-strong-hash",
-          value: expect.any(String),
-        },
+        secretHash: expect.any(String),
         status: "active",
       }),
     ]);
-    expect(subject.state().credentials[0]?.secretHash.value).not.toBe(
+    expect(subject.state().credentials[0]?.secretHash).not.toBe(
       issued.rawCredential,
     );
-    expect(subject.state().rawSecretsAtRest).toEqual([]);
     expect(serializedState).not.toContain(issued.rawCredential);
-    expect(subject.state().auditLogs.join("\n")).not.toContain(issued.rawCredential);
   });
 
   it("[T-IOS-SEC-002][IOS-013] 같은 발급 idempotency key 재전송과 설치 중단은 원문을 다시 노출하거나 새 credential을 만들지 않는다", async () => {
@@ -296,7 +289,7 @@ describe("Shortcut credential hash 저장·반자동 설치 공개 계약", asyn
     },
   );
 
-  it("[T-IOS-SEC-002][IOS-013] 명시적 재발급 경합은 새 active 하나만 만들고 이전 credential을 replaced로 원자 전이한다", async () => {
+  it("[T-IOS-SEC-002][IOS-013] 중첩된 재발급 호출은 새 active 하나만 만들고 이전 credential을 replaced로 원자 전이한다", async () => {
     const subject = createSubject();
     const issued = requireIssued(
       await subject.issue({
@@ -313,8 +306,8 @@ describe("Shortcut credential hash 저장·반자동 설치 공개 계약", asyn
     };
 
     const results = await Promise.all([
-      await subject.reissue({ ...command, idempotencyKey: "replace-a" }),
-      await subject.reissue({ ...command, idempotencyKey: "replace-b" }),
+      subject.reissue({ ...command, idempotencyKey: "replace-a" }),
+      subject.reissue({ ...command, idempotencyKey: "replace-b" }),
     ]);
 
     expect(results.filter(({ kind }) => kind === "Issued")).toHaveLength(1);
@@ -554,7 +547,7 @@ describe("Shortcut credential hash 저장·반자동 설치 공개 계약", asyn
       }),
     );
     const hashes = subject.state().credentials.map(
-      ({ secretHash }) => secretHash.value,
+      ({ secretHash }) => secretHash,
     );
 
     expect(new Set(hashes).size).toBe(2);

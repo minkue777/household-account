@@ -1,5 +1,7 @@
 # Android 결제 알림 수집 모듈 상세 설계
 
+2026-10-05: Capture receipt의 transaction/balance 결과는 분기 상태 전이 때 전체 필드로 교체합니다. 재귀 병합으로 이전 retryable code가 terminal 성공에 남아서는 안 되며, 최초 terminal 결과·동시성·TTL 보존은 실제 Firestore 검사로 확인합니다.
+
 > 설계 대상: [`ING-*`, `PARSE-*`, `ING-SAVE-*`, `CAN-*` 요구사항](requirements.md#5-요구사항) 38개  
 > 상위 Context: [Payment Capture](../../requirements.md)  
 > 공통 형식: [모듈 상세 설계 규약](../../../../governance/module-design-standard.md)  

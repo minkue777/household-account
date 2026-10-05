@@ -37,7 +37,6 @@ export interface CategoryCatalogFixture {
 }
 
 export interface CategoryCatalogFixtureSubject extends CategoryCatalogInputPort {
-  publicCommands(): readonly string[];
   state(): CategoryCatalogFixtureState;
 }
 
@@ -202,18 +201,6 @@ class FixtureCategoryCatalogDriver implements CategoryCatalogFixtureSubject {
 
   defaultForManualEntry() {
     return this.application.defaultForManualEntry();
-  }
-
-  publicCommands(): readonly string[] {
-    return [
-      "InitializeDefaultCategories",
-      "CreateCategory",
-      "UpdateCategory",
-      "ReorderCategories",
-      "ArchiveCategory",
-      "ContinueCategoryArchiveProcess",
-      "SetDefaultCategory",
-    ];
   }
 
   state(): CategoryCatalogFixtureState {

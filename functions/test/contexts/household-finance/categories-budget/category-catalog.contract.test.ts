@@ -10,7 +10,6 @@ import {
 } from "../../../support/category-catalog-fixture";
 
 export interface CategoryCatalogSubject extends CategoryCatalogInputPort {
-  publicCommands(): readonly string[];
   state(): CategoryCatalogFixtureState;
 }
 
@@ -187,12 +186,6 @@ describe("Category Catalog 공개 계약", () => {
       }),
     ).toEqual(expect.objectContaining({ kind: "conflict" }));
     expect(subject.state()).toEqual(afterSuccess);
-  });
-
-  it("[T-CAT-003][CAT-002] 공개 Command에는 archived 카테고리 재활성화와 hard delete가 없다", () => {
-    expect(createSubject().publicCommands()).not.toEqual(
-      expect.arrayContaining(["ReactivateCategory", "HardDeleteCategory"]),
-    );
   });
 
   it("[T-CAT-004][CAT-003] 현재 기본 카테고리는 archive할 수 없다", async () => {

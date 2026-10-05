@@ -29,10 +29,6 @@ export interface DeliveryReconciliationSnapshot {
 
 export interface DeliveryReconciliationFixtureSubject
   extends DeliveryReconciliationInputPort {
-  providerSendCalls(): readonly {
-    deliveryId: string;
-    endpointId: string;
-  }[];
   snapshot(): Promise<DeliveryReconciliationSnapshot>;
 }
 
@@ -154,7 +150,6 @@ export function createDeliveryReconciliationFixtureSubject(
   return {
     reconcileStuckDelivery: (deliveryId, now) =>
       input.reconcileStuckDelivery(deliveryId, now),
-    providerSendCalls: () => [],
     snapshot: async () => store.snapshot(),
   };
 }

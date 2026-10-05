@@ -4,8 +4,8 @@
 
 | 조사 항목 | 상태 | 변경·검증 근거 |
 |---|---|---|
-| [FT-01 / P2: 실제 동작과 연결되지 않는 상수 관측을 없애기](finance-tests.md) | 미착수 | |
-| [FT-02 / P2: Capture 조율용 fixture가 별도 금융 엔진을 구현하는 범위 줄이기](finance-tests.md) | 미착수 | |
+| [FT-01 / P2: 실제 동작과 연결되지 않는 상수 관측을 없애기](finance-tests.md) | 구현·실제 SDK 검사 완료 | [실제 수집·저장 검사](../../operations/capture-test-boundaries-2026-10-05.md) |
+| [FT-02 / P2: Capture 조율용 fixture가 별도 금융 엔진을 구현하는 범위 줄이기](finance-tests.md) | 구현·실제 SDK 검사 완료 | [실제 수집·저장 검사](../../operations/capture-test-boundaries-2026-10-05.md) |
 | [FIN-09 · P1 · 정기 계획 한 건의 명령을 가구 전체 plans·receipts 로딩과 diff 저장에서 분리합니다](finance.md) | 구현·실제 SDK 검사 완료 | [정기 계획과 Outbox 단순화](../../operations/recurring-simplicity-2026-10-05.md) |
 | [FIN-01 · P1 · 자산·보유종목 Command가 계산한 최종 상태를 버려 Web이 서버 상태를 추정합니다](finance.md) | 서버 배포·Web 구현·브라우저 5개 완료 | [명령 확정 응답](../../operations/portfolio-command-confirmation-2026-10-05.md) |
 | [FIN-02 · P1 · 실제 경로와 분리된 Reporting 상태기계·포트폴리오 정책을 계약 검사와 함께 정리합니다](finance.md) | 미착수 | |
@@ -72,10 +72,10 @@
 | [6. 테스트만 소비하는 legacy Shortcut owner 추론은 운영 src와 분리](capture.md) | 구현·관련 검사 완료 | [수집 인가와 과거 정책](../../operations/capture-authorization-simplicity-2026-10-05.md) |
 | [7. QuickEdit의 original/draft/Intent 필드 복제를 한 snapshot과 draft로 정리](capture.md) | 미착수 | |
 | [8. 모든 알림 event에 붙은 legacy Shortcut guard의 종료 조건 명시](capture.md) | 검토 완료·계약상 유지 결정 | [근거와 종료 조건](../../operations/simplicity-retention-decisions-2026-10-05.md) |
-| [CT01 — 경합이라고 이름 붙인 검사가 순차 실행입니다. P1, 확신 높음](capture-tests.md) | 미착수 | |
-| [CT02 — 로그·원문 비저장의 일부 검사가 상수 빈 배열을 읽습니다. P1, 확신 높음](capture-tests.md) | 미착수 | |
-| [CT03 — receipt 조율 테스트가 취소·해시 별도 구현까지 유지합니다. P2, 확신 높음](capture-tests.md) | 미착수 | |
-| [CT04 — golden 결과 상수를 다시 검사하는 테스트를 행동 검증과 분리합니다. P3, 확신 높음](capture-tests.md) | 미착수 | |
+| [CT01 — 경합이라고 이름 붙인 검사가 순차 실행입니다. P1, 확신 높음](capture-tests.md) | 구현·실제 SDK 검사 완료 | [실제 수집·저장 검사](../../operations/capture-test-boundaries-2026-10-05.md) |
+| [CT02 — 로그·원문 비저장의 일부 검사가 상수 빈 배열을 읽습니다. P1, 확신 높음](capture-tests.md) | 구현·실제 SDK 검사 완료 | [실제 수집·저장 검사](../../operations/capture-test-boundaries-2026-10-05.md) |
+| [CT03 — receipt 조율 테스트가 취소·해시 별도 구현까지 유지합니다. P2, 확신 높음](capture-tests.md) | 구현·실제 SDK 검사 완료 | [실제 수집·저장 검사](../../operations/capture-test-boundaries-2026-10-05.md) |
+| [CT04 — golden 결과 상수를 다시 검사하는 테스트를 행동 검증과 분리합니다. P3, 확신 높음](capture-tests.md) | 구현·실제 SDK 검사 완료 | [실제 수집·저장 검사](../../operations/capture-test-boundaries-2026-10-05.md) |
 | [WE01 — 선택 상태를 CSS 구현으로 검증하는 작은 결합. P3, 확신 높음](web-e2e.md) | 구현·관련 검사 완료 | [운영 연결과 계약 검사](../../operations/web-contract-tests-simplicity-2026-10-05.md) |
 | [WE02 — 첫 홈 성능 검사가 정확한 chunk 이름·개수를 고정합니다. P3, 확신 중간](web-e2e.md) | 미착수 | |
 

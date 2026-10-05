@@ -1,7 +1,4 @@
-import { createHash } from "node:crypto";
-
 import type {
-  CapturePayloadFingerprintPort,
   CaptureReceiptBranch,
   CaptureReceiptClaimResult,
   CaptureSubmissionReceipt,
@@ -93,63 +90,5 @@ export class InMemoryCaptureSubmissionReceiptStore
 
   saveCount(): number {
     return this.saves;
-  }
-}
-
-export class Sha256CapturePayloadFingerprint
-  implements CapturePayloadFingerprintPort
-{
-  fingerprint(envelope: CaptureBranchEnvelope): string {
-    const identity = envelope.captureEnvelopeIdentity;
-    const transaction = envelope.transactionBranch;
-    const capture = transaction?.captureContext;
-    const balance = envelope.balanceBranch;
-    const canonicalPayload = JSON.stringify([
-      envelope.householdId,
-      identity === undefined
-        ? null
-        : [
-            identity.contractVersion,
-            identity.observationId,
-            identity.originChannel,
-            identity.sourceIdentity,
-            identity.observedAt,
-            identity.parserId,
-            identity.parserVersion,
-            identity.rawPayloadHash,
-          ],
-      transaction === undefined
-        ? null
-        : [
-            transaction.branchKey,
-            transaction.merchant,
-            transaction.amountInWon,
-            transaction.occurredAt,
-            capture === undefined
-              ? null
-              : [
-                  capture.observationId,
-                  capture.observationType,
-                  capture.originChannel,
-                  capture.cardEvidence?.companyLabel ?? null,
-                  capture.cardEvidence?.maskedToken ?? null,
-                ],
-          ],
-      balance === undefined
-        ? null
-        : [
-            balance.branchKey,
-            balance.observation.contractVersion,
-            balance.observation.observationId,
-            balance.observation.localCurrencyType,
-            balance.observation.balanceInWon,
-            balance.observation.observedAt,
-            balance.observation.sourceType,
-            balance.observation.parser.parserId,
-            balance.observation.parser.parserVersion,
-            balance.observation.rawPayloadHash ?? null,
-          ],
-    ]);
-    return createHash("sha256").update(canonicalPayload).digest("hex");
   }
 }

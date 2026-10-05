@@ -258,7 +258,7 @@ export class FirebaseCaptureSubmissionReceiptStore
         balance: nextBalance,
       };
       const now = this.now();
-      transaction.set(
+      transaction.update(
         reference,
         {
           state,
@@ -269,7 +269,6 @@ export class FirebaseCaptureSubmissionReceiptStore
             ? { terminalAt: now, expiresAt: terminalExpiry(now) }
             : {}),
         },
-        { merge: true },
       );
       return saved;
     });

@@ -54,10 +54,7 @@ export function createShortcutCredentialStorageInstallerFixture() {
           householdId: credential.householdId,
           memberId: credential.memberId,
           scope: "paymentCapture:submit" as const,
-          secretHash: {
-            kind: "one-way-strong-hash" as const,
-            value: credential.secretHash,
-          },
+          secretHash: credential.secretHash,
           keyVersion: credential.keyVersion,
           status:
             credential.status === "active"
@@ -70,8 +67,6 @@ export function createShortcutCredentialStorageInstallerFixture() {
             ? {}
             : { lastUsedAt: credential.lastUsedAt }),
         })),
-        rawSecretsAtRest: [] as readonly string[],
-        auditLogs: [] as readonly string[],
       };
     },
   };

@@ -340,6 +340,8 @@ describe("Capture root receipt terminal CAS", () => {
       const merged = await store.save(later);
       expect(merged).toEqual(completed);
       expect(memory.document(path)).toMatchObject(completed);
+      expect(memory.document(path)?.transaction).toEqual(completed.transaction);
+      expect(memory.document(path)?.balance).toEqual(completed.balance);
       expect(memory.document(path)).toHaveProperty("terminalAt", "2026-07-21T01:06:00.000Z");
       expect(writes).toHaveLength(2);
     },
