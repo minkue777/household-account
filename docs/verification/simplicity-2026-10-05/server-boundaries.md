@@ -70,12 +70,12 @@ default exports 구성은 유지합니다. 무소비 demo 경로는 SB-01 제거
 
 근거:
 
-- [functions/src/contexts/payment-capture/android-payment-ingestion/public.ts:53](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/contexts/payment-capture/android-payment-ingestion/public.ts:53)
-- [functions/src/contexts/payment-capture/android-payment-ingestion/domain/policies/recentNotificationCache.ts:27](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/contexts/payment-capture/android-payment-ingestion/domain/policies/recentNotificationCache.ts:27)
-- [functions/src/demo/portfolio/application/demoAssetFixtureApplication.ts:8](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/demo/portfolio/application/demoAssetFixtureApplication.ts:8)
-- [functions/src/contexts/payment-capture/android-payment-ingestion/application/diagnosticRetentionApplication.ts:75](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/contexts/payment-capture/android-payment-ingestion/application/diagnosticRetentionApplication.ts:75)
-- [functions/src/adapters/firebase/payment-capture/firebaseDiagnosticDocumentStore.ts:49](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/adapters/firebase/payment-capture/firebaseDiagnosticDocumentStore.ts:49)
-- [firestore.rules:218](C:/Users/minku/Desktop/programming/ToyProject/Household-account/firestore.rules:218)
+- [functions/src/contexts/payment-capture/android-payment-ingestion/public.ts:53](../../../functions/src/contexts/payment-capture/android-payment-ingestion/public.ts#L53)
+- [functions/src/contexts/payment-capture/android-payment-ingestion/domain/policies/recentNotificationCache.ts:27](../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/policies/recentNotificationCache.ts#L27)
+- [functions/src/demo/portfolio/application/demoAssetFixtureApplication.ts:8](../../../functions/src/demo/portfolio/application/demoAssetFixtureApplication.ts#L8)
+- [functions/src/contexts/payment-capture/android-payment-ingestion/application/diagnosticRetentionApplication.ts:75](../../../functions/src/contexts/payment-capture/android-payment-ingestion/application/diagnosticRetentionApplication.ts#L75)
+- [functions/src/adapters/firebase/payment-capture/firebaseDiagnosticDocumentStore.ts:49](../../../functions/src/adapters/firebase/payment-capture/firebaseDiagnosticDocumentStore.ts#L49)
+- [firestore.rules:218](../../../firestore.rules#L218)
 
 실제 연결: 실제 Android raw handler는 buildNotificationEnvelope와 Android의 내구성 queue를 사용합니다. createNotificationIngress/recentNotificationCache는 factory 내부 외 생산·테스트 소비자가 없으며, demo portfolio 4개도 자기 package 외 소비자를 찾지 못했습니다. 진단 collect는 실제 callable에 연결되지만 application.readAll은 test driver만 호출하고 실제 진단 조회 권한은 Firestore rules가 담당합니다.
 
@@ -103,10 +103,10 @@ default exports 구성은 유지합니다. 무소비 demo 경로는 SB-01 제거
 
 근거:
 
-- [functions/src/contexts/payment-capture/android-payment-ingestion/domain/policies/selectSmsParserByPriority.ts:7](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/contexts/payment-capture/android-payment-ingestion/domain/policies/selectSmsParserByPriority.ts:7)
-- [functions/src/contexts/payment-capture/android-payment-ingestion/domain/parsers/smsBillProviderParser.ts:32](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/contexts/payment-capture/android-payment-ingestion/domain/parsers/smsBillProviderParser.ts:32)
-- [functions/test/support/sms-parser-order-driver.ts:29](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/test/support/sms-parser-order-driver.ts:29)
-- [functions/src/contexts/payment-capture/android-payment-ingestion/public.ts:37](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/contexts/payment-capture/android-payment-ingestion/public.ts:37)
+- [functions/src/contexts/payment-capture/android-payment-ingestion/domain/policies/selectSmsParserByPriority.ts:7](../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/policies/selectSmsParserByPriority.ts#L7)
+- [functions/src/contexts/payment-capture/android-payment-ingestion/domain/parsers/smsBillProviderParser.ts:32](../../../functions/src/contexts/payment-capture/android-payment-ingestion/domain/parsers/smsBillProviderParser.ts#L32)
+- [functions/test/support/sms-parser-order-driver.ts:29](../../../functions/test/support/sms-parser-order-driver.ts#L29)
+- [functions/src/contexts/payment-capture/android-payment-ingestion/public.ts:37](../../../functions/src/contexts/payment-capture/android-payment-ingestion/public.ts#L37)
 
 실제 연결: 운영 SMS는 smsBillProviderParser의 실제 parser 배열을 차례로 실행합니다. 별도 selectSmsParserByPriority는 미리 성공했다는 ID 배열만 받아 선택하며 test driver만 소비합니다.
 
@@ -133,11 +133,11 @@ default exports 구성은 유지합니다. 무소비 demo 경로는 SB-01 제거
 
 근거:
 
-- [functions/src/bootstrap/commands/portfolioHouseholdCommandHandlers.ts:46](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/bootstrap/commands/portfolioHouseholdCommandHandlers.ts:46)
-- [functions/src/bootstrap/commands/portfolioHouseholdCommandHandlers.ts:138](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/bootstrap/commands/portfolioHouseholdCommandHandlers.ts:138)
-- [functions/src/bootstrap/commands/portfolioHouseholdCommandHandlers.ts:192](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/bootstrap/commands/portfolioHouseholdCommandHandlers.ts:192)
-- [functions/src/bootstrap/commands/portfolioHouseholdCommandHandlers.ts:240](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/bootstrap/commands/portfolioHouseholdCommandHandlers.ts:240)
-- [functions/src/bootstrap/commands/portfolioHouseholdCommandHandlers.ts:267](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/bootstrap/commands/portfolioHouseholdCommandHandlers.ts:267)
+- [functions/src/bootstrap/commands/portfolioHouseholdCommandHandlers.ts:46](../../../functions/src/bootstrap/commands/portfolioHouseholdCommandHandlers.ts#L46)
+- [functions/src/bootstrap/commands/portfolioHouseholdCommandHandlers.ts:138](../../../functions/src/bootstrap/commands/portfolioHouseholdCommandHandlers.ts#L138)
+- [functions/src/bootstrap/commands/portfolioHouseholdCommandHandlers.ts:192](../../../functions/src/bootstrap/commands/portfolioHouseholdCommandHandlers.ts#L192)
+- [functions/src/bootstrap/commands/portfolioHouseholdCommandHandlers.ts:240](../../../functions/src/bootstrap/commands/portfolioHouseholdCommandHandlers.ts#L240)
+- [functions/src/bootstrap/commands/portfolioHouseholdCommandHandlers.ts:267](../../../functions/src/bootstrap/commands/portfolioHouseholdCommandHandlers.ts#L267)
 
 실제 연결: expectedVersion(payload)는 유효한 양의 정수를 반환하거나 throw합니다. 이어지는 네 명령은 undefined인 경우 version을 생략하는 분기를 실행할 수 없습니다.
 
@@ -162,10 +162,10 @@ default exports 구성은 유지합니다. 무소비 demo 경로는 SB-01 제거
 
 근거:
 
-- [functions/src/bootstrap/commands/ledgerHouseholdCommandHandlers.ts:245](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/bootstrap/commands/ledgerHouseholdCommandHandlers.ts:245)
-- [functions/src/bootstrap/commands/ledgerHouseholdCommandHandlers.ts:256](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/bootstrap/commands/ledgerHouseholdCommandHandlers.ts:256)
-- [functions/src/bootstrap/commands/ledgerHouseholdCommandHandlers.ts:499](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/bootstrap/commands/ledgerHouseholdCommandHandlers.ts:499)
-- [functions/src/bootstrap/commands/householdCommandRouter.ts:106](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/bootstrap/commands/householdCommandRouter.ts:106)
+- [functions/src/bootstrap/commands/ledgerHouseholdCommandHandlers.ts:245](../../../functions/src/bootstrap/commands/ledgerHouseholdCommandHandlers.ts#L245)
+- [functions/src/bootstrap/commands/ledgerHouseholdCommandHandlers.ts:256](../../../functions/src/bootstrap/commands/ledgerHouseholdCommandHandlers.ts#L256)
+- [functions/src/bootstrap/commands/ledgerHouseholdCommandHandlers.ts:499](../../../functions/src/bootstrap/commands/ledgerHouseholdCommandHandlers.ts#L499)
+- [functions/src/bootstrap/commands/householdCommandRouter.ts:106](../../../functions/src/bootstrap/commands/householdCommandRouter.ts#L106)
 
 실제 연결: router는 payload가 object인지와 위조 identity 필드를 검사합니다. 일반 수동 등록 handler는 transactionType이 string인지만 확인한 뒤 income이면 수입, 그 외는 모두 지출 command로 바꿉니다. 월 분할 handler에는 expense/income 명시 검사가 이미 있습니다.
 

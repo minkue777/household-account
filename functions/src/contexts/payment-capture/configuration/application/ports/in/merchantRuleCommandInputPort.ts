@@ -1,7 +1,6 @@
 import type {
   MerchantMatchType,
   MerchantRuleActor,
-  MerchantRuleCommandState,
   MerchantRuleMapping,
   MerchantRuleRecord,
 } from "../../../domain/model/merchantRuleSet";
@@ -83,12 +82,4 @@ export interface ReorderMerchantRulesCommand {
   readonly matchType: Exclude<MerchantMatchType, "exact">;
   readonly orderedRuleIds: readonly string[];
   readonly expectedCollectionVersion: number;
-}
-
-export interface MerchantRuleCommandInputPort {
-  create(input: CreateMerchantRuleCommand): MerchantRuleCommandResult;
-  update(input: UpdateMerchantRuleCommand): MerchantRuleCommandResult;
-  delete(input: DeleteMerchantRuleCommand): MerchantRuleCommandResult;
-  reorder(input: ReorderMerchantRulesCommand): MerchantRuleCommandResult;
-  state(): MerchantRuleCommandState;
 }

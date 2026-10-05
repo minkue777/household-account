@@ -1,11 +1,17 @@
-import { createMerchantRuleCommandApplication } from "../../src/contexts/payment-capture/configuration/application/merchantRuleCommandApplication";
+import {
+  createMerchantRuleMutation,
+  updateMerchantRuleMutation,
+  deleteMerchantRuleMutation,
+  reorderMerchantRulesMutation,
+  type MerchantRuleMutation,
+} from "../../src/contexts/payment-capture/configuration/application/merchantRuleMutation";
 import type {
   CreateMerchantRuleCommand,
+  MerchantRuleCommandResult,
   DeleteMerchantRuleCommand,
   ReorderMerchantRulesCommand,
   UpdateMerchantRuleCommand,
 } from "../../src/contexts/payment-capture/configuration/application/ports/in/merchantRuleCommandInputPort";
-import type { MerchantRuleCommandStorePort } from "../../src/contexts/payment-capture/configuration/application/ports/out/merchantRuleCommandStorePort";
 import type {
   MerchantRuleCommandState,
   MerchantRuleRecord,
@@ -25,55 +31,35 @@ export function createMerchantRuleCommandBoundaryFixture(fixture?: {
     rules: fixture?.rules ?? [],
     collectionVersions: fixture?.collectionVersions,
   });
-  let nextCommitOutcome: CommitOutcome = "success";
-
-  const store: MerchantRuleCommandStorePort = {
-    read: () => cloneMerchantRuleCommandState(state),
-    transact(decide) {
-      const decision = decide(cloneMerchantRuleCommandState(state));
-      if (!decision.writes) {
-        return { kind: "Committed", value: decision.value };
-      }
-      if (nextCommitOutcome === "failure") {
-        return { kind: "CommitFailed" };
-      }
-      state = cloneMerchantRuleCommandState(decision.state);
-      return { kind: "Committed", value: decision.value };
-    },
-  };
-
   const firstCollectionKey = Object.keys(fixture?.collectionVersions ?? {})[0];
   const householdId =
     fixture?.rules?.[0]?.householdId ??
     firstCollectionKey?.split(":")[0] ??
     "household-a";
-  const application = createMerchantRuleCommandApplication({ householdId, store });
-
-  const setCommitOutcome = (outcome: CommitOutcome | undefined): void => {
-    nextCommitOutcome = outcome ?? "success";
+  const commit = (
+    mutation: MerchantRuleMutation,
+    outcome: CommitOutcome = "success",
+  ): MerchantRuleCommandResult => {
+    if (mutation.writes) {
+      if (outcome === "failure") return { kind: "RetryableFailure", code: "ATOMIC_COMMIT_FAILED" };
+      state = cloneMerchantRuleCommandState(mutation.state);
+    }
+    return mutation.value;
   };
 
   return {
     create(input: CreateMerchantRuleCommand & { readonly commitOutcome?: CommitOutcome }) {
-      setCommitOutcome(input.commitOutcome);
-      const { commitOutcome: _commitOutcome, ...command } = input;
-      return application.create(command);
+      return commit(createMerchantRuleMutation(state, householdId, input), input.commitOutcome);
     },
     update(input: UpdateMerchantRuleCommand & { readonly commitOutcome?: CommitOutcome }) {
-      setCommitOutcome(input.commitOutcome);
-      const { commitOutcome: _commitOutcome, ...command } = input;
-      return application.update(command);
+      return commit(updateMerchantRuleMutation(state, householdId, input), input.commitOutcome);
     },
     delete(input: DeleteMerchantRuleCommand & { readonly commitOutcome?: CommitOutcome }) {
-      setCommitOutcome(input.commitOutcome);
-      const { commitOutcome: _commitOutcome, ...command } = input;
-      return application.delete(command);
+      return commit(deleteMerchantRuleMutation(state, householdId, input), input.commitOutcome);
     },
     reorder(input: ReorderMerchantRulesCommand & { readonly commitOutcome?: CommitOutcome }) {
-      setCommitOutcome(input.commitOutcome);
-      const { commitOutcome: _commitOutcome, ...command } = input;
-      return application.reorder(command);
+      return commit(reorderMerchantRulesMutation(state, householdId, input), input.commitOutcome);
     },
-    state: () => application.state(),
+    state: () => cloneMerchantRuleCommandState(state),
   };
 }

@@ -36,4 +36,10 @@ Android v1.2.33/code35의 release build와 APK v2 서명을 확인했습니다. 
 
 로컬 로그: `TEMP/household-simplicity-capture-unit-20261005.log`, `TEMP/household-simplicity-category-instrumentation-20261005.log`, `TEMP/household-simplicity-release-20261005.log`.
 
-이번 실행은 Android 미사용 경로 정리입니다. 서버의 미사용 모형, 자산 명령 결과·편집 상태, capture 재시도 잠금/중복 알고리즘, 실제 계약을 관측하지 않는 테스트 등의 후보는 아직 미완료입니다. 전체 정비가 끝났다고 해석하지 않습니다.
+위 1차 실행은 Android 미사용 경로 정리입니다. 서버의 미사용 모형, 자산 명령 결과·편집 상태, capture 재시도 잠금/중복 알고리즘, 실제 계약을 관측하지 않는 테스트 등의 후보는 아직 미완료입니다. 전체 정비가 끝났다고 해석하지 않습니다.
+
+## 2차: 가맹점 규칙 저장 실행 구조 — MER-003/004/005
+
+실제 transaction 안의 가상 저장소·중첩 transaction·가변 결과 회수를 제거하고, 생성·수정·삭제·순서 변경·규칙 기억하기를 직접적인 변경 계산으로 연결했습니다. 실제 DB adapter만 원자 저장을 담당합니다. 상세 계약·전후 구조·검증·남은 범위는 [가맹점 규칙 정비 기록](../../operations/merchant-rule-simplicity-2026-10-05.md)을 따릅니다. 기존 관련 검사 54개, 실제 Firestore 검사 7개, architecture 45개와 build·타입 검사가 통과했습니다.
+
+1차 CI에서 분석 문서의 Windows 절대 경로 링크 62개가 실패한 문제도 상대 링크로 수정했습니다. Android 제품은 바꾸지 않으므로 APK 재발행은 없습니다.

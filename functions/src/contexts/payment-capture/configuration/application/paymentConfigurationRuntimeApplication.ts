@@ -1,6 +1,12 @@
 import { createHash } from "node:crypto";
 
-import { createMerchantRuleCommandApplication } from "./merchantRuleCommandApplication";
+import {
+  createMerchantRuleMutation,
+  updateMerchantRuleMutation,
+  deleteMerchantRuleMutation,
+  reorderMerchantRulesMutation,
+  unchangedMerchantRules,
+} from "./merchantRuleMutation";
 import type {
   MerchantRuleCommandResult,
   MerchantRuleCommandState,
@@ -16,7 +22,6 @@ import type {
   PaymentConfigurationAtomicStorePort,
   PaymentConfigurationCommandMetadata,
 } from "./ports/out/paymentConfigurationAtomicStorePort";
-import { cloneMerchantRuleCommandState } from "../domain/policies/merchantRuleClaims";
 import { normalizeCardCompanyKey } from "../domain/value-objects/cardIdentity";
 
 export interface PaymentConfigurationRuntimeActor {
@@ -144,35 +149,6 @@ function metadata(
   };
 }
 
-export function merchantMutation(
-  current: MerchantRuleCommandState,
-  householdId: string,
-  execute: (
-    application: ReturnType<typeof createMerchantRuleCommandApplication>,
-    state: MerchantRuleCommandState,
-  ) => MerchantRuleCommandResult,
-): AtomicPaymentConfigurationMutation<
-  MerchantRuleCommandState,
-  MerchantRuleCommandResult
-> {
-  let next = cloneMerchantRuleCommandState(current);
-  let writes = false;
-  const application = createMerchantRuleCommandApplication({
-    householdId,
-    store: {
-      read: () => cloneMerchantRuleCommandState(next),
-      transact(decide) {
-        const outcome = decide(cloneMerchantRuleCommandState(next));
-        next = cloneMerchantRuleCommandState(outcome.state);
-        writes = outcome.writes;
-        return { kind: "Committed", value: outcome.value };
-      },
-    },
-  });
-  const value = execute(application, current);
-  return { state: next, value, writes };
-}
-
 function cardMutation(
   current: RegisteredCardCommandState,
   householdId: string,
@@ -275,23 +251,21 @@ export function createPaymentConfigurationRuntimeApplication(
       const atomic = await store.transactMerchantRules(
         metadata(input),
         (current) =>
-          merchantMutation(current, input.actor.householdId, (application) =>
-            application.create({
-              actor: actor(input),
-              ruleId: deterministicId("merchant-rule", input.actor.householdId, input.commandId),
-              keyword,
-              matchType: type,
-              ...(type === "exact"
-                ? {}
-                : {
-                    priority:
-                      positivePriority(raw.priority) ??
-                      nextPriority(current, input.actor.householdId, type),
-                  }),
-              mapping: ruleMapping,
-              active: optionalBoolean(raw.isActive) ?? true,
-            }),
-          ),
+          createMerchantRuleMutation(current, input.actor.householdId, {
+            actor: actor(input),
+            ruleId: deterministicId("merchant-rule", input.actor.householdId, input.commandId),
+            keyword,
+            matchType: type,
+            ...(type === "exact"
+              ? {}
+              : {
+                  priority:
+                    positivePriority(raw.priority) ??
+                    nextPriority(current, input.actor.householdId, type),
+                }),
+            mapping: ruleMapping,
+            active: optionalBoolean(raw.isActive) ?? true,
+          }),
       );
       return result(atomic, (value) =>
         value.kind === "Created" && "rule" in value
@@ -322,69 +296,68 @@ export function createPaymentConfigurationRuntimeApplication(
 
       const atomic = await store.transactMerchantRules(
         metadata(input),
-        (current) =>
-          merchantMutation(current, input.actor.householdId, (application) => {
-            const target = current.rules.find(({ ruleId }) => ruleId === input.ruleId);
-            if (target === undefined) return { kind: "NotFound" };
-            const requestedType =
-              changes.matchType === undefined
-                ? target.matchType
-                : matchType(changes.matchType);
-            const requestedKeyword =
-              changes.merchantKeyword === undefined
-                ? target.keyword
-                : nonEmptyString(changes.merchantKeyword);
-            const requestedMapping =
-              changes.mapping === undefined
-                ? target.mapping
-                : mapping(changes.mapping, target.mapping);
-            const requestedActive =
-              changes.isActive === undefined
-                ? target.active
-                : optionalBoolean(changes.isActive);
-            if (requestedType === undefined) {
-              return { kind: "Rejected", code: "REGEX_NOT_SUPPORTED" };
-            }
-            if (requestedKeyword === undefined) {
-              return { kind: "Rejected", code: "EMPTY_KEYWORD" };
-            }
-            if (requestedMapping === undefined || requestedActive === undefined) {
-              return { kind: "Rejected", code: "EMPTY_KEYWORD" };
-            }
-            if (
-              changes.priority !== undefined &&
-              positivePriority(changes.priority) === undefined
-            ) {
-              return { kind: "Rejected", code: "NON_EXACT_PRIORITY_REQUIRED" };
-            }
-            if (requestedType === "exact" && changes.priority !== undefined) {
-              return { kind: "Rejected", code: "EXACT_PRIORITY_NOT_ALLOWED" };
-            }
-            const priority =
-              requestedType === "exact"
-                ? undefined
-                : positivePriority(changes.priority) ??
-                  (target.matchType === requestedType &&
-                  typeof target.priority === "number" &&
-                  target.priority > 0
-                    ? target.priority
-                    : nextPriority(
-                        current,
-                        input.actor.householdId,
-                        requestedType,
-                        target.ruleId,
-                      ));
-            return application.update({
-              actor: actor(input),
-              ruleId: target.ruleId,
-              expectedVersion: input.expectedVersion,
-              keyword: requestedKeyword,
-              matchType: requestedType,
-              ...(priority === undefined ? {} : { priority }),
-              mapping: requestedMapping,
-              active: requestedActive,
-            });
-          }),
+        (current) => {
+          const target = current.rules.find(({ ruleId }) => ruleId === input.ruleId);
+          if (target === undefined) return unchangedMerchantRules(current, { kind: "NotFound" });
+          const requestedType =
+            changes.matchType === undefined
+              ? target.matchType
+              : matchType(changes.matchType);
+          const requestedKeyword =
+            changes.merchantKeyword === undefined
+              ? target.keyword
+              : nonEmptyString(changes.merchantKeyword);
+          const requestedMapping =
+            changes.mapping === undefined
+              ? target.mapping
+              : mapping(changes.mapping, target.mapping);
+          const requestedActive =
+            changes.isActive === undefined
+              ? target.active
+              : optionalBoolean(changes.isActive);
+          if (requestedType === undefined) {
+            return unchangedMerchantRules(current, { kind: "Rejected", code: "REGEX_NOT_SUPPORTED" });
+          }
+          if (requestedKeyword === undefined) {
+            return unchangedMerchantRules(current, { kind: "Rejected", code: "EMPTY_KEYWORD" });
+          }
+          if (requestedMapping === undefined || requestedActive === undefined) {
+            return unchangedMerchantRules(current, { kind: "Rejected", code: "EMPTY_KEYWORD" });
+          }
+          if (
+            changes.priority !== undefined &&
+            positivePriority(changes.priority) === undefined
+          ) {
+            return unchangedMerchantRules(current, { kind: "Rejected", code: "NON_EXACT_PRIORITY_REQUIRED" });
+          }
+          if (requestedType === "exact" && changes.priority !== undefined) {
+            return unchangedMerchantRules(current, { kind: "Rejected", code: "EXACT_PRIORITY_NOT_ALLOWED" });
+          }
+          const priority =
+            requestedType === "exact"
+              ? undefined
+              : positivePriority(changes.priority) ??
+                (target.matchType === requestedType &&
+                typeof target.priority === "number" &&
+                target.priority > 0
+                  ? target.priority
+                  : nextPriority(
+                      current,
+                      input.actor.householdId,
+                      requestedType,
+                      target.ruleId,
+                    ));
+          return updateMerchantRuleMutation(current, input.actor.householdId, {
+            actor: actor(input),
+            ruleId: target.ruleId,
+            expectedVersion: input.expectedVersion,
+            keyword: requestedKeyword,
+            matchType: requestedType,
+            ...(priority === undefined ? {} : { priority }),
+            mapping: requestedMapping,
+            active: requestedActive,
+          });
+        },
       );
       return result(atomic, (value) =>
         value.kind === "Updated" ? {} : undefined,
@@ -397,15 +370,10 @@ export function createPaymentConfigurationRuntimeApplication(
       const atomic = await store.transactMerchantRules(
         metadata(input),
         (current) =>
-          merchantMutation(current, input.actor.householdId, (application) => {
-            const target = current.rules.find(({ ruleId }) => ruleId === input.ruleId);
-            return target === undefined
-              ? { kind: "NotFound" }
-              : application.delete({
-                  actor: actor(input),
-                  ruleId: target.ruleId,
-                  expectedVersion: input.expectedVersion,
-                });
+          deleteMerchantRuleMutation(current, input.actor.householdId, {
+            actor: actor(input),
+            ruleId: input.ruleId,
+            expectedVersion: input.expectedVersion,
           }),
       );
       return result(atomic, (value) =>
@@ -419,10 +387,10 @@ export function createPaymentConfigurationRuntimeApplication(
       readonly expectedCollectionVersion: number;
     }): Promise<PaymentConfigurationRuntimeResult> {
       const atomic = await store.transactMerchantRules(metadata(input), (current) =>
-        merchantMutation(current, input.actor.householdId, (application) => application.reorder({
+        reorderMerchantRulesMutation(current, input.actor.householdId, {
           actor: actor(input), matchType: input.matchType, orderedRuleIds: input.orderedRuleIds,
           expectedCollectionVersion: input.expectedCollectionVersion,
-        })));
+        }));
       return result(atomic, (value) => value.kind === "Reordered" ? {} : undefined);
     },
 

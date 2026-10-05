@@ -7,6 +7,8 @@
 
 ## 1. 설계 목적과 추적성
 
+2026-10-05 가맹점 규칙 저장 정비: [변경 계산](../../../../../../functions/src/contexts/payment-capture/configuration/application/merchantRuleMutation.ts)은 현재 상태와 명령을 받아 `{state, value, writes}`를 반환합니다. 생성·수정·삭제·재정렬 및 기존 지출의 규칙 기억하기에 같은 계산을 사용합니다. 계산 내부에는 저장소·transaction·가변 application 상태가 없습니다. 실제 Firestore Adapter 한 곳에서 본문·claim·collection version·receipt·수집 Projection 무효화를 원자 반영합니다. 오류 코드, mapping의 미제공/빈 값, 기존 exact 규칙 재사용, expectedVersion과 멱등 key는 유지합니다. `MER-003/004/005` 검증은 기존 Command·Adapter 검사와 [실제 Firebase 경합/수명 검사](../../../../../../functions/test/integration/firebase/payment-configuration-atomic.integration.test.ts), [mapping 저장 검사](../../../../../../functions/test/integration/firebase/payment-configuration-mapping.integration.test.ts)로 연결합니다.
+
 이 문서는 등록 카드와 가맹점 규칙을 서버 권위 기준정보로 옮기기 위한 구현 계약입니다. 카드 정규화·유일성·정렬과 가맹점 매칭·우선순위·치환은 이 모듈의 Domain Policy 한 곳에서만 결정합니다. Web, Android, Shortcut, Payment Intake는 공개 Query 결과와 공용 fixture를 소비하며 같은 규칙을 다시 구현하지 않습니다.
 
 설계 권위는 [요구사항](requirements.md), Accepted 결정, [목표 아키텍처](../../../../../architecture/target-clean-architecture.md#3-아키텍처-드라이버), 이 문서 순입니다. 이 문서는 요구사항 ID를 새로 만들지 않으며 11절에서 12개 소유 ID를 모두 테스트에 연결합니다.

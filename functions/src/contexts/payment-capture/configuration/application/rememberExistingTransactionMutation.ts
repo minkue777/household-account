@@ -1,4 +1,4 @@
-import { merchantMutation } from "./paymentConfigurationRuntimeApplication";
+import { createMerchantRuleMutation, unchangedMerchantRules } from "./merchantRuleMutation";
 import type { MerchantRuleCommandState } from "./ports/in/merchantRuleCommandInputPort";
 import { normalizeRememberedMerchant, rememberedExactRuleId } from "../domain/policies/rememberMerchantRule";
 
@@ -11,16 +11,14 @@ export function rememberExistingTransactionMutation(input: {
   categoryId: string;
 }) {
   const keyword = normalizeRememberedMerchant(input.originalMerchant);
-  return merchantMutation(input.current, input.householdId, (application, state) => {
-    const existing = state.rules.find((rule) => rule.householdId === input.householdId && rule.matchType === "exact" && rule.normalizedKeywords.includes(keyword));
-    if (existing !== undefined) return { kind: "Updated", rule: existing };
-    return application.create({
-      actor: { householdId: input.householdId, memberId: input.memberId, capability: "paymentConfiguration:manage" },
-      ruleId: rememberedExactRuleId(input.householdId, keyword),
-      keyword,
-      matchType: "exact",
-      active: true,
-      mapping: { categoryId: input.categoryId },
-    });
+  const existing = input.current.rules.find((rule) => rule.householdId === input.householdId && rule.matchType === "exact" && rule.normalizedKeywords.includes(keyword));
+  if (existing !== undefined) return unchangedMerchantRules(input.current, { kind: "Updated", rule: existing });
+  return createMerchantRuleMutation(input.current, input.householdId, {
+    actor: { householdId: input.householdId, memberId: input.memberId, capability: "paymentConfiguration:manage" },
+    ruleId: rememberedExactRuleId(input.householdId, keyword),
+    keyword,
+    matchType: "exact",
+    active: true,
+    mapping: { categoryId: input.categoryId },
   });
 }

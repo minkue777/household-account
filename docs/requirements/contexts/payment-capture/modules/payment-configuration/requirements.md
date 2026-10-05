@@ -152,7 +152,7 @@ Web과 Android의 `T-MER-*`, `T-CARD-*`는 같은 JSON fixture를 사용해야 �
 ### Android
 
 - [등록 카드 관리 Application](../../../../../../functions/src/contexts/payment-capture/configuration/application/registeredCardCommandBoundaryApplication.ts)
-- [가맹점 규칙 Command Application](../../../../../../functions/src/contexts/payment-capture/configuration/application/merchantRuleCommandApplication.ts)
+- [가맹점 규칙 변경 계산](../../../../../../functions/src/contexts/payment-capture/configuration/application/merchantRuleMutation.ts)
 
 ### Functions
 

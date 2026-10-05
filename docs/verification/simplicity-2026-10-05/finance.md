@@ -88,11 +88,11 @@ Functions의 원장·카테고리·지역화폐·정기 계획·자산·보유�
 
 근거:
 
-- [functions/src/adapters/firebase/recurring/firebaseRecurringPlanManagementStore.ts:144](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/adapters/firebase/recurring/firebaseRecurringPlanManagementStore.ts:144)
-- [functions/src/adapters/firebase/recurring/firebaseRecurringPlanManagementStore.ts:183](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/adapters/firebase/recurring/firebaseRecurringPlanManagementStore.ts:183)
-- [functions/src/adapters/firebase/recurring/firebaseRecurringPlanManagementStore.ts:195](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/adapters/firebase/recurring/firebaseRecurringPlanManagementStore.ts:195)
-- [functions/src/adapters/firebase/recurring/firebaseRecurringPlanManagementStore.ts:206](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/adapters/firebase/recurring/firebaseRecurringPlanManagementStore.ts:206)
-- [functions/src/contexts/household-finance/recurring/application/recurringPlanManagementApplication.ts:266](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/contexts/household-finance/recurring/application/recurringPlanManagementApplication.ts:266)
+- [functions/src/adapters/firebase/recurring/firebaseRecurringPlanManagementStore.ts:144](../../../functions/src/adapters/firebase/recurring/firebaseRecurringPlanManagementStore.ts#L144)
+- [functions/src/adapters/firebase/recurring/firebaseRecurringPlanManagementStore.ts:183](../../../functions/src/adapters/firebase/recurring/firebaseRecurringPlanManagementStore.ts#L183)
+- [functions/src/adapters/firebase/recurring/firebaseRecurringPlanManagementStore.ts:195](../../../functions/src/adapters/firebase/recurring/firebaseRecurringPlanManagementStore.ts#L195)
+- [functions/src/adapters/firebase/recurring/firebaseRecurringPlanManagementStore.ts:206](../../../functions/src/adapters/firebase/recurring/firebaseRecurringPlanManagementStore.ts#L206)
+- [functions/src/contexts/household-finance/recurring/application/recurringPlanManagementApplication.ts:266](../../../functions/src/contexts/household-finance/recurring/application/recurringPlanManagementApplication.ts#L266)
 
 현재 흐름: Plan update → store.read가 전체 canonical plans·legacy plans·모든 command receipts 조회 → 사전 판정 → transact가 같은 전체 상태 재조회 → 한 건 수정된 배열 전체 diff → 변경 plan·receipt·outbox 저장; 목록도 read를 통해 불필요한 receipts를 읽음
 
@@ -122,11 +122,11 @@ Functions의 원장·카테고리·지역화폐·정기 계획·자산·보유�
 
 근거:
 
-- [functions/src/contexts/portfolio/core/application/portfolioAssetCommandApplication.ts:387](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/contexts/portfolio/core/application/portfolioAssetCommandApplication.ts:387)
-- [functions/src/contexts/portfolio/core/application/portfolioPositionCommandApplication.ts:231](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/contexts/portfolio/core/application/portfolioPositionCommandApplication.ts:231)
-- [functions/src/adapters/firebase/portfolio/firebasePortfolioRuntimeStore.ts:55](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/adapters/firebase/portfolio/firebasePortfolioRuntimeStore.ts:55)
-- [functions/src/contexts/portfolio/core/application/ports/out/portfolioRuntimeStorePort.ts:114](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/contexts/portfolio/core/application/ports/out/portfolioRuntimeStorePort.ts:114)
-- [functions/src/adapters/firebase/portfolio/firebasePortfolioRuntimeDocuments.ts:56](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/adapters/firebase/portfolio/firebasePortfolioRuntimeDocuments.ts:56)
+- [functions/src/contexts/portfolio/core/application/portfolioAssetCommandApplication.ts:387](../../../functions/src/contexts/portfolio/core/application/portfolioAssetCommandApplication.ts#L387)
+- [functions/src/contexts/portfolio/core/application/portfolioPositionCommandApplication.ts:231](../../../functions/src/contexts/portfolio/core/application/portfolioPositionCommandApplication.ts#L231)
+- [functions/src/adapters/firebase/portfolio/firebasePortfolioRuntimeStore.ts:55](../../../functions/src/adapters/firebase/portfolio/firebasePortfolioRuntimeStore.ts#L55)
+- [functions/src/contexts/portfolio/core/application/ports/out/portfolioRuntimeStorePort.ts:114](../../../functions/src/contexts/portfolio/core/application/ports/out/portfolioRuntimeStorePort.ts#L114)
+- [functions/src/adapters/firebase/portfolio/firebasePortfolioRuntimeDocuments.ts:56](../../../functions/src/adapters/firebase/portfolio/firebasePortfolioRuntimeDocuments.ts#L56)
 
 현재 흐름: HouseholdCommand → portfolio runtime → 같은 transaction에서 updated Position/nextAsset 계산 → canonical·history·outbox·receipt 저장 → success({}) 또는 ID만 반환 → Web이 expectedVersion+1/현재시각을 추정
 
@@ -156,17 +156,17 @@ Functions의 원장·카테고리·지역화폐·정기 계획·자산·보유�
 
 근거:
 
-- [functions/src/read-side/reporting/application/reportingAuthoritativeActionController.ts:26](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/read-side/reporting/application/reportingAuthoritativeActionController.ts:26)
-- [functions/src/read-side/reporting/application/reportingCategoryActionController.ts:18](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/read-side/reporting/application/reportingCategoryActionController.ts:18)
-- [functions/src/read-side/reporting/application/queries/boundedReportingQuery.ts:70](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/read-side/reporting/application/queries/boundedReportingQuery.ts:70)
-- [functions/src/read-side/reporting/application/queries/boundedAssetStatisticsQuery.ts:101](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/read-side/reporting/application/queries/boundedAssetStatisticsQuery.ts:101)
-- [functions/test/support/reporting-authoritative-action-fixture.ts:47](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/test/support/reporting-authoritative-action-fixture.ts:47)
-- [docs/requirements/supporting-platform/modules/reporting/design.md:9](C:/Users/minku/Desktop/programming/ToyProject/Household-account/docs/requirements/supporting-platform/modules/reporting/design.md:9)
-- [functions/src/contexts/portfolio/holdings/domain/policies/assetRevaluationPolicy.ts:24](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/contexts/portfolio/holdings/domain/policies/assetRevaluationPolicy.ts:24)
-- [functions/src/contexts/portfolio/automation/domain/policies/automationDueTasks.ts:37](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/contexts/portfolio/automation/domain/policies/automationDueTasks.ts:37)
-- [functions/src/contexts/portfolio/dividends/domain/entities/dividendEvent.ts:215](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/contexts/portfolio/dividends/domain/entities/dividendEvent.ts:215)
-- [functions/test/contexts/portfolio/dividend-state-transition-contract.contract.test.ts:62](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/test/contexts/portfolio/dividend-state-transition-contract.contract.test.ts:62)
-- [functions/src/adapters/firebase/dividends/firebaseDividendEventRuntimeRepository.ts:266](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/adapters/firebase/dividends/firebaseDividendEventRuntimeRepository.ts:266)
+- [functions/src/read-side/reporting/application/reportingAuthoritativeActionController.ts:26](../../../functions/src/read-side/reporting/application/reportingAuthoritativeActionController.ts#L26)
+- [functions/src/read-side/reporting/application/reportingCategoryActionController.ts:18](../../../functions/src/read-side/reporting/application/reportingCategoryActionController.ts#L18)
+- [functions/src/read-side/reporting/application/queries/boundedReportingQuery.ts:70](../../../functions/src/read-side/reporting/application/queries/boundedReportingQuery.ts#L70)
+- [functions/src/read-side/reporting/application/queries/boundedAssetStatisticsQuery.ts:101](../../../functions/src/read-side/reporting/application/queries/boundedAssetStatisticsQuery.ts#L101)
+- [functions/test/support/reporting-authoritative-action-fixture.ts:47](../../../functions/test/support/reporting-authoritative-action-fixture.ts#L47)
+- [docs/requirements/supporting-platform/modules/reporting/design.md:9](../../../docs/requirements/supporting-platform/modules/reporting/design.md#L9)
+- [functions/src/contexts/portfolio/holdings/domain/policies/assetRevaluationPolicy.ts:24](../../../functions/src/contexts/portfolio/holdings/domain/policies/assetRevaluationPolicy.ts#L24)
+- [functions/src/contexts/portfolio/automation/domain/policies/automationDueTasks.ts:37](../../../functions/src/contexts/portfolio/automation/domain/policies/automationDueTasks.ts#L37)
+- [functions/src/contexts/portfolio/dividends/domain/entities/dividendEvent.ts:215](../../../functions/src/contexts/portfolio/dividends/domain/entities/dividendEvent.ts#L215)
+- [functions/test/contexts/portfolio/dividend-state-transition-contract.contract.test.ts:62](../../../functions/test/contexts/portfolio/dividend-state-transition-contract.contract.test.ts#L62)
+- [functions/src/adapters/firebase/dividends/firebaseDividendEventRuntimeRepository.ts:266](../../../functions/src/adapters/firebase/dividends/firebaseDividendEventRuntimeRepository.ts#L266)
 
 현재 흐름: 현재 Web 통계 → expenseStatisticsReadModel/cache + expenseService Command + 화면 revision; 별도 Functions controller/query → fixture source/가짜 owner gateway만 호출
 
@@ -197,10 +197,10 @@ Functions의 원장·카테고리·지역화폐·정기 계획·자산·보유�
 
 근거:
 
-- [functions/src/contexts/household-finance/recurring/application/recurringSchedulerWorkflowApplication.ts:89](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/contexts/household-finance/recurring/application/recurringSchedulerWorkflowApplication.ts:89)
-- [functions/src/contexts/household-finance/recurring/application/ports/out/recurringProcessingPorts.ts:23](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/contexts/household-finance/recurring/application/ports/out/recurringProcessingPorts.ts:23)
-- [functions/src/adapters/firebase/recurring/firebaseRecurringFinanceUnitOfWork.ts:193](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/adapters/firebase/recurring/firebaseRecurringFinanceUnitOfWork.ts:193)
-- [functions/test/support/recurring-processing-fixture.ts:107](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/test/support/recurring-processing-fixture.ts:107)
+- [functions/src/contexts/household-finance/recurring/application/recurringSchedulerWorkflowApplication.ts:89](../../../functions/src/contexts/household-finance/recurring/application/recurringSchedulerWorkflowApplication.ts#L89)
+- [functions/src/contexts/household-finance/recurring/application/ports/out/recurringProcessingPorts.ts:23](../../../functions/src/contexts/household-finance/recurring/application/ports/out/recurringProcessingPorts.ts#L23)
+- [functions/src/adapters/firebase/recurring/firebaseRecurringFinanceUnitOfWork.ts:193](../../../functions/src/adapters/firebase/recurring/firebaseRecurringFinanceUnitOfWork.ts#L193)
+- [functions/test/support/recurring-processing-fixture.ts:107](../../../functions/test/support/recurring-processing-fixture.ts#L107)
 
 현재 흐름: Scheduler → processDue → readPlanPage가 있으면 실제 DB page; 없으면 read()로 전체 상태를 받고 filter/sort/slice
 
@@ -228,10 +228,10 @@ Functions의 원장·카테고리·지역화폐·정기 계획·자산·보유�
 
 근거:
 
-- [functions/src/contexts/household-finance/recurring/application/recurringSchedulerWorkflowApplication.ts:63](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/contexts/household-finance/recurring/application/recurringSchedulerWorkflowApplication.ts:63)
-- [functions/src/operations/scheduling/recurringScheduledPages.ts:66](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/operations/scheduling/recurringScheduledPages.ts:66)
-- [functions/src/adapters/firebase/recurring/firebaseRecurringFinanceUnitOfWork.ts:411](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/adapters/firebase/recurring/firebaseRecurringFinanceUnitOfWork.ts:411)
-- [functions/test/support/recurring-processing-fixture.ts:145](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/test/support/recurring-processing-fixture.ts:145)
+- [functions/src/contexts/household-finance/recurring/application/recurringSchedulerWorkflowApplication.ts:63](../../../functions/src/contexts/household-finance/recurring/application/recurringSchedulerWorkflowApplication.ts#L63)
+- [functions/src/operations/scheduling/recurringScheduledPages.ts:66](../../../functions/src/operations/scheduling/recurringScheduledPages.ts#L66)
+- [functions/src/adapters/firebase/recurring/firebaseRecurringFinanceUnitOfWork.ts:411](../../../functions/src/adapters/firebase/recurring/firebaseRecurringFinanceUnitOfWork.ts#L411)
+- [functions/test/support/recurring-processing-fixture.ts:145](../../../functions/test/support/recurring-processing-fixture.ts#L145)
 
 현재 흐름: UoW → 거래/execution/receipt/outbox 동시 commit → committedEvents를 반환 → application events.publish → production은 빈 함수
 
@@ -258,9 +258,9 @@ Functions의 원장·카테고리·지역화폐·정기 계획·자산·보유�
 
 근거:
 
-- [functions/src/adapters/firebase/portfolio/firebaseAssetLifecycleUnitOfWork.ts:211](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/adapters/firebase/portfolio/firebaseAssetLifecycleUnitOfWork.ts:211)
-- [functions/src/contexts/portfolio/core/application/assetLifecycleApplication.ts:587](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/contexts/portfolio/core/application/assetLifecycleApplication.ts:587)
-- [functions/src/bootstrap/admin/handlers/adminAssetAccessHandlers.ts:86](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/bootstrap/admin/handlers/adminAssetAccessHandlers.ts:86)
+- [functions/src/adapters/firebase/portfolio/firebaseAssetLifecycleUnitOfWork.ts:211](../../../functions/src/adapters/firebase/portfolio/firebaseAssetLifecycleUnitOfWork.ts#L211)
+- [functions/src/contexts/portfolio/core/application/assetLifecycleApplication.ts:587](../../../functions/src/contexts/portfolio/core/application/assetLifecycleApplication.ts#L587)
+- [functions/src/bootstrap/admin/handlers/adminAssetAccessHandlers.ts:86](../../../functions/src/bootstrap/admin/handlers/adminAssetAccessHandlers.ts#L86)
 
 현재 흐름: 관리자 인증 → listDeletedAssets → 전체 assets 조회/상태 mapping → ID만 반환 → handler가 ID마다 같은 canonical 문서를 재조회하고 deleted로 표시
 
@@ -288,11 +288,11 @@ Functions의 원장·카테고리·지역화폐·정기 계획·자산·보유�
 
 근거:
 
-- [functions/src/contexts/portfolio/holdings/domain/policies/instrumentCatalogPolicy.ts:37](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/contexts/portfolio/holdings/domain/policies/instrumentCatalogPolicy.ts:37)
-- [functions/src/contexts/portfolio/holdings/application/instrumentCatalogApplication.ts:84](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/contexts/portfolio/holdings/application/instrumentCatalogApplication.ts:84)
-- [functions/src/adapters/firebase/portfolio/firebaseInstrumentCatalog.ts:288](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/adapters/firebase/portfolio/firebaseInstrumentCatalog.ts:288)
-- [functions/src/adapters/firebase/portfolio/firebaseInstrumentCatalog.ts:336](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/adapters/firebase/portfolio/firebaseInstrumentCatalog.ts:336)
-- [functions/src/adapters/firebase/portfolio/firebaseInstrumentCatalog.ts:370](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/adapters/firebase/portfolio/firebaseInstrumentCatalog.ts:370)
+- [functions/src/contexts/portfolio/holdings/domain/policies/instrumentCatalogPolicy.ts:37](../../../functions/src/contexts/portfolio/holdings/domain/policies/instrumentCatalogPolicy.ts#L37)
+- [functions/src/contexts/portfolio/holdings/application/instrumentCatalogApplication.ts:84](../../../functions/src/contexts/portfolio/holdings/application/instrumentCatalogApplication.ts#L84)
+- [functions/src/adapters/firebase/portfolio/firebaseInstrumentCatalog.ts:288](../../../functions/src/adapters/firebase/portfolio/firebaseInstrumentCatalog.ts#L288)
+- [functions/src/adapters/firebase/portfolio/firebaseInstrumentCatalog.ts:336](../../../functions/src/adapters/firebase/portfolio/firebaseInstrumentCatalog.ts#L336)
+- [functions/src/adapters/firebase/portfolio/firebaseInstrumentCatalog.ts:370](../../../functions/src/adapters/firebase/portfolio/firebaseInstrumentCatalog.ts#L370)
 
 현재 흐름: 공급자 source 검증 → buildCatalogPublication이 가상 generation/checksum/publishedAt·receipt 생성 → 실제 Storage adapter가 gzip·SHA256·object generation·publishedAt·manifest·receipt를 다시 생성
 
@@ -321,9 +321,9 @@ Functions의 원장·카테고리·지역화폐·정기 계획·자산·보유�
 
 근거:
 
-- [functions/src/adapters/firebase/local-currency/firebaseLocalCurrencyBalanceStore.ts:134](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/adapters/firebase/local-currency/firebaseLocalCurrencyBalanceStore.ts:134)
-- [functions/src/adapters/firebase/home-preferences/firebaseHomePreferenceAtomicStore.ts:161](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/adapters/firebase/home-preferences/firebaseHomePreferenceAtomicStore.ts:161)
-- [functions/src/adapters/firebase/local-currency/firebaseLocalCurrencyBalanceStore.ts:229](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/adapters/firebase/local-currency/firebaseLocalCurrencyBalanceStore.ts:229)
+- [functions/src/adapters/firebase/local-currency/firebaseLocalCurrencyBalanceStore.ts:134](../../../functions/src/adapters/firebase/local-currency/firebaseLocalCurrencyBalanceStore.ts#L134)
+- [functions/src/adapters/firebase/home-preferences/firebaseHomePreferenceAtomicStore.ts:161](../../../functions/src/adapters/firebase/home-preferences/firebaseHomePreferenceAtomicStore.ts#L161)
+- [functions/src/adapters/firebase/local-currency/firebaseLocalCurrencyBalanceStore.ts:229](../../../functions/src/adapters/firebase/local-currency/firebaseLocalCurrencyBalanceStore.ts#L229)
 
 현재 흐름: BalanceObservation → version/순서/receipt 판정 → canonical localCurrencyBalances와 legacy balances 둘 다 저장 → Home Preferences도 두 저장소를 조회
 
@@ -352,9 +352,9 @@ Functions의 원장·카테고리·지역화폐·정기 계획·자산·보유�
 
 근거:
 
-- [functions/src/adapters/firebase/portfolio/firebaseDividendHoldingQuery.ts:246](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/adapters/firebase/portfolio/firebaseDividendHoldingQuery.ts:246)
-- [functions/src/adapters/firebase/portfolio/firebaseMigratedPositionHistoryReader.ts:5](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/adapters/firebase/portfolio/firebaseMigratedPositionHistoryReader.ts:5)
-- [functions/src/adapters/firebase/migration/collectors/portfolioPositionRuntimeMigrationCollector.ts:218](C:/Users/minku/Desktop/programming/ToyProject/Household-account/functions/src/adapters/firebase/migration/collectors/portfolioPositionRuntimeMigrationCollector.ts:218)
+- [functions/src/adapters/firebase/portfolio/firebaseDividendHoldingQuery.ts:246](../../../functions/src/adapters/firebase/portfolio/firebaseDividendHoldingQuery.ts#L246)
+- [functions/src/adapters/firebase/portfolio/firebaseMigratedPositionHistoryReader.ts:5](../../../functions/src/adapters/firebase/portfolio/firebaseMigratedPositionHistoryReader.ts#L5)
+- [functions/src/adapters/firebase/migration/collectors/portfolioPositionRuntimeMigrationCollector.ts:218](../../../functions/src/adapters/firebase/migration/collectors/portfolioPositionRuntimeMigrationCollector.ts#L218)
 
 현재 흐름: 배당 확정/정정 → Position history 조회 → 계좌 이력이 비면 완료 migration plan과 candidates를 조회·검증해 과거 수량을 합성
 
