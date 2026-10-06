@@ -108,6 +108,57 @@ function caseById(caseId: string): AndroidProviderGoldenCase {
 }
 
 describe("Android 공급자별 비식별 raw parser 공개 계약", () => {
+  const kbSalesCancellation = {
+    source: { packageName: "com.kbcard.cxh.appcard", parserId: "kb-card-parser" },
+    notification: {
+      postedAt: "2026-10-07T00:04:12Z",
+      title: "카드매출취소안내",
+      text: "[KB국민카드] 1234 김*원님 예약서비스(구)- 09/28 이용건 10/06 전체취소(-120,000원)",
+    },
+    clockNow: "2030-01-01T00:00:00Z",
+  };
+
+  it.each(["com.kbcard.cxh.appcard", "com.kbcard.kbkookmincard"])(
+    "[T-PARSE-002][PARSE-KB-001] %s 매출취소는 이용일 대신 취소일과 게시 시각을 쓰고 가맹점 원문을 보존한다",
+    (packageName) => {
+      expect(createSubject().parse({
+        ...kbSalesCancellation,
+        source: { ...kbSalesCancellation.source, packageName },
+      })).toEqual({ kind: "Parsed", payment: {
+        type: "cancellation", amountInWon: 120_000,
+        occurredLocalDate: "2026-10-06", occurredLocalTime: "09:04",
+        merchant: "예약서비스(구)-", cardCompany: "국민", maskedCardToken: "1234",
+        timeSource: "postedAt",
+      } });
+    },
+  );
+
+  it("[T-PARSE-002][T-PARSE-TIME-001][PARSE-KB-001] 매출취소의 연말 날짜와 누락된 게시 시각은 주입 Clock으로 해석한다", () => {
+    expect(createSubject().parse({
+      ...kbSalesCancellation,
+      notification: { ...kbSalesCancellation.notification, postedAt: undefined,
+        text: kbSalesCancellation.notification.text.replace("09/28 이용건 10/06", "12/28 이용건 12/31") },
+      clockNow: "2027-01-01T00:05:00+09:00",
+    })).toMatchObject({ kind: "Parsed", payment: {
+      occurredLocalDate: "2026-12-31", occurredLocalTime: "00:05", timeSource: "clock",
+    } });
+  });
+
+  it.each([
+    ["전체취소", "부분취소"], ["전체취소", "취소예정"],
+    ["-120,000", "120,000"], ["-120,000", "--120,000"],
+    ["-120,000", "-0"], ["-120,000", "-2,147,483,648"],
+    ["-120,000", "-120,00"], ["09/28 이용건", "02/30 이용건"],
+    ["10/06 전체취소", "13/06 전체취소"], ["예약서비스(구)-", ""],
+    ["1234 김*원님", "김*원님"],
+  ])("[T-PARSE-002][PARSE-KB-001] 매출취소의 잘못된 증거 %s → %s는 거래를 만들지 않는다", (from, to) => {
+    expect(createSubject().parse({
+      ...kbSalesCancellation,
+      notification: { ...kbSalesCancellation.notification,
+        text: kbSalesCancellation.notification.text.replace(from, to) },
+    }).kind).toBe("Ignored");
+  });
+
   it("[T-PARSE-001][T-PARSE-002] fixture는 모든 지원 공급자·승인·취소를 포함하고 case ID가 고유하다", () => {
     const coveredIds = new Set(fixture.cases.flatMap(({ requirementIds }) => requirementIds));
 

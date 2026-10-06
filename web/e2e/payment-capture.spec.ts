@@ -7,6 +7,43 @@ import { ledgerRecords, records, paymentCommand, rawNotification, registerCard, 
 
 test.beforeEach(resetTestAccount);
 
+test('[T-PARSE-002][PARSE-KB-001][CAN-003][CAN-007] 국민 매출취소는 가맹점 완전 일치를 유지하고 분리 원결제를 취소한다', async ({ page, request }) => {
+  const actor = await createHouseholdThroughUi(page);
+  await registerCard(request, actor, '국민', '1234');
+  const now = new Date(Date.now() + 9 * 3600_000);
+  const date = now.toISOString().slice(0, 10);
+  const approvalDate = new Date(now.getTime() - 8 * 86400_000).toISOString().slice(0, 10);
+  const merchant = '예약서비스페이';
+  const original = await submitRaw(request, actor, rawNotification({ merchant, amount: 120000, date: approvalDate }));
+  const id = original.transactionResult.transactionId;
+  const baseDraft = { merchant, amountInWon: 120000, categoryId: 'etc', memo: '분리 원본' };
+  const split = await paymentCommand(request, actor, 'ledger.split-transaction.v1', {
+    transactionId: id, expectedVersion: 1, operation: { kind: 'items', baseDraft,
+      items: ['용돈A', '용돈B'].map(tag => ({ ...baseDraft, amountInWon: 60000, tags: [tag] })) },
+  });
+  expect(split.transactionIds).toHaveLength(2);
+  const cancellation = (name: string) => ({
+    contractVersion: 'android-raw-notification.v1', observationId: 'kb-sales-cancel-' + randomUUID(),
+    packageName: 'com.kbcard.cxh.appcard', notification: {
+      postedAt: `${date}T09:04:12+09:00`, title: '카드매출취소안내',
+      text: `[KB국민카드] 1234 김*원님 ${name} ${approvalDate.slice(5).replace('-', '/')} 이용건 ${date.slice(5).replace('-', '/')} 전체취소(-120,000원)`,
+    },
+  });
+  const before = await ledgerRecords(request);
+  const mismatched = cancellation('예약서비스(구)-');
+  const notFound = await submitRaw(request, actor, mismatched);
+  expect(notFound.transactionResult).toEqual({ kind: 'notFound', resource: 'cancellationTarget' });
+  expect(await submitRaw(request, actor, mismatched)).toEqual(notFound);
+  expect(await ledgerRecords(request)).toEqual(before);
+
+  const matched = cancellation(merchant);
+  const cancelled = await submitRaw(request, actor, matched);
+  expect(cancelled.transactionResult.kind).toBe('cancelled');
+  expect(new Set(cancelled.transactionResult.transactionIds)).toEqual(new Set([id, ...split.transactionIds]));
+  expect(await submitRaw(request, actor, matched)).toEqual(cancelled);
+  expect(await ledgerRecords(request)).toHaveLength(0);
+});
+
 test('[T-PARSE-002][PARSE-GYEONGGI-001][CAN-003][CAN-007][ING-008][BAL-003] 경기지역화폐 취소는 두 원승인만 제거하고 최종 결제·최신 잔액·재전송을 보존한다', async ({ page, request }) => {
   const actor = await createHouseholdThroughUi(page);
   await registerCard(request, actor, '경기지역화폐');

@@ -54,6 +54,23 @@ function raw(
 }
 
 describe("Android 원문 알림 서버 파싱 제출 계약", () => {
+  it.each(["com.kbcard.cxh.appcard", "com.kbcard.kbkookmincard", "com.samsung.android.messaging", "com.google.android.apps.messaging", "com.android.mms"])(
+    "[T-PARSE-002][PARSE-KB-001][ING-006] %s의 국민 매출취소 원문은 양수 취소 observation으로 전달한다", async (packageName) => {
+      const subject = createSubject();
+      await subject.submit({ actor, input: raw({ packageName, notification: {
+        postedAt: "2026-10-06T00:04:12Z", title: "카드매출취소안내",
+        text: "[KB국민카드] 1234 김*원님 예약서비스(구)- 09/28 이용건 10/06 전체취소(-120,000원)",
+      } }) });
+      expect(subject.state().captured).toHaveLength(1);
+      expect(subject.state().captured[0].envelope.paymentObservation).toMatchObject({
+        observationType: "cancellation", amountInWon: 120_000,
+        occurredLocalDate: "2026-10-06", occurredLocalTime: "09:04",
+        merchantEvidence: { rawCandidate: "예약서비스(구)-" },
+        cardEvidence: { companyLabel: "국민", maskedToken: "1234" },
+      });
+    },
+  );
+
   it.each(['com.samsung.android.messaging', 'com.google.android.apps.messaging', 'com.android.mms'])(
     '[T-PARSE-002][PARSE-SAMSUNG-001] %s의 음수 취소를 양수 원금의 취소 observation으로 전달한다', async (packageName) => {
       const subject = createSubject();

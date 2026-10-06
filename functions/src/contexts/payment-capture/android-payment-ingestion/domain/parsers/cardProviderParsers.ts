@@ -19,6 +19,8 @@ const KB_DETAIL_AMOUNT_PATTERN = /([\d,]+)원\s*(?:일시불|할부)?/u;
 const KB_DATE_TIME_PATTERN = /(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})/u;
 const KB_SUMMARY_PATTERN =
   /([\d,]+)원\s+(\d{2})\/(\d{2})(?:\s+(\d{2}):(\d{2}))?/u;
+const KB_SALES_CANCELLATION_PATTERN =
+  /(?:^|\n)\[KB국민카드\]\s+([0-9*xX＊]{4})\s+\S+님\s+(.+?)\s+(\d{2})\/(\d{2})\s+이용건\s+(\d{2})\/(\d{2})\s+전체취소\(-([0-9]+(?:,[0-9]{3})*)원\)\s*$/u;
 
 const NH_KEYWORD_PATTERN = /NH카드/u;
 const NH_APPROVAL_PATTERN = /승인(취소)?/u;
@@ -115,6 +117,30 @@ function kbMerchantAtDate(
 }
 
 function parseKb(context: ProviderParserContext): AndroidProviderParseResult {
+  const salesCancellation = KB_SALES_CANCELLATION_PATTERN.exec(context.body);
+  if (salesCancellation !== null) {
+    const [, cardToken, merchant, approvalMonth, approvalDay, month, day, rawAmount] = salesCancellation;
+    const amount = amountInWon(rawAmount);
+    const received = receivedLocalTime(context);
+    if (amount === undefined || amount === 0) return ignoredParseFailure("INVALID_AMOUNT");
+    if (received === undefined) return ignoredParseFailure("INVALID_CLOCK");
+    const time = { context, hour: received.localTime.slice(0, 2), minute: received.localTime.slice(3, 5) };
+    const approval = occurrence({ ...time, month: approvalMonth, day: approvalDay });
+    const cancellation = occurrence({ ...time, month, day });
+    if (approval.kind === "failure") return ignoredParseFailure(approval.code);
+    if (cancellation.kind === "failure") return ignoredParseFailure(cancellation.code);
+    // 이용일과 취소일이 함께 오며 시각은 없으므로, 취소일에 수신 시각을 결합합니다.
+    return parsedPayment({
+      type: "cancellation",
+      amountInWon: amount,
+      occurredLocalDate: cancellation.occurredLocalDate,
+      occurredLocalTime: cancellation.occurredLocalTime,
+      merchant: merchant.trim(),
+      cardCompany: "국민",
+      maskedCardToken: cardToken,
+      timeSource: received.timeSource,
+    });
+  }
   const card = KB_CARD_PATTERN.exec(context.body);
   if (card === null) return ignoredParseFailure();
   const lines = bodyLines(context.body);

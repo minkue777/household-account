@@ -212,6 +212,8 @@ Functions의 `SourceSelector`는 서버 `PaymentSourceRegistry`에서 package를
 
 SMS Adapter는 후보마다 KB → NH → NaverPay → Toss → KakaoPay → DigitalOnnuri → Paybooc → Samsung → Lotte → Gyeonggi → Daejeon 순으로 첫 성공을 선택하고, 모두 실패하면 `SmsCardMessageParser`를 마지막에 실행합니다. Sejong과 CityGas는 이 내부 순서에 포함하지 않습니다. 실행 순서는 실제 `smsBillProviderParser` 배열 한 곳에서 관리하며 `T-SMS-ORDER-001`은 실제 parser 호출 순서·겹치는 문자·중단을 검사합니다. 전용 앱은 package가 지역을 확정하지만 공용 SMS에서는 서비스명을 먼저 해석합니다. 여민전·세종지역화폐는 SMS 지역 후보에서 제외하고, 대전사랑카드/온통대전/대전지역화폐는 대전으로, 나머지 `지역화폐` 서비스명은 기존 경기 시군별 명칭으로 처리합니다. `희망화성지역화폐_특례시기념` 같은 기존 지역 명칭도 보존합니다. 지역명이 없는 일반 결제·잔액이나 여민전을 경기지역화폐로 추정하지 않습니다.
 
+KB 매출취소는 기존 승인·취소 형식 앞에서 완전한 `[KB국민카드] 번호 명의자님 가맹점 이용일 이용건 취소일 전체취소(-금액원)` 본문을 확인합니다. 전체취소가 명시된 이 형식에서만 음수 표시를 양의 정수 원금으로 해석하고 0·상한 초과·잘못된 부호/구분자는 제외합니다. 이용일과 취소일은 기존 연도 정책으로 검증하되 observation에는 취소일을 사용합니다. 본문에 시각이 없으므로 서울 수신 시각을 결합하고 `timeSource`를 기록합니다. 가맹점의 `(구)-` 등 표기를 보존하며 별칭 변환·부분 일치·카드/금액만으로 연결하지 않습니다. `T-PARSE-002`는 실제 raw 제출의 취소 observation과 Emulator에서 가맹점 불일치 시 `NotFound`·원장 보존, 완전 일치 시 분리 lineage 취소·재전송을 검사합니다.
+
 KakaoTalk Adapter는 `MessagingStyle.messages`의 현재 메시지를 표시 순서대로 독립 후보로 만들고 `historicMessages`는 후보에 넣지 않습니다. 후보별 admission·30초 claim·observation ID·암호화 Queue entry를 따로 만들기 때문에 `A` 알림이 `A+B`로 갱신돼도 A의 중복 여부와 새 B의 처리가 분리됩니다. 구조화 메시지가 없는 fallback은 기존 raw 필드 계약을 사용하되, 여러 거래의 필드를 서로 빌려 하나의 결과를 합성하지 않습니다.
 
 CityGas parser의 최소 성공 조건은 도시가스 청구 문구와 총액입니다. 청구 제목은 선택이며 없으면 서울 수신 월과 빈 memo를 사용합니다. 납부마감일은 accounting date 후보이고 없거나 유효하지 않을 때 서울 수신일로 fallback합니다. 현재 구현은 마감일 문구가 없을 때만 fallback하고 형식은 맞지만 유효하지 않은 날짜에서 전체 parse가 실패하므로 `T-CITYGAS-001`로 교정합니다.
