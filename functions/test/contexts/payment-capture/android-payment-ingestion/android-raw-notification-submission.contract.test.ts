@@ -55,6 +55,23 @@ function raw(
 
 describe("Android 원문 알림 서버 파싱 제출 계약", () => {
   it.each(["com.kbcard.cxh.appcard", "com.kbcard.kbkookmincard", "com.samsung.android.messaging", "com.google.android.apps.messaging", "com.android.mms"])(
+    "[T-PARSE-001][PARSE-KB-001][ING-006] %s의 국민 후불교통 원문은 카드번호를 추정하지 않고 합계를 전달한다", async (packageName) => {
+      const subject = createSubject();
+      await subject.submit({ actor, input: raw({ packageName, notification: {
+        postedAt: "2026-10-02T05:20:39Z", title: "KB Pay",
+        text: "KB국민카드\n후불교통(신용)\n22건 30,550원\n10/14 결제예정",
+      } }) });
+      expect(subject.state().captured).toHaveLength(1);
+      const payment = subject.state().captured[0].envelope.paymentObservation;
+      expect(payment).toMatchObject({ observationType: "approval", amountInWon: 30_550,
+        occurredLocalDate: "2026-10-02", occurredLocalTime: "14:20",
+        merchantEvidence: { rawCandidate: "후불교통(신용) 22건" },
+      });
+      expect(payment?.cardEvidence).toEqual({ companyLabel: "국민" });
+    },
+  );
+
+  it.each(["com.kbcard.cxh.appcard", "com.kbcard.kbkookmincard", "com.samsung.android.messaging", "com.google.android.apps.messaging", "com.android.mms"])(
     "[T-PARSE-002][PARSE-KB-001][ING-006] %s의 국민 매출취소 원문은 양수 취소 observation으로 전달한다", async (packageName) => {
       const subject = createSubject();
       await subject.submit({ actor, input: raw({ packageName, notification: {

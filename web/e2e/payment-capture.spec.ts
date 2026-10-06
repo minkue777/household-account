@@ -7,6 +7,34 @@ import { ledgerRecords, records, paymentCommand, rawNotification, registerCard, 
 
 test.beforeEach(resetTestAccount);
 
+test('[T-PARSE-001][PARSE-KB-001][CARD-004][ING-SAVE-004] 국민 후불교통 합계는 본인 카드 확인 후 수신일에 한 번만 저장한다', async ({ page, request }) => {
+  const actor = await createHouseholdThroughUi(page);
+  const raw = () => ({
+    contractVersion: 'android-raw-notification.v1', observationId: 'kb-transit-' + randomUUID(),
+    packageName: 'com.kbcard.cxh.appcard', notification: {
+      postedAt: '2026-10-02T05:20:39Z', title: 'KB Pay',
+      text: 'KB국민카드\n후불교통(신용)\n22건 30,550원\n10/14 결제예정 ',
+    },
+  });
+  const rejected = await submitRaw(request, actor, raw());
+  expect(rejected.transactionResult).toEqual({ kind: 'rejected', code: 'CARD_NOT_REGISTERED_FOR_ACTOR' });
+  expect(await ledgerRecords(request)).toHaveLength(0);
+  await registerCard(request, actor, '국민', '1234');
+  const notification = raw();
+  const first = await submitRaw(request, actor, notification);
+  expect(first.transactionResult.kind).toBe('created');
+  expect(first.transactionResult.quickEditSnapshot).toMatchObject({
+    merchant: '후불교통(신용) 22건', amountInWon: 30550, accountingDate: '2026-10-02', localTime: '14:20',
+  });
+  expect(await submitRaw(request, actor, notification)).toEqual(first);
+  const duplicate = await submitRaw(request, actor, raw());
+  expect(duplicate.transactionResult).toMatchObject({ kind: 'duplicate', existingTransactionId: first.transactionResult.transactionId });
+  expect(await ledgerRecords(request)).toEqual([expect.objectContaining({
+    id: first.transactionResult.transactionId, amountInWon: 30550,
+    merchant: '후불교통(신용) 22건', accountingDate: '2026-10-02', creatorMemberId: actor.memberId,
+  })]);
+});
+
 test('[T-PARSE-002][PARSE-KB-001][CAN-003][CAN-007] 국민 매출취소는 가맹점 완전 일치를 유지하고 분리 원결제를 취소한다', async ({ page, request }) => {
   const actor = await createHouseholdThroughUi(page);
   await registerCard(request, actor, '국민', '1234');

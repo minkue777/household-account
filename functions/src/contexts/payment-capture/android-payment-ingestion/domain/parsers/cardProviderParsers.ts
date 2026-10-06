@@ -21,6 +21,8 @@ const KB_SUMMARY_PATTERN =
   /([\d,]+)원\s+(\d{2})\/(\d{2})(?:\s+(\d{2}):(\d{2}))?/u;
 const KB_SALES_CANCELLATION_PATTERN =
   /(?:^|\n)\[KB국민카드\]\s+([0-9*xX＊]{4})\s+\S+님\s+(.+?)\s+(\d{2})\/(\d{2})\s+이용건\s+(\d{2})\/(\d{2})\s+전체취소\(-([0-9]+(?:,[0-9]{3})*)원\)\s*$/u;
+const KB_POSTPAID_TRANSIT_PATTERN =
+  /(?:^|\n)KB국민카드\s+(후불교통\((?:신용|체크)\))\s+([1-9][0-9]*)건\s+([0-9]+(?:,[0-9]{3})*)원\s+(\d{2})\/(\d{2})\s+결제예정\s*$/u;
 
 const NH_KEYWORD_PATTERN = /NH카드/u;
 const NH_APPROVAL_PATTERN = /승인(취소)?/u;
@@ -117,6 +119,20 @@ function kbMerchantAtDate(
 }
 
 function parseKb(context: ProviderParserContext): AndroidProviderParseResult {
+  const transit = KB_POSTPAID_TRANSIT_PATTERN.exec(context.body);
+  if (transit !== null) {
+    const [, label, count, rawAmount, month, day] = transit;
+    const amount = amountInWon(rawAmount);
+    if (amount === undefined || amount === 0 || !Number.isSafeInteger(Number(count))) {
+      return ignoredParseFailure("INVALID_AMOUNT");
+    }
+    const dueDate = occurrence({ context, month, day, hour: "00", minute: "00" });
+    if (dueDate.kind === "failure") return ignoredParseFailure(dueDate.code);
+    // 이용 월은 없고 결제예정일만 있으므로 수신일에 합계 한 건을 기록합니다.
+    return paymentAtReceivedTime({ context, payment: {
+      type: "approval", amountInWon: amount, merchant: `${label} ${count}건`, cardCompany: "국민",
+    } });
+  }
   const salesCancellation = KB_SALES_CANCELLATION_PATTERN.exec(context.body);
   if (salesCancellation !== null) {
     const [, cardToken, merchant, approvalMonth, approvalDay, month, day, rawAmount] = salesCancellation;

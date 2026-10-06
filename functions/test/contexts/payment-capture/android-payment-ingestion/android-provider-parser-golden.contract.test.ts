@@ -108,6 +108,52 @@ function caseById(caseId: string): AndroidProviderGoldenCase {
 }
 
 describe("Android 공급자별 비식별 raw parser 공개 계약", () => {
+  const kbTransit = {
+    source: { packageName: "com.kbcard.cxh.appcard", parserId: "kb-card-parser" },
+    notification: {
+      postedAt: "2026-10-02T05:20:39Z", title: "KB Pay",
+      text: "KB국민카드\n후불교통(신용)\n22건 30,550원\n10/14 결제예정 ",
+    },
+    clockNow: "2030-01-01T00:00:00Z",
+  };
+
+  it.each(["com.kbcard.cxh.appcard", "com.kbcard.kbkookmincard"])(
+    "[T-PARSE-001][PARSE-KB-001] %s의 후불교통 합계는 수신일에 한 건으로 해석하고 건수·카드 종류를 보존한다",
+    (packageName) => {
+      expect(createSubject().parse({ ...kbTransit, source: { ...kbTransit.source, packageName } })).toEqual({
+        kind: "Parsed", payment: {
+          type: "approval", amountInWon: 30_550,
+          occurredLocalDate: "2026-10-02", occurredLocalTime: "14:20",
+          merchant: "후불교통(신용) 22건", cardCompany: "국민", timeSource: "postedAt",
+        },
+      });
+    },
+  );
+
+  it("[T-PARSE-001][T-PARSE-TIME-001][PARSE-KB-001] 후불교통 체크·CRLF·게시시각 누락은 주입 Clock으로 처리한다", () => {
+    expect(createSubject().parse({ ...kbTransit,
+      notification: { ...kbTransit.notification, postedAt: undefined, text: undefined,
+        textLines: ["KB국민카드", "후불교통(체크)\r\n1건 1,550원", "01/14 결제예정"] },
+      clockNow: "2027-01-02T00:01:00+09:00",
+    })).toEqual({ kind: "Parsed", payment: {
+      type: "approval", amountInWon: 1_550,
+      occurredLocalDate: "2027-01-02", occurredLocalTime: "00:01",
+      merchant: "후불교통(체크) 1건", cardCompany: "국민", timeSource: "clock",
+    } });
+  });
+
+  it.each([
+    ["22건", "0건"], ["22건", "-22건"], ["22건", "9007199254740992건"],
+    ["30,550", "0"], ["30,550", "-30,550"], ["30,550", "2,147,483,648"],
+    ["30,550", "30,55"], ["10/14", "13/14"], ["10/14", "02/30"],
+    ["결제예정", "결제예정 안내 신청"], ["후불교통(신용)", "카드대금"],
+    ["KB국민카드", "다른카드"], ["22건 30,550원", "최대 30,550원 캐시백"],
+  ])("[T-PARSE-001][PARSE-KB-001] 후불교통이 아닌 안내·잘못된 합계 %s → %s는 지출을 만들지 않는다", (from, to) => {
+    expect(createSubject().parse({ ...kbTransit,
+      notification: { ...kbTransit.notification, text: kbTransit.notification.text.replace(from, to) },
+    }).kind).toBe("Ignored");
+  });
+
   const kbSalesCancellation = {
     source: { packageName: "com.kbcard.cxh.appcard", parserId: "kb-card-parser" },
     notification: {
