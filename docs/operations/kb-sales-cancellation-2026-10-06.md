@@ -25,4 +25,6 @@
 ## 검증과 배포
 
 - 수정 전 새 회귀 8개 실패, 수정 후 관련 5개 파일 138개 통과. Functions 테스트 타입 검사와 production build·architecture 43개 통과.
-- Emulator 검사와 Firebase 배포 결과는 아래에 기록한다. 전체 CI는 최종 SHA로 후속 확인한다.
+- 실제 Auth·Firestore·Functions Emulator의 callable→parser→매칭→항목 분리 취소·재전송 검사 1개 통과(Chromium, production Web build 포함). 운영 가맹점명 불일치를 재현한 비식별 입력은 `NotFound`이며 두 지출을 보존했다. 에뮬레이터는 정상 종료했다.
+- 로컬 로그: `%TEMP%/household-kb-sales-cancellation-before-20261006.log`, `household-kb-cancellation-prepare-20261006.log`, `household-kb-cancellation-e2e-20261006.log`.
+- Firebase plan은 마지막 성공 `45b7e83`부터 누적 변경을 비교해 Functions 세 codebase를 선택했다. 배포 성공은 release provenance·실제 로그인 smoke로 별도 확인하며 Web·APK 배포는 불필요하다. 전체 CI는 최종 SHA로 후속 확인한다.
