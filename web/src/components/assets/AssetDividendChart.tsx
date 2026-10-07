@@ -165,7 +165,7 @@ function AssetDividendChart({ visible = true, revision = 0 }: { visible?: boolea
     ]
       .filter((event) => {
         const [year, month] = event.paymentDate.split('-').map(Number);
-        return year === dividendYear && month === selectedMonth;
+        return year === dividendYear && month === selectedMonth && event.quantity > 0;
       })
       .sort((left, right) => {
         if (left.paymentDate !== right.paymentDate) {

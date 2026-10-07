@@ -251,6 +251,8 @@ ContractFailure(code)
 - announced, 다른 연도, totalAmount가 없는 Event는 제외합니다.
 - Canonical 신규 write는 잘못된 월·숫자를 거부합니다. Legacy read는 짧은 배열을 0으로 채우고 비정상 값을 0으로 정규화한 뒤 `freshness=stale`로 표시하여 rebuild 대상으로 만듭니다.
 
+월 상세의 표시 경계에서는 지급 연월과 함께 이벤트의 배당 기준 수량(`quantity > 0`)을 확인합니다. 현재 Holdings와 대조해 과거 배당을 숨기거나, 반올림한 금액이 0원이라는 이유로 양의 소수 수량을 제외하지 않습니다. 원천 Event·Projection·월/연간 합계는 보존합니다. `assetDividendChartIdentity.contract.test.tsx`와 `portfolio-reporting.spec.ts`가 0주 제외·현재 보유 없음의 과거 배당 보존·합계와 저장 원천 무변경을 검증합니다.
+
 ### 4.4 예상 배당 Policy
 
 `asOf < recordDate`인 announced Event에 현재 Holdings 공개 Query의 수량과 perShareAmount를 곱합니다. 같은 종목·안정 공시 ID의 Event가 이미 fixed/paid이면 예상에서 제외합니다. 예상액은 Canonical Event나 Annual Projection에 저장하지 않는 Read Model입니다.

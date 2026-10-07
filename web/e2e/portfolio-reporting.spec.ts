@@ -98,7 +98,7 @@ test('[DIV-006][STAT-005] 배당 이벤트의 실제 SDK 조회 이후 변환 �
   await expect(card.getByText('데이터 없음', { exact: true })).toHaveCount(0);
 });
 
-test('[T-DIV-001][T-DIV-004][T-DIV-007][T-JOB-DIV-001][DIV-001][DIV-003][DIV-004][DIV-006][JOB-DIV-001] 원천 자산이 없어도 fixed 배당은 실제 예약 실행에서 paid로 진행하고 연간 UI에 보존된다', async ({ page, request }) => {
+test('[T-DIV-001][T-DIV-004][T-DIV-007][T-JOB-DIV-001][DIV-001][DIV-003][DIV-004][DIV-006][JOB-DIV-001] 원천 자산이 없어도 배당을 보존하고 월 상세에서 0주만 숨긴다', async ({ page, request }) => {
   const scope = await createHouseholdThroughUi(page);
   const year = Number(monthsAgo(0).slice(0, 4));
   // 이미 수집·확정한 과거 공시만 시작 fixture로 준비합니다. 신규 외부 공시 수집을 대역하지 않습니다.
@@ -108,11 +108,19 @@ test('[T-DIV-001][T-DIV-004][T-DIV-007][T-JOB-DIV-001][DIV-001][DIV-003][DIV-004
     recordDate: `${year}-01-01`, paymentDate: `${year}-01-15`, perShareAmount: 120,
     eligibleQuantity: 10, totalAmount: 1_200, status: 'fixed', aggregateVersion: 1, sourceAssetIds: ['already-deleted-asset'],
   });
+  await fixture(request, 'dividend_events/zero-quantity-disclosure', {
+    schemaVersion: 1, eventId: 'kind:zero-quantity:476550', householdId: scope.householdId,
+    instrumentCode: '476550', stockCode: '476550', stockName: 'E2E 기준 수량 0주', instrumentName: 'E2E 기준 수량 0주', sourceDisclosureId: 'zero-quantity',
+    recordDate: `${year}-01-01`, paymentDate: `${year}-01-15`, perShareAmount: 66,
+    eligibleQuantity: 0, totalAmount: 0, status: 'fixed', aggregateVersion: 1, sourceAssetIds: ['another-deleted-asset'],
+  });
   await runScheduled('dividendHourly', `${year}-01-15T09:00:00+09:00`);
-  expect((await documents(request, 'dividend_events'))[0]).toMatchObject({ status: 'paid', totalAmount: 1_200 });
+  const paidEvents = await documents(request, 'dividend_events');
+  expect(paidEvents.find(event => event.id === 'confirmed-disclosure')).toMatchObject({ status: 'paid', eligibleQuantity: 10, totalAmount: 1_200 });
+  expect(paidEvents.find(event => event.id === 'zero-quantity-disclosure')).toMatchObject({ status: 'paid', eligibleQuantity: 0, totalAmount: 0 });
   const projection = (await documents(request, 'dividend_snapshots'))[0];
   expect(projection.monthlyData).toEqual([1_200, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-  expect(Object.keys(projection.events as object)).toEqual(['kind:disclosure-001:069500']);
+  expect(Object.keys(projection.events as object).sort()).toEqual(['kind:disclosure-001:069500', 'kind:zero-quantity:476550']);
   const overwrite = await request.patch(`http://127.0.0.1:8080/v1/projects/${E2E_PROJECT_ID}/databases/(default)/documents/dividend_snapshots/${scope.householdId}_${year}`, {
     headers: { authorization: `Bearer ${scope.idToken}` },
     data: { fields: firestoreFields({ householdId: scope.householdId, year, monthlyData: Array(12).fill(999) }) },
@@ -121,9 +129,35 @@ test('[T-DIV-001][T-DIV-004][T-DIV-007][T-JOB-DIV-001][DIV-001][DIV-003][DIV-004
   expect((await documents(request, 'dividend_snapshots'))[0].monthlyData).toEqual(projection.monthlyData);
   await runScheduled('dividendHourly', `${year}-01-15T10:00:00+09:00`);
   expect((await documents(request, 'dividend_snapshots'))[0].monthlyData).toEqual(projection.monthlyData);
+  const projectionBeforeView = (await documents(request, 'dividend_snapshots'))[0];
   await page.goto('/assets/stats');
   const card = page.locator('div.rounded-2xl').filter({ has: page.getByRole('heading', { name: '배당금 현황', exact: true }) }).last();
   await expect(card.getByText('1,200원', { exact: true })).toBeVisible();
+  const canvas = card.locator('canvas');
+  await canvas.scrollIntoViewIfNeeded();
+  // 실제 canvas에 그려진 유일한 양수 막대의 중심을 클릭합니다. Chart/React handler를 대역하지 않습니다.
+  let barPosition: { x: number; y: number } | null = null;
+  await expect.poll(async () => {
+    barPosition = await canvas.evaluate(element => {
+      const canvas = element as HTMLCanvasElement;
+      const y = Math.floor(canvas.height / 2);
+      const pixels = canvas.getContext('2d')!.getImageData(0, y, canvas.width, 1).data;
+      const xs = Array.from({ length: canvas.width }, (_, x) => x)
+        .filter(x => pixels[x * 4] < 80 && pixels[x * 4 + 1] > 100 && pixels[x * 4 + 2] > 70 && pixels[x * 4 + 3] > 180);
+      if (xs.length === 0) return null;
+      const bounds = canvas.getBoundingClientRect();
+      return { x: (xs[0] + xs.at(-1)!) / 2 * bounds.width / canvas.width, y: y * bounds.height / canvas.height };
+    });
+    return barPosition !== null;
+  }).toBe(true);
+  await canvas.click({ position: barPosition! });
+  const detail = page.locator('div.fixed.inset-0').filter({ has: page.getByRole('heading', { name: '1월 배당금', exact: true }) }).last();
+  await expect(detail.getByText('E2E 확정 ETF', { exact: true })).toBeVisible();
+  await expect(detail.getByText('10주', { exact: true })).toBeVisible();
+  await expect(detail.getByText('E2E 기준 수량 0주', { exact: true })).toHaveCount(0);
+  await expect(detail.getByText('1,200원', { exact: true })).toHaveCount(2);
+  expect((await documents(request, 'dividend_snapshots'))[0]).toEqual(projectionBeforeView);
+  await detail.getByRole('button').click();
   await card.locator('button').first().click();
   await expect(card.getByText(`${year - 1}년`, { exact: true })).toBeVisible();
   await expect(card.getByText('데이터 없음', { exact: true })).toBeVisible();

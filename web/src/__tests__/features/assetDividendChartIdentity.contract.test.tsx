@@ -130,3 +130,33 @@ test('[DIV-001][DIV-002] filters combined month details and sorts by payment dat
   expect(screen.getByText('120원')).toBeInTheDocument();
   expect(screen.queryByText(/다른 (달|해) (확정|예상)/)).not.toBeInTheDocument();
 });
+
+test('[DIV-001] hides zero eligible quantities but retains historical dividends after sale and positive fractional quantities', async () => {
+  jest.mocked(getAllStockHoldings).mockResolvedValue([]);
+  jest.mocked(getDividendEventsByYear).mockResolvedValue([]);
+  const base = { stockCode: 'ETF', paymentDate: '2026-09-20', perShareAmount: 10 };
+  const monthlyData = Array(12).fill(0);
+  monthlyData[8] = 30;
+  const snapshot = {
+    monthlyData,
+    events: {
+      zero: { ...base, stockName: '기준 수량 없음', quantity: 0, totalAmount: 0 },
+      sold: { ...base, stockName: '현재 전량 매도', quantity: 3, totalAmount: 30 },
+      fractional: { ...base, stockName: '소수 수량 배당', quantity: 0.01, totalAmount: 0 },
+    },
+  };
+  jest.mocked(getDividendSnapshot).mockResolvedValue(snapshot);
+
+  render(<AssetDividendChart />);
+  await screen.findByText('30원');
+  act(() => mockDividendOptions.mock.calls.at(-1)![0].onClick({}, [{ index: 8 }]));
+
+  expect(screen.queryByText('기준 수량 없음')).not.toBeInTheDocument();
+  expect(screen.getByText('현재 전량 매도')).toBeInTheDocument();
+  expect(screen.getByText('3주')).toBeInTheDocument();
+  expect(screen.getByText('소수 수량 배당')).toBeInTheDocument();
+  expect(screen.getByText('0.01주')).toBeInTheDocument();
+  expect(screen.getAllByText('30원')).toHaveLength(3);
+  expect(JSON.parse(screen.getByTestId('dividend-chart').textContent!).datasets[0].data).toEqual(monthlyData);
+  expect(snapshot.events.zero.quantity).toBe(0);
+});
