@@ -32,4 +32,4 @@
 
 실제 Firestore Emulator에서 동시 변경 시 무변경, 보정 멱등성, 수정 후 승인 중복 억제, 수정 가맹점 취소 매칭, 취소 후 재승인 억제를 확인했다. 운영 재조회에서 16건의 금액·메모·태그·분류·날짜·카드·명의자·거래 ID가 보존됐고 지역화폐 잔액 문서 전체가 이전과 같음을 확인했다. 보정 계획·백업은 TEMP의 `household-daejeon-repair-plan-20261011.json`, 실행기는 `household-daejeon-repair-20261011.cjs`, Emulator 로그는 `household-daejeon-repair-test-20261011.log`에 있다. 운영 작업 receipt ID는 `daejeon-merchant-reparse-20261011`이다.
 
-가맹점명이 남은 1건은 2026-10-09 10:25의 5,200원 결제다. 해당 가구 전체 진단 3,950개에서도 원문을 찾지 못했다. 기존 메모에 따른 수동 가맹점 보정 여부는 사용자에게 확인 중이며, 승인 전에는 변경하지 않는다.
+원문이 없는 1건은 2026-10-09 10:25의 5,200원 결제다. 해당 가구 전체 진단 3,950개에서도 원문을 찾지 못해 사용자에게 확인했고, 사용자가 가맹점명을 `빽다방`으로 수정하라고 승인했다. 동일한 transaction·동시 변경 검사·필드 보존 검증으로 Ledger·Capture·중복 판정 fingerprint를 보정했다. 수동 보정 receipt ID는 `daejeon-merchant-manual-20261011`이며, 백업은 TEMP의 `household-daejeon-manual-repair-plan-20261011.json`에 있다. 이 건은 파서 재처리로 표현하지 않는다. 최종 운영 재조회에서 17건(185,050원) 보정과 카드명을 가맹점으로 가진 내역 0건, 지역화폐 잔액 보존을 확인했다.
