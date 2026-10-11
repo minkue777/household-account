@@ -7,6 +7,38 @@ import { ledgerRecords, records, paymentCommand, rawNotification, registerCard, 
 
 test.beforeEach(resetTestAccount);
 
+test('[T-PARSE-001][PARSE-DAEJEON-001][ING-SAVE-004][BAL-002] 대전 카드 상품명에 관계없이 실제 가맹점과 잔액을 저장하고 재전송을 중복 생성하지 않는다', async ({ page, request }) => {
+  const actor = await createHouseholdThroughUi(page);
+  await registerCard(request, actor, '대전사랑카드', '1357');
+  for (const [title, merchant] of [['온통대전 1Q체크카드', '테스트 카페'], ['온통대전 농협 체크카드', '테스트 약국']]) {
+    const raw = {
+      contractVersion: 'android-raw-notification.v1', observationId: randomUUID(),
+      packageName: 'kr.co.nmcs.daejeonpay', notification: {
+        postedAt: '2026-10-11T09:12:00+09:00', title,
+        text: `${title}(1357) 승인 1,700원 캐시백적립 170원 10/11 09:11 ${merchant} 잔액42,913원`,
+      },
+    };
+    const first = await submitRaw(request, actor, raw);
+    expect(first.transactionResult.kind).toBe('created');
+    expect(first.transactionResult.quickEditSnapshot).toMatchObject({ merchant, amountInWon: 1700 });
+    expect(first.balanceResult.kind).toBe('recorded');
+    const balances = await records(request, `households/${actor.householdId}/localCurrencyBalances`);
+    expect(balances).toEqual([expect.objectContaining({ localCurrencyType: 'daejeon', balanceInWon: 42913 })]);
+    expect(await submitRaw(request, actor, raw)).toEqual(first);
+    expect(await records(request, `households/${actor.householdId}/localCurrencyBalances`)).toEqual(balances);
+    const duplicate = await submitRaw(request, actor, { ...raw, observationId: randomUUID() });
+    expect(duplicate.transactionResult).toMatchObject({ kind: 'duplicate', existingTransactionId: first.transactionResult.transactionId });
+    expect((await ledgerRecords(request)).find(row => row.id === first.transactionResult.transactionId)).toMatchObject({
+      merchant, originalMerchant: merchant, amountInWon: 1700, cardDisplay: '대전사랑카드(1357)',
+      accountingDate: '2026-10-11', localTime: '09:11', creatorMemberId: actor.memberId,
+    });
+    expect((await records(request, `households/${actor.householdId}/captureRecords`)).find(row => row.transactionId === first.transactionResult.transactionId)).toMatchObject({
+      originalMerchant: merchant, cardEvidence: { companyLabel: '대전사랑카드', lastFour: '1357' },
+    });
+  }
+  expect(await ledgerRecords(request)).toHaveLength(2);
+});
+
 test('[T-PARSE-001][PARSE-KB-001][CARD-004][ING-SAVE-004] 국민 후불교통 합계는 본인 카드 확인 후 수신일에 한 번만 저장한다', async ({ page, request }) => {
   const actor = await createHouseholdThroughUi(page);
   const raw = () => ({

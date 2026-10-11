@@ -33,7 +33,7 @@ const GYEONGGI_CANCELLATION_HEADER = /^결제\s*취소/u;
 const GYEONGGI_CANCELLATION_PATTERN = /^결제\s*취소\s+([\d,]+)원$/u;
 
 const DAEJEON_DETAILED_PAYMENT_PATTERN =
-  /([^\s]+(?:\s*[^\s]+)?)\s+체크카드\((\d{4})\)\s+승인\s+([\d,]+)원(?:\s+캐시백적립\s+[\d,]+원)?\s+(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})\s+(.+?)\s+잔액\s*([\d,]+)원/u;
+  /체크카드\((\d{4})\)\s+승인\s+([\d,]+)원(?:\s+캐시백적립\s+[\d,]+원)?\s+(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})\s+(.+?)\s+잔액\s*([\d,]+)원/u;
 const DAEJEON_CARD_PATTERN = /체크카드\((\d{4})\)/u;
 const DAEJEON_DATE_TIME_PATTERN =
   /(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})/u;
@@ -203,6 +203,7 @@ function parseGyeonggi(
 
 function isDaejeonMerchant(value: string): boolean {
   if (value === "") return false;
+  if (/^(?:온통대전|대전사랑카드)(?:.*체크카드)?(?:\(\d{4}\))?$/u.test(value)) return false;
   if (value.includes("승인") || value.includes("결제") || value.includes("사용")) {
     return false;
   }
@@ -214,7 +215,6 @@ function isDaejeonMerchant(value: string): boolean {
 
 function daejeonMerchant(
   lines: readonly string[],
-  body: string,
 ): string {
   for (let index = 0; index < lines.length - 1; index += 1) {
     if (
@@ -233,8 +233,6 @@ function daejeonMerchant(
       return cleanupLocalMerchant(lines[index + 1]);
     }
   }
-  const detailed = DAEJEON_DETAILED_PAYMENT_PATTERN.exec(flattened(body));
-  if (detailed !== null) return cleanupLocalMerchant(detailed[8]);
   const candidate = lines.find(isDaejeonMerchant);
   return candidate === undefined ? "알수없음" : cleanupLocalMerchant(candidate);
 }
@@ -249,14 +247,14 @@ function parseDaejeon(
   let payment: ParsedPaymentGolden | undefined;
 
   if (detailed !== null) {
-    const amount = amountInWon(detailed[3]);
-    const detailedBalance = amountInWon(detailed[9]);
+    const amount = amountInWon(detailed[2]);
+    const detailedBalance = amountInWon(detailed[8]);
     const occurred = embeddedPaymentTime(
       context,
+      detailed[3],
       detailed[4],
       detailed[5],
       detailed[6],
-      detailed[7],
     );
     balance = detailedBalance ?? commonBalance;
     if (amount !== undefined && occurred !== undefined) {
@@ -264,9 +262,9 @@ function parseDaejeon(
         type: "approval",
         amountInWon: amount,
         ...occurred,
-        merchant: detailed[8].trim(),
+        merchant: detailed[7].trim(),
         cardCompany: "대전사랑카드",
-        maskedCardToken: detailed[2],
+        maskedCardToken: detailed[1],
         localCurrencyType: "daejeon",
       };
     }
@@ -292,7 +290,7 @@ function parseDaejeon(
           type: "approval",
           amountInWon: amount,
           ...occurred,
-          merchant: daejeonMerchant(localCurrencyLines(context.body), context.body),
+          merchant: daejeonMerchant(localCurrencyLines(context.body)),
           cardCompany: "대전사랑카드",
           ...(token === undefined ? {} : { maskedCardToken: token }),
           localCurrencyType: "daejeon",

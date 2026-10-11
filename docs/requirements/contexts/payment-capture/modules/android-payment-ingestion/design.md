@@ -220,6 +220,8 @@ KakaoTalk Adapter는 `MessagingStyle.messages`의 현재 메시지를 표시 순
 
 CityGas parser의 최소 성공 조건은 도시가스 청구 문구와 총액입니다. 청구 제목은 선택이며 없으면 서울 수신 월과 빈 memo를 사용합니다. 납부마감일은 accounting date 후보이고 없거나 유효하지 않을 때 서울 수신일로 fallback합니다. 현재 구현은 마감일 문구가 없을 때만 fallback하고 형식은 맞지만 유효하지 않은 날짜에서 전체 parse가 실패하므로 `T-CITYGAS-001`로 교정합니다.
 
+대전 상세 승인은 상품명 앞부분을 캡처하지 않고 `체크카드(번호) 승인 금액 [캐시백적립 금액] 월/일 시:분 가맹점 잔액` 구조를 읽습니다. `1Q체크카드`와 `농협 체크카드` 모두 같은 경로를 사용합니다. 상세 형식이 아니면 기존 줄 단위 fallback을 사용하되 서비스명·카드명 헤더는 가맹점 후보에서 제외하고, 가맹점이 없을 때 기존 `알수없음` 결과를 유지합니다. 실패한 상세 정규식을 fallback에서 다시 실행하지 않습니다. 금액·카드 증거·시간·잔액과 권한·분류·멱등성 저장 경계는 유지합니다. `T-PARSE-001`은 표시 필드와 줄바꿈별 공개 parser 및 실제 callable의 원장·Capture·QuickEdit·잔액·재전송을 검증합니다.
+
 ### 4.2 30초 process 중복
 
 `RecentNotificationCache` key는 versioned hash `(packageName, candidateParseText)`입니다. 최초 처리 시각부터 30,000ms 이하 재입력은 중복이고 30,001ms부터 다시 처리합니다. 카카오톡은 분리된 현재 메시지 하나가 candidate 단위이므로 누적 알림 전체가 아니라 메시지별로 claim합니다. cache는 process 재시작 때 사라지며 서버 fingerprint나 Queue idempotency를 대체하지 않습니다.
