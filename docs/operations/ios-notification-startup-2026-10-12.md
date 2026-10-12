@@ -28,3 +28,7 @@
 - 로그: `TEMP/household-notification-{startup,worker,warm-entry,security}-e2e-20261012.log` 및 후속 `worker-e2e-final` 로그. Emulator는 정상 종료했다.
 
 배포는 진단 서버를 먼저 완료한 후 같은 후보 Web을 Git push로 진행한다. 이 변경으로 네트워크/SDK 지연 자체가 해결됐다고 판단하지 않는다.
+
+## 서버 선행 배포
+
+`ac0e969af130344473e07ef1a6a7e17a0e38d0f7`의 release `release-20261012-notification-startup-ac0e969`를 default·payment-capture·access-session에 배포했다. wrapper의 clean HEAD/hash·architecture 43개 검사, 실제 로그인·가구 Query와 정확한 배포 marker 검증이 모두 통과해 성공 provenance가 기록됐다. 운영 업무 자료는 직접 변경하지 않았다. Web은 이 제품 변경과 본 배포 기록을 함께 main에 push하여 Git 자동배포하며 전체 CI는 별도로 추적한다.
