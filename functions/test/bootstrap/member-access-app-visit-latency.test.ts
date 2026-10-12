@@ -64,7 +64,7 @@ describe("member app visit startup latency", () => {
     } finally { logs.mockRestore(); }
   });
 
-  it("[T-ADM-005] 실제 구조화 로그에 신규 16개 iPhone 관측을 같은 총시간과 한 번만 기록한다", async () => {
+  it("[T-ADM-005] 실제 구조화 로그에 늦은 초기 조회까지 같은 총시간과 한 번만 기록한다", async () => {
     const logs = vi.spyOn(logger, "info").mockImplementation(() => {});
     const recordAccess = vi.fn()
       .mockResolvedValueOnce({ kind: "recorded", totalAccessCount: 1 })
@@ -75,6 +75,9 @@ describe("member app visit startup latency", () => {
       visibilityTrackingStartedAtMs: 150, hiddenMs: 600, hiddenCount: 1,
       timingsMs: {
         bootstrapStarted: 150,
+        ledgerInitialReadFallback: 1_100, ledgerInitialReadCompleted: 1_500,
+        categoriesInitialReadCompleted: 900, currencyPreferencesInitialReadCompleted: 910,
+        currencyBalancesInitialReadFallback: 1_100, currencyBalancesInitialReadFailed: 1_550,
         authTokenObserved: 300, authTokenRequestStarted: 200, authTokenResponseEnd: 280,
         householdReadStarted: 350, householdSnapshotReceived: 1_650,
         ledgerListenStarted: 400, ledgerServerSnapshotReceived: 1_600,

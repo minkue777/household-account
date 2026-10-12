@@ -16,6 +16,10 @@ const valid = {
 };
 
 const readPhaseTimings = {
+  ledgerInitialReadCompleted: 800, ledgerInitialReadFailed: 800,
+  categoriesInitialReadCompleted: 810, categoriesInitialReadFailed: 810,
+  currencyPreferencesInitialReadCompleted: 820, currencyPreferencesInitialReadFailed: 820,
+  currencyBalancesInitialReadCompleted: 830, currencyBalancesInitialReadFailed: 830,
   ledgerInitialReadStarted: 400,
   ledgerInitialReadReceived: 500,
   ledgerInitialReadFallback: 600,

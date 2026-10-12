@@ -53,7 +53,7 @@ type WorkerMessageV1 =
 - `activate`: 새 버전 cache 준비가 확인된 뒤 현재 version 밖의 이 모듈 cache를 삭제하고 `clientsClaim()`한다.
 - `fetch`: build hash 정적 asset은 현재 version precache에서 제공하고 공개 비민감 아이콘·폰트·이미지의 `GET` 성공 응답만 명시적 allowlist로 최대 7일 runtime cache한다. navigation HTML, `Set-Cookie`가 있거나 `Cache-Control: private|no-store`인 응답, `/api/**`, 인증 header·cookie가 있거나 가구·거래·자산·통계 데이터를 포함한 응답, 비 GET method와 임의 cross-origin 응답은 network-only로 처리한다. 정적 allowlist 밖 요청에는 fetch route를 등록하지 않아 브라우저 기본 네트워크 경로를 사용한다. catch-all NetworkOnly의 respondWith·waitUntil은 오래 열린 요청을 구 active worker에 묶어 skipWaiting 이후에도 새 worker 활성화를 막을 수 있으므로 사용하지 않는다. 기존 요청을 취소하거나 완료를 기다려야만 갱신할 수 있게 만들지 않는다. cache key에 UID·memberId·householdId·token을 넣지 않는다.
 - `push`: Notifications v1 payload를 검증한 뒤 표시한다.
-- `notificationclick`: 구조화 payload의 식별자를 단일 segment로 인코딩한 뒤 URL API로 정규화하고, 허용된 same-origin path prefix와 정확한 segment 수를 다시 검증한 destination만 기존 창 focus 또는 새 창으로 연다. dot·percent·이중 encoding·역슬래시 traversal은 decode 깊이와 무관하게 거부한다.
+- `notificationclick`: 구조화 payload를 검증한 뒤 same-origin 홈의 단일 `edit` query를 URLSearchParams로 생성한다. 기존 창을 focus하고 MessageChannel로 요청한다. 현재 controller에서 보낸 요청만 root receiver가 Next router로 수락하며 1초 내 수락이 없으면 navigate, 창이 없거나 사라지면 openWindow를 사용한다. 기존 `/expenses/:id/edit`의 307은 구 링크 호환용으로 유지한다. dot·percent·이중 encoding·역슬래시 traversal은 decode 깊이와 무관하게 거부한다.
 
 Firebase `register(messaging, { serviceWorkerRegistration, vapidKey })`에는 이미 등록된 root worker registration을 전달한다. Web과 worker의 Firebase public config는 같은 typed build source에서 생성하며 worker 파일에 설정 값을 hardcode하거나 compat SDK·deprecated `getToken`을 남기지 않는다. build는 생성된 실제 `/sw.js` artifact와 app SDK·worker Messaging SDK의 지원 matrix를 검사하고 맞지 않으면 배포 artifact 생성을 실패시킨다. 로그인한 iPhone 홈 화면 standalone PWA에서만 `onRegistered`로 받은 FID를 Notifications의 `RegisterEndpoint`로 전달한다. 로그아웃은 같은 설치의 `RemoveEndpoint`와 이전 session purge가 모두 성공해야 완료되며, 어느 하나라도 실패하면 이전 session을 격리하고 새 endpoint 등록을 차단한다. 다른 멤버 로그인은 두 정리가 성공한 뒤 현재 FID를 새 등록으로 전달한다. 별도 endpoint 멤버 전환 API는 호출하지 않는다. 인증되지 않은 iPhone, 홈 화면 밖 browser mode와 데스크톱에서는 messaging 권한 요청·등록을 시작하지 않으며 `firebase-messaging-sw.js`를 별도 root registration으로 만들지 않는다.
 
@@ -67,7 +67,7 @@ Firebase `register(messaging, { serviceWorkerRegistration, vapidKey })`에는 �
 | `SessionIsolationPolicy` | logout·인증 사용자 변경·household 변경은 이전 generation의 in-memory 응답·진행 중 요청·구독 namespace를 다음 query·endpoint 등록 전에 폐기한다. logout 성공 뒤에는 현재 generation이 없고, 사용자·가구 변경 성공만 명시된 새 generation을 연다. 공개 runtime cache는 actor와 무관하므로 generation에 귀속하지 않는다. generation에 귀속된 Cache Storage 항목은 원칙상 0건이어야 하며 발견되면 보안 계약 위반으로 삭제한다. |
 | `FirebaseWorkerCompatibility` | Web config와 worker config는 같은 build 입력의 산출물이고 SDK 조합은 검증된 matrix 안에 있다. |
 | `UpdatePolicy` | 새 worker는 waiting 상태로 설치한다. 미저장 입력이 없는 사용자의 갱신 동작 또는 모든 client 종료 뒤에만 활성화하며 시간 제한 강제 reload를 하지 않는다. |
-| `NotificationNavigationPolicy` | route template과 인코딩한 identifier로 URL을 만든 뒤 URL 정규화 결과의 same-origin, 허용 prefix와 segment 수를 검증하며 payload URL과 traversal 표현을 신뢰하지 않는다. |
+| `NotificationNavigationPolicy` | 검증된 identifier로 same-origin 홈의 단일 edit query를 만들며 payload URL과 traversal 표현을 신뢰하지 않는다. |
 | `WebResponseSecurityPolicy` | production 응답에 최소 권한 CSP·`frame-ancestors 'none'`·nosniff·안전한 Referrer·Permissions header를 적용하고 HTTPS hosting에서 1년 이상의 HSTS를 적용한다. wildcard framing·unsafe script/connect·`unsafe-url`·`max-age=0`은 build 실패다. |
 
 ## 5. Application Use Case 상세
@@ -96,8 +96,8 @@ Firebase `register(messaging, { serviceWorkerRegistration, vapidKey })`에는 �
 1. versioned payload의 `version`, `notificationId`, `title`, `body`, `route.kind`, `route.identifier` 존재·타입·빈 값과 허용 route kind를 검증한다.
 2. 알 수 없는 version·필수 필드 누락·타입 오류·허용하지 않은 route는 표시하지 않고 contract metric을 남긴다.
 3. 표시 가능한 최소 payload만 Notification API에 전달한다.
-4. payload의 route kind와 identifier를 schema 검증하고 URL API와 segment encoding으로 destination을 만든 뒤 정규화된 path prefix·segment 수를 검사한다. dot·percent·이중 encoding·역슬래시 traversal은 거부한다.
-5. 일치하는 기존 client가 있으면 focus·navigate하고, 없으면 새 창을 연다.
+4. payload의 route kind와 identifier를 검증하고 URLSearchParams로 same-origin 홈의 단일 edit query를 만든다. dot·percent·이중 encoding·역슬래시 traversal은 거부한다.
+5. 일치하는 기존 client가 있으면 focus 후 지출 열기 요청을 보내고 수락 시 재로딩하지 않는다. 수락이 없으면 1초 뒤 navigate하고, 창이 없거나 사라졌으면 새 창을 연다. focus 거절 자체는 기존 앱으로의 전달을 막지 않는다.
 
 ### 5.4 세션 purge·응답 보안
 
@@ -143,7 +143,7 @@ Firebase `register(messaging, { serviceWorkerRegistration, vapidKey })`에는 �
 ## 9. 오류·보안·관측성
 
 - 등록·install·activate·push 계약 실패를 서로 다른 code로 기록한다.
-- push payload의 임의 외부 URL, `javascript:` URL, dot·percent·이중 encoding·역슬래시 path traversal과 정규화 뒤 허용 prefix·segment shape를 벗어난 route를 거부한다.
+- push payload의 임의 외부 URL, `javascript:` URL, dot·percent·이중 encoding·역슬래시 path traversal과 허용된 홈 목적지를 벗어난 route를 거부한다.
 - 인증 응답, 가구 key, 거래 상세가 runtime cache에 들어가는지 보안 E2E로 검사한다.
 - CSP violation, 누락·불완전 보안 header, endpoint 삭제·session purge 실패와 Firebase config/version mismatch를 서로 다른 code로 기록한다.
 - metric: active registration 수, worker version mismatch, install failure, stale cache count, push contract failure, click routing failure.
@@ -181,7 +181,7 @@ web/public/manifest.json
 | PWA-003 | production E2E | 통합 worker·endpoint cleanup barrier | 기존 두 root script, fetch, background push, click, Messaging handoff, 삭제·purge 성공/실패, 비인증·browser·desktop | root registration 하나, 별도 Firebase worker 0건, 삭제와 purge 뒤에만 재등록 | T-PWA-001 |
 | PWA-004 | 보안 I, production E2E | CachePolicy·PurgePwaSession | method, Set-Cookie, private/no-store, 개인정보 query, 인증·금융 응답, logout, 사용자·가구 변경, 진행 request·subscription, purge 실패 | 민감 응답·PII cache key 0건, logout generation 없음, 이전 state 제거 또는 query·endpoint 격리 | T-PWA-002 |
 | PWA-005 | Contract, production build | Firebase worker config generator·실제 artifact | Web/worker config drift, 지원·미지원 SDK 조합, compat·deprecated API·설정 hardcode | 통합 `/sw.js`와 단일 산출 config, drift·미지원·hardcode 조합은 build 실패 | T-PWA-003 |
-| PWA-006 | Unit, 보안 E2E | NotificationNavigationPolicy | `/`, `?`, `#`, Unicode, dot·percent·이중 encoding·역슬래시 traversal, 잘못된 template, 외부·javascript URL | 정규화 뒤 허용 prefix·segment shape인 route만 focus/open | T-PWA-004 |
+| PWA-006 | Unit, 보안 E2E | NotificationNavigationPolicy | `/`, `?`, `#`, Unicode, dot·percent·이중 encoding·역슬래시 traversal, 잘못된 template, 외부·javascript URL | 검증된 단일 edit query만 전달, 수락한 기존 앱 reload 0회, 무응답·구버전·cold 복귀 | T-PWA-004 |
 | PWA-007 | Contract, 보안 E2E | WebResponseSecurityPolicy | document/API, wildcard framing, unsafe script/connect, unsafe referrer, HSTS 0 | directive 의미가 최소 권한인 header만 적용하고 불완전 정책은 build 실패 | T-PWA-005 |
 | PWA-008 | Unit, Integration, production E2E | WorkerVersionHandshake·ActivationPolicy·CachePolicy | 정확한 waiting version, 미저장 form, 장기 waiting, 사용자 갱신, 모든 client 종료, 부분 precache 실패, controllerchange 중복, 7일 경계, 응답이 보류된 비정적 GET | 부분 cache·강제 reload·입력 유실 없이 허용된 client만 한 번 전환하고 공개 runtime cache 유지, 열린 비정적 요청은 갱신 뒤에도 정상 완료 | T-PWA-006 |
 

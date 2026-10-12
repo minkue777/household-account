@@ -1,3 +1,4 @@
+import { clickNotification } from './notification-click';
 import { expect, test, type Page, type Worker } from '@playwright/test';
 
 type WorkerRuntime = {
@@ -20,40 +21,13 @@ async function registeredWorker(page: Page): Promise<Worker> {
   return page.context().serviceWorkers().find(worker => new URL(worker.url()).pathname === '/sw.js')!;
 }
 
-/** OS notification-click 전달과 이벤트 수명만 대신합니다. 실제 worker handler를
- * 실행하며, 합성 이벤트에는 OS 사용자 활성화가 없어 navigate 뒤 focus가 거절될 수 있습니다. */
-async function clickNotification(worker: Worker, data: unknown, action = ''): Promise<number> {
-  return worker.evaluate(async ({ data, action }) => {
-    const runtime = self as unknown as WorkerRuntime;
-    await runtime.registration.showNotification('E2E 가계부 알림', { data, tag: 'e2e-notification' });
-    const notification = (await runtime.registration.getNotifications({ tag: 'e2e-notification' }))[0];
-    const tasks: Promise<unknown>[] = [];
-    const event = new runtime.NotificationEvent('notificationclick', { notification, action });
-    Object.defineProperty(event, 'waitUntil', { value: (task: Promise<unknown>) => tasks.push(task) });
-    runtime.dispatchEvent(event);
-    const results = await Promise.allSettled(tasks);
-    let rejectedFocus = 0;
-    for (const result of results) {
-      if (result.status === 'fulfilled') continue;
-      if (result.reason instanceof DOMException && result.reason.name === 'InvalidAccessError' && result.reason.message === 'Not allowed to focus a window.') {
-        rejectedFocus += 1;
-      } else {
-        throw result.reason;
-      }
-    }
-    return rejectedFocus;
-  }, { data, action });
-}
-
 test('[T-PWA-004][T-PUSH-SEC-002][PWA-003][PWA-005][PWA-006] 생성된 실제 worker 클릭 handler는 정상 ID를 인코딩하여 기존 창을 열고 공격·dismiss를 무시한다', async ({ page, context }) => {
   const worker = await registeredWorker(page);
   await context.grantPermissions(['notifications'], { origin: new URL(page.url()).origin });
   expect(await page.evaluate(() => Notification.permission)).toBe('granted');
   const valid = (expenseId: string) => ({ payloadVersion: 'notification-payload.v1', type: 'household-notification-requested', clickTarget: 'expense-edit', expenseId });
   for (const id of ['실제 worker/거래?수정#1&edit=other', 'safe-expense-id']) {
-    const rejectedFocus = await clickNotification(worker, { FCM_MSG: { data: valid(id) } });
-    expect(rejectedFocus).toBeLessThanOrEqual(1);
-    if (rejectedFocus) test.info().annotations.push({ type: 'OS boundary', description: '실제 navigate 이후 focus는 합성 알림 이벤트의 사용자 활성화 부재로 거절됨. OS focus/openWindow는 실기기 검증 범위입니다.' });
+    expect(await clickNotification(worker, { FCM_MSG: { data: valid(id) } })).toBe(1);
     await expect.poll(() => new URL(page.url()).searchParams.get('edit')).toBe(id);
     await expect(page.getByRole('button', { name: /\uB85C\uADF8\uC778/ }).first()).toBeVisible();
     expect(context.pages()).toHaveLength(1);

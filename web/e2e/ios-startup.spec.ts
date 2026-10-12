@@ -190,6 +190,54 @@ test.beforeEach(async () => { await resetTestAccount(); });
 
 test.describe('첫 홈 별도 서버 조회', () => {
   test.use({ serviceWorkers: 'block' });
+  test('[T-ADM-005][T-WEBVIEW-004] 실제 Lite 지연 응답은 fallback 뒤 완료 시각만 기록하고 Listen까지 홈을 기다린다', async ({ page, context, request }) => {
+    await observeIndexedDbOpens(page, true);
+    await createFinanceHousehold(page, request);
+    await page.close();
+    const restarted = await context.newPage();
+    await observeIndexedDbOpens(restarted, true);
+    const visits = observeAppVisits(restarted);
+    let releaseRest!: () => void, releaseListen!: () => void;
+    const restGate = new Promise<void>(resolve => { releaseRest = resolve; });
+    const listenGate = new Promise<void>(resolve => { releaseListen = resolve; });
+    let restHeld = 0, listensHeld = 0;
+    await restarted.route(/\/documents(?::batchGet|(?:\/[^?]+)?:runQuery)/, async route => {
+      const response = await route.fetch();
+      expect(response.ok()).toBe(true);
+      restHeld += 1;
+      await restGate;
+      await route.fulfill({ response });
+    });
+    await restarted.route('**/google.firestore.v1.Firestore/Listen/channel**', async route => {
+      listensHeld += 1;
+      await listenGate;
+      await route.continue();
+    });
+    try {
+      await restarted.goto('/');
+      await expect.poll(() => restHeld).toBeGreaterThanOrEqual(4);
+      await expect.poll(() => listensHeld).toBeGreaterThan(0);
+      // Hold the real Lite results beyond the 750ms budget. Listen remains blocked.
+      await restarted.waitForTimeout(1000);
+      releaseRest();
+      await expect.poll(() => restarted.evaluate(() => performance.getEntriesByType('resource')
+        .filter(entry => /\/documents(?::batchGet|(?:\/[^?]+)?:runQuery)/.test(entry.name)).length)).toBeGreaterThanOrEqual(4);
+      await restarted.waitForTimeout(100); // Allow SDK Promise callbacks to settle while Listen is still held.
+      await expect(restarted.locator('.calendar-glass')).toHaveCount(0);
+      releaseListen();
+      await expect(restarted.locator('.calendar-glass')).toHaveAttribute('aria-busy', 'false');
+      const timings = (await acceptedAppVisit(visits)).clientStartupDiagnostics!.timingsMs;
+      for (const source of ['ledger', 'categories', 'currencyPreferences', 'currencyBalances']) {
+        expect(timings[source + 'InitialReadCompleted']).toBeGreaterThan(timings[source + 'InitialReadFallback']);
+        expect(timings[source + 'ServerSnapshotReceived']).toBeGreaterThan(timings[source + 'InitialReadCompleted']);
+        expect(timings).not.toHaveProperty(source + 'InitialReadReceived');
+      }
+    } finally {
+      releaseRest(); releaseListen();
+      await restarted.unrouteAll({ behavior: 'wait' });
+    }
+  });
+
   test('[T-LED-001][T-HOME-003][T-WEBVIEW-004] 첫 홈은 마지막 잔액 응답까지 기다려 예산·잔액·날짜별 금액을 함께 표시한다', async ({ page, context, request }, testInfo) => {
     await observeIndexedDbOpens(page, true);
     const householdId = await createFinanceHousehold(page, request);
@@ -320,6 +368,8 @@ test.describe('첫 홈 별도 서버 조회', () => {
       expectServerReadinessOrder(timings);
       for (const source of ['ledger', 'categories', 'currencyPreferences', 'currencyBalances']) {
         expect(timings).toHaveProperty(source + 'InitialReadReceived');
+        expect(timings).toHaveProperty(source + 'InitialReadCompleted');
+        expect(timings[source + 'InitialReadCompleted']).toBeLessThanOrEqual(timings[source + 'InitialReadReceived']);
         expect(timings).not.toHaveProperty(source + 'InitialReadFallback');
         expect(timings).not.toHaveProperty(source + 'ServerSnapshotReceived');
       }

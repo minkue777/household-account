@@ -7,10 +7,13 @@ test.beforeEach(async ({ page, browserName }) => {
   if (browserName === 'webkit') await observeIndexedDbOpens(page, true);
 });
 
+for (const entry of ['legacy', 'notification'] as const) {
+test.describe(entry, () => {
 test('[PUSH-006][PUSH-011][LED-001] 과거월 지출 편집 링크에 도착하면 로그인 복원 후 해당 월과 실제 수정 화면을 연다', async ({ page, request }) => {
   await createFinanceHousehold(page, request);
   const expense = await addExpenseThroughUi(page, request, { merchant: '과거 알림 거래', amount: 4567, date: seoulDate(-4), memo: '링크 도착 원문' });
-  await page.goto(`/expenses/${encodeURIComponent(documentId(expense))}/edit`);
+  await page.goto(entry === 'legacy' ? `/expenses/${encodeURIComponent(documentId(expense))}/edit`
+    : '/?' + new URLSearchParams({ edit: documentId(expense) }));
   const edit = page.getByRole('dialog', { name: '지출 수정', exact: true });
   await expect(edit).toBeVisible();
   await expect(edit.locator('input[type="text"]').first()).toHaveValue('과거 알림 거래');
@@ -21,6 +24,8 @@ test('[PUSH-006][PUSH-011][LED-001] 과거월 지출 편집 링크에 도착하�
   await expect(page.getByTestId(`calendar-day-${seoulDate(-4)}`)).toBeVisible();
   await expect(page.getByTestId('expense-item').filter({ hasText: '과거 알림 거래' })).toContainText('4,567원');
 });
+});
+}
 
 test('[PUSH-011][HH-008] 없는 ID와 다른 가구의 편집 링크는 정보를 노출하지 않고 오류를 표시한다', async ({ page, request }) => {
   await createFinanceHousehold(page, request);

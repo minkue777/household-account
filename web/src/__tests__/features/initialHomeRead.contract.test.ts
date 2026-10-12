@@ -101,6 +101,7 @@ describe.each(['iPhone', 'Android'] as const)('[T-WEBVIEW-004][T-SYS-008][AND-01
     pending.resolve(123); await flush();
     expect(events).toEqual(runtime === 'Android' ? ['publish', 'listen'] : ['listen']);
     const timings = value.diagnostics.completeClientStartupDiagnostics()?.timingsMs;
+    expect(timings?.ledgerInitialReadCompleted).toBe(1230);
     if (runtime === 'Android') expect(timings).not.toHaveProperty('ledgerInitialReadFallback');
     else expect(timings).toHaveProperty('ledgerInitialReadFallback');
     cancel();
@@ -146,6 +147,34 @@ describe.each(['iPhone', 'Android'] as const)('[T-WEBVIEW-004][T-SYS-008][AND-01
     if (kind === 'cancel') cancel(); else value.session.setClientSessionScope({ ...identity, sessionGeneration: 2 });
     pending.resolve(1); await flush(); jest.runOnlyPendingTimers();
     expect(publish).not.toHaveBeenCalled(); expect(listen).not.toHaveBeenCalled(); cancel();
+    expect(value.diagnostics.completeClientStartupDiagnostics()?.timingsMs).not.toHaveProperty('ledgerInitialReadCompleted');
+  });
+
+  it.each(['ledger', 'categories', 'currencyPreferences', 'currencyBalances'] as const)('%s의 늦은 실패 시각을 기록하고 표시·구독을 중복하지 않는다', async source => {
+    const value = setup(), pending = deferred<number>(), publish = jest.fn(), listen = jest.fn(() => jest.fn());
+    const cancel = value.subscribeWithInitialHomeRead({ source, scope: value.scope,
+      read: () => pending.promise, publish, listen });
+    await flush(); jest.advanceTimersByTime(expectedBudgetMs + 200);
+    // The real collector records late failure without re-subscribing or publishing.
+    pending.reject(new Error('private error never logged')); await flush();
+    const timings = value.diagnostics.completeClientStartupDiagnostics()?.timingsMs;
+    expect(timings).toHaveProperty(source + 'InitialReadFailed', expectedBudgetMs + 200);
+    expect(timings).toHaveProperty(source + 'InitialReadFallback', expectedBudgetMs);
+    expect(timings).not.toHaveProperty(source + 'InitialReadReceived');
+    expect(publish).not.toHaveBeenCalled(); expect(listen).toHaveBeenCalledTimes(1);
+    cancel();
+  });
+
+  it('첫 표시 이후 완료는 이미 동결한 진단에 추가하지 않는다', async () => {
+    const value = setup(), pending = deferred<number>();
+    const cancel = value.subscribeWithInitialHomeRead({ source: 'ledger', scope: value.scope,
+      read: () => pending.promise, publish: jest.fn(), listen: () => jest.fn() });
+    await flush(); jest.advanceTimersByTime(expectedBudgetMs);
+    const frozen = value.diagnostics.completeClientStartupDiagnostics();
+    pending.resolve(1); await flush();
+    expect(value.diagnostics.completeClientStartupDiagnostics()).toEqual(frozen);
+    expect(frozen?.timingsMs).not.toHaveProperty('ledgerInitialReadCompleted');
+    cancel();
   });
 
   it('시작 진단이 끝난 화면에서는 추가 조회 없이 바로 구독한다', () => {

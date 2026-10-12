@@ -600,3 +600,6 @@ partner 선택 정책은 [DEC-022](../../../../governance/decisions.md#dec-022),
 ### 동작별 의존성과 초기화 저장 (2026-10-05)
 
 가입·초대·가구 생성은 필요한 의존성만 받는 함수다. 초기화 완료 저장은 identity 생성 receipt와 구분한 명시적 동작이며 호출 횟수로 저장 정책을 바꾸지 않는다. 완료 상태는 늦은 실패로 내려가지 않으며 삭제 가구는 복원하지 않는다. 가구원 제거/복구는 대상 member의 graph만 읽는다. 명의 조회/변경에 사용하지 않는 members 자료나 가짜 ID 생성기를 전달하지 않는다. [실제 SDK 검증과 추적](../../../../../operations/access-command-simplicity-2026-10-05.md).
+
+### 초기 조회 완료 관측 (2026-10-12)
+네 원본의 `InitialReadCompleted`/`InitialReadFailed`는 현재 세션에서 Promise가 끝난 시각이다. fallback 뒤 성공도 표시하지 않고 시각만 기록한다. `InitialReadReceived`는 예산 안에 채택한 결과, mapper 실패는 Completed와 Fallback으로 구분한다. 첫 홈 paint 시 진단을 동결하므로 그 이후 완료는 관측할 수 없다. 서버 선택 필드 허용을 Web보다 선행 배포한다. [작업 및 검증](../../../../../operations/ios-notification-startup-2026-10-12.md).

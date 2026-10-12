@@ -24,11 +24,9 @@ export function expenseNotificationDestination(value: unknown, origin: string): 
   const data = expenseNotificationData(value);
   if (!data) return null;
   try {
-    const url = new URL(`/expenses/${encodeURIComponent(data.expenseId)}/edit`, origin);
-    const segments = url.pathname.split('/');
-    if (url.origin !== origin || segments.length !== 4 || segments[1] !== 'expenses'
-      || segments[3] !== 'edit' || !segments[2]
-      || decodeURIComponent(segments[2]) !== data.expenseId || url.search || url.hash) return null;
+    const url = new URL('/', origin);
+    if (url.origin !== origin) return null;
+    url.searchParams.set('edit', data.expenseId);
     return url.href;
   } catch { return null; }
 }

@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { PwaRuntimeUpdate } from '@/platform/pwa/PwaRuntimeUpdate';
+import { PwaNotificationNavigation } from '@/platform/pwa/PwaNotificationNavigation';
 import { useRouter } from 'next/navigation';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { CategoryProvider } from '@/contexts/CategoryContext';
@@ -275,6 +276,7 @@ export default function AppProviders({ children }: { children: React.ReactNode }
       <HouseholdProvider>
         <RetiredHomeReadSnapshotCleanup />
         <PwaRuntimeUpdate />
+        <PwaNotificationNavigation />
         <AuthenticatedPlatformEffects />
         <AdminHouseholdViewBanner />
         <ThemeProvider>

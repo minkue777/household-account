@@ -6,6 +6,23 @@ import { expenseNotificationData, expenseNotificationDestination } from '../src/
 const workerVersion = process.env.NEXT_PUBLIC_PWA_WORKER_VERSION;
 const cacheVersion = `static-v1-${workerVersion}`;
 
+// Old clients have no receiver. Bound the handshake so their click still opens.
+function openInExistingApp(client, data) {
+  return new Promise(resolve => {
+    const channel = new MessageChannel();
+    const finish = accepted => {
+      clearTimeout(timer);
+      channel.port1.close();
+      channel.port2.close();
+      resolve(accepted);
+    };
+    const timer = setTimeout(() => finish(false), 1000);
+    channel.port1.onmessage = event => finish(event.data?.type === 'EXPENSE_NOTIFICATION_ACCEPTED');
+    try { client.postMessage({ type: 'OPEN_EXPENSE_NOTIFICATION', data }, [channel.port2]); }
+    catch { finish(false); }
+  });
+}
+
 // Install our validation/click handlers before Firebase attaches its handlers.
 self.addEventListener('push', event => {
   let payload;
@@ -23,8 +40,14 @@ self.addEventListener('notificationclick', event => {
   event.waitUntil((async () => {
     for (const client of await self.clients.matchAll({ type: 'window', includeUncontrolled: true })) {
       if (new URL(client.url).origin === self.location.origin) {
-        await client.navigate(destination);
-        return client.focus();
+        // Some browsers deny focus even while the existing document is usable.
+        await client.focus().catch(() => {});
+        try {
+          if (await openInExistingApp(client, data)) return;
+          const navigated = await client.navigate(destination);
+          if (navigated) return;
+        } catch { /* A closed or unresponsive window falls back to a new one. */ }
+        break;
       }
     }
     return self.clients.openWindow(destination);

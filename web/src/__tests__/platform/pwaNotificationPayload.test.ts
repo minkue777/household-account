@@ -2,9 +2,9 @@ import { expenseNotificationDestination } from '@/platform/pwa/notificationPaylo
 
 describe('실제 worker/foreground 알림 navigation 정책', () => {
   const payload = (expenseId: string) => ({ payloadVersion: 'notification-payload.v1', type: 'expense-created', clickTarget: 'expense-edit', expenseId });
-  it.each(['/', '?', '#', '한글 거래', 'expense-A.1'])('식별자 %s를 정확히 한 segment로 인코딩한다', id => {
+  it.each(['/', '?', '#', '한글 거래', 'expense-A.1'])('식별자 %s를 정확히 한 query 값으로 인코딩한다', id => {
     expect(expenseNotificationDestination(payload(id), 'https://example.com'))
-      .toBe('https://example.com/expenses/' + encodeURIComponent(id) + '/edit');
+      .toBe('https://example.com/?' + new URLSearchParams({ edit: id }));
   });
   it.each(['.', '..', '%2e', '%252f', '\\admin', '', '\u0000bad'])('traversal/잘못된 식별자 %s를 거부한다', id => {
     expect(expenseNotificationDestination(payload(id), 'https://example.com')).toBeNull();

@@ -41,7 +41,9 @@ export function subscribeWithInitialHomeRead<T>(options: {
   recordClientStartupTiming(`${source}InitialReadStarted`);
   // The SDK cannot abort this read. Cancellation permanently ignores its result.
   void Promise.resolve().then(() => current() && !decided ? options.read() : undefined).then(value => {
-    if (decided || !current() || value === undefined) return;
+    if (!current() || value === undefined) return;
+    recordClientStartupTiming(`${source}InitialReadCompleted`);
+    if (decided) return;
     try {
       recordClientStartupTiming(`${source}InitialReadReceived`);
       options.publish(value);
@@ -52,7 +54,11 @@ export function subscribeWithInitialHomeRead<T>(options: {
     decided = true;
     clearTimeout(timer);
     startLive();
-  }, fallback);
+  }, () => {
+    if (!current()) return;
+    recordClientStartupTiming(`${source}InitialReadFailed`);
+    fallback();
+  });
   return () => {
     active = false;
     clearTimeout(timer);
