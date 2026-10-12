@@ -32,3 +32,12 @@
 ## 서버 선행 배포
 
 `ac0e969af130344473e07ef1a6a7e17a0e38d0f7`의 release `release-20261012-notification-startup-ac0e969`를 default·payment-capture·access-session에 배포했다. wrapper의 clean HEAD/hash·architecture 43개 검사, 실제 로그인·가구 Query와 정확한 배포 marker 검증이 모두 통과해 성공 provenance가 기록됐다. 운영 업무 자료는 직접 변경하지 않았다. Web은 이 제품 변경과 본 배포 기록을 함께 main에 push하여 Git 자동배포하며 전체 CI는 별도로 추적한다.
+
+## CI의 별도 PWA 갱신 실패와 관측 보강
+
+- `0ca28fa6887a955f0fe5be82c600d7e8f2acabee`의 Vercel Git 배포와 운영 HTML·worker·build manifest 확인은 성공했다. CI `38193617312`의 `web`은 기존 root worker 교체 검사 한 곳에서 실패했다. 나머지 PWA 5개(알림 클릭·payload 검증 포함)는 통과했다.
+- 후보는 올바른 버전의 `ACTIVATE_WAITING_WORKER`를 받아 실제 `skipWaiting()`을 호출했지만, 15초 뒤에도 installed/waiting이고 기존 active/controller가 유지됐다. 후보의 native Promise가 끝나지 않은 상태다. 기존 worker 관측 핸들은 `Service worker restarted` 오류로 읽지 못했으며, 종전 관측 도구는 이 오류를 `unavailable: true`로만 저장했다.
+- 로컬에서 변경 전 같은 검사를 3회 실행했으나 모두 통과해 CI 실패는 재현하지 못했다. 성공할 때도 교체된 기존 worker의 핸들이 끊기므로 이 오류만으로 활성화 지연의 원인을 확정할 수 없다. 제품 결함이나 브라우저 장애를 해결했다고 표현하지 않는다.
+- 활성화 **직전** 두 worker의 미완료 extendable event를 첨부하고, worker 밖의 CDP에서 native `runningStatus`·`status` 전이와 worker 오류를 기록한다. 관측 실패의 원문 오류도 보존한다. 실제 후보의 installed 상태가 관측됐는지 검사한다. worker·메시지·시계를 대체하거나 재시작하지 않으며 기존 활성화 15초 제한·버전 검증·active/controller 일치 조건은 유지한다.
+- 관측 보강 후 실제 production artifact의 PWA 전체 6개가 통과했다(18.2초). 기존 worker의 pending 없음, running→stopping→stopped→redundant 및 후보의 installed→activating→activated 전이가 첨부되는 것을 확인했다. Web 타입 검사도 통과했다. 로그는 `TEMP/household-pwa-activation-{repro,observation}-20261012.log`다.
+- 후속 변경은 검사·문서뿐이며 Firebase·Web·APK 재배포는 필요하지 않다. 이전 CI 실패는 그대로 보존하고 새 SHA의 전체 검증과 이전에 진행 중이던 web-e2e를 별도로 확인한다.

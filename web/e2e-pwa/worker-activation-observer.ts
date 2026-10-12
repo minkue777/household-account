@@ -5,6 +5,7 @@ type Probe = { read(): { events: Array<Record<string, unknown>>; pending: Array<
 // Observe native promises; do not synthesize messages, resolve them or replace workers.
 export function observeWorkerActivation(context: BrowserContext) {
   const probes = new Map<Worker, Promise<JSHandle<Probe> | undefined>>();
+  const errors = new Map<Worker, string>();
   const observe = (worker: Worker) => {
     if (probes.has(worker)) return;
     probes.set(worker, worker.evaluateHandle(() => {
@@ -34,7 +35,10 @@ export function observeWorkerActivation(context: BrowserContext) {
         read: () => ({ events, pending: Array.from(pending.values()) }),
         dispose: () => { self.removeEventListener('message', message); scope.skipWaiting = originalSkipWaiting; prototype.waitUntil = originalWaitUntil; },
       };
-    }).catch(() => undefined));
+    }).catch(error => {
+      errors.set(worker, String(error));
+      return undefined;
+    }));
   };
   context.on('serviceworker', observe);
   context.serviceWorkers().forEach(observe);
@@ -42,7 +46,9 @@ export function observeWorkerActivation(context: BrowserContext) {
     ready: () => Promise.all(probes.values()),
     read: () => Promise.all(Array.from(probes).map(async ([worker, handle]) => {
       const probe = await handle;
-      return { url: worker.url(), ...(probe ? await probe.evaluate(value => value.read()).catch(() => ({ unavailable: true })) : { unavailable: true }) };
+      return { url: worker.url(), ...(probe ? await probe.evaluate(value => value.read())
+        .catch(error => ({ unavailable: true, error: String(error) }))
+        : { unavailable: true, error: errors.get(worker) }) };
     })),
     dispose: async () => {
       context.off('serviceworker', observe);

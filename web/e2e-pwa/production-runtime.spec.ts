@@ -109,6 +109,17 @@ test('[T-PWA-006][T-PWA-002][PWA-004][PWA-008] 온라인 조회의 HTTP 응답�
 
 test('[T-PWA-INSTALL-001][T-PWA-001][T-PWA-003][PWA-001][PWA-002][PWA-003][PWA-004][PWA-005][PWA-007][PWA-008] 빌드된 HTML의 CSP가 hydration을 허용하고 실제 root worker가 static만 cache한다', async ({ page, context, request }, testInfo) => {
   const workerObservation = observeWorkerActivation(context);
+  // Handles in the old worker are destroyed during replacement. Keep native
+  // running/status transitions outside that worker so failure evidence survives.
+  const browserSession = await context.newCDPSession(page);
+  const browserWorkerEvents: Array<Record<string, unknown>> = [];
+  browserSession.on('ServiceWorker.workerVersionUpdated', event => {
+    browserWorkerEvents.push({ type: 'versions', atMs: performance.now(), versions: event.versions });
+  });
+  browserSession.on('ServiceWorker.workerErrorReported', event => {
+    browserWorkerEvents.push({ type: 'error', atMs: performance.now(), error: event.errorMessage });
+  });
+  await browserSession.send('ServiceWorker.enable');
   const blockedScripts: string[] = [];
   page.on('console', message => { if (/Refused to execute inline script|violates.*script-src/i.test(message.text())) blockedScripts.push(message.text()); });
   const response = await page.goto('/');
@@ -229,6 +240,14 @@ test('[T-PWA-INSTALL-001][T-PWA-001][T-PWA-003][PWA-001][PWA-002][PWA-003][PWA-0
     });
     expect(await page.evaluate(() => navigator.serviceWorker.controller?.scriptURL)).toBe(before);
     expect(await page.evaluate(async () => !!(await navigator.serviceWorker.getRegistration('/'))?.waiting)).toBe(true);
+    await testInfo.attach('worker-before-activation', { contentType: 'application/json',
+      body: Buffer.from(JSON.stringify(await workerObservation.read(), null, 2)) });
+    // Require the browser probe to observe the actual candidate, not an empty log.
+    await expect.poll(() => browserWorkerEvents).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'versions', versions: expect.arrayContaining([
+        expect.objectContaining({ scriptURL: candidateUrl, status: 'installed' }),
+      ]) }),
+    ]));
     // 실제 version handshake 뒤에만 새 Worker가 controller가 됩니다.
     await page.evaluate(async workerVersion => {
       (await navigator.serviceWorker.getRegistration('/'))!.waiting!.postMessage({ type: 'ACTIVATE_WAITING_WORKER', workerVersion });
@@ -246,6 +265,9 @@ test('[T-PWA-INSTALL-001][T-PWA-001][T-PWA-003][PWA-001][PWA-002][PWA-003][PWA-0
     ]) });
     await expect(page.getByRole('button', { name: /\uB85C\uADF8\uC778/ }).first()).toBeVisible();
   } finally {
+    await testInfo.attach('worker-browser-lifecycle', { contentType: 'application/json',
+      body: Buffer.from(JSON.stringify(browserWorkerEvents, null, 2)) });
+    await browserSession.detach();
     await testInfo.attach('worker-activation-events', { contentType: 'application/json', body: Buffer.from(JSON.stringify(await workerObservation.read(), null, 2)) });
     await workerObservation.dispose();
     await testInfo.attach('worker-activation-lifecycle', { contentType: 'application/json',
