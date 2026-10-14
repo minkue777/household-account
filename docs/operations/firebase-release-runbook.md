@@ -68,11 +68,11 @@ smoke에 사용할 활성 가구 구성원의 최신 Firebase ID token을 저장
 node functions/scripts/prepare-smoke-session.cjs --token-file "$env:TEMP\household-smoke.id-token"
 ```
 
-이 도구는 유효기간이 충분한 기존 token을 먼저 재사용합니다. 새 token이 필요하면 `http://localhost:55318/`을 평소 사용하는 같은 Chrome·Edge 프로필로 엽니다. 최초 한 번만 기존 가계부 Google 계정으로 로그인하고, 이후에는 Firebase SDK의 `browserLocalPersistence`로 복원한 로그인에서 새 ID token을 자동 발급받습니다. Google 계정은 ADC 운영자와 동일한 기존 계정인지 검증합니다. 완료 직후 로그아웃하거나 매번 임시 브라우저 프로필을 만들지 않습니다. 로그아웃이 필요하면 확인 페이지의 해당 버튼을 사용합니다.
+Firebase 배포마다 이 도구를 실행하며, 유효기간이 충분한 기존 token은 그대로 재사용합니다. 로그인 URL이 출력되면 에이전트가 연결된 내장 브라우저에서 `http://localhost:55318/`을 열어 저장된 로그인 복원을 먼저 시도합니다. 최초 한 번만 기존 가계부 Google 계정으로 로그인하고, 이후에는 Firebase SDK의 `browserLocalPersistence`로 복원한 로그인에서 새 ID token을 자동 발급받습니다. Google 계정은 ADC 운영자와 동일한 기존 계정인지 검증합니다. 완료 직후 로그아웃하거나 매번 임시 브라우저 프로필을 만들지 않습니다. 로그아웃이 필요하면 확인 페이지의 해당 버튼을 사용합니다.
 
 Firebase ID token의 약 1시간 유효기간과 브라우저 로그인 유지기간은 다릅니다. 브라우저 데이터 삭제·직접 로그아웃·세션 취소 등으로 복원 또는 갱신이 실패할 때만 다시 로그인합니다. 장기 갱신 자격은 Firebase SDK가 브라우저에 관리하고, CLI에는 이번 배포용 ID token만 전달합니다. 서버 배포용 ADC 인증과 이 사용자 접근 검증용 인증도 구분합니다.
 
-도구가 출력한 URL만으로 브라우저가 자동으로 열리는 것은 아닙니다. 사용할 수 있는 브라우저 도구로 페이지를 실제로 열어 확인하고, 일반 브라우저를 열 수 없거나 내장 브라우저에서 Google 인증이 실패하면 사용자에게 일반 Chrome·Edge 주소창에서 위 주소를 열도록 안내합니다. 내장 브라우저의 실패를 계정 만료로 단정하지 않습니다.
+도구가 출력한 URL만으로 브라우저가 자동으로 열리는 것은 아닙니다. 브라우저 도구로 실제 페이지를 열고 완료 표시 및 `smokeSession: ready` 출력 또는 token 파일 생성을 확인합니다. token 원문은 읽어 출력하지 않습니다. 사용자가 휴대폰에서 원격 작업 중이어도 localhost는 에이전트가 PC에서 열며 휴대폰 브라우저에 입력하도록 안내하지 않습니다. 내장 브라우저 연결이 없다면 현재 연결 상태를 확인하고, 이전에 로그인한 일반 Chrome·Edge 프로필을 사용할 수 있는지 확인합니다. 최초 로그인이나 실제 복원·갱신 실패 때만 사용자 조작을 요청하며, 브라우저 연결 부재를 계정 만료로 단정하지 않습니다. Cloud CLI의 Google 인증을 가계부 로그인 대신 사용하는 것은 이 절차가 아닙니다.
 
 ```powershell
 npm --prefix functions run deploy -- `

@@ -52,7 +52,9 @@ CI에서 실제 제품 결함이 이미 확인되었다면 그 원인을 먼저 
 - `targets`가 비어 있으면 Firebase 배포·manifest·로그인 준비를 생략한다. wrapper·테스트·문서만 바뀌었다고 서버를 재배포하지 않는다.
 - runbook의 `npm --prefix functions run deploy -- ...` wrapper를 사용한다. build·clean HEAD/hash·호환성·actor·Secret binding·lease·실제 로그인 smoke를 유지하고 직접 `firebase deploy`로 우회하지 않는다.
 - 운영 데이터나 Secret 값을 로그로 가져오지 않는다. 유효한 인증·smoke 자격이 있으면 재사용하고, 실제 사용자 로그인이 필요한 때만 그 조작을 요청한다. 대기 중 독립적인 push·Web·CI 작업은 진행한다.
-- smoke 인증은 runbook의 `functions/scripts/prepare-smoke-session.cjs --token-file <저장소 밖 경로>`로 준비한다. 고정 주소 `http://localhost:55318/`을 이전에 로그인한 같은 일반 브라우저 프로필로 열어 저장된 로그인과 token 자동 갱신을 먼저 사용한다. 일회용 메모리 인증·완료 후 자동 로그아웃 방식의 임시 도구를 다시 만들지 않는다. 최초 로그인이나 실제 갱신 실패 때만 사용자의 Google 로그인을 요청하고, 창을 열었다고 말하기 전에 실제 페이지 표시를 확인한다.
+- Firebase 배포 때마다 `functions/scripts/prepare-smoke-session.cjs --token-file <저장소 밖 경로>`를 실행한다. 유효한 기존 token이 있으면 재사용하고, 로그인 URL이 나오면 **연결된 내장 브라우저에서 `http://localhost:55318/`을 열어 저장된 로그인을 자동 복원하는 방법을 우선한다.** 완료 화면과 도구의 `smokeSession: ready` 또는 token 파일 생성을 확인한 뒤 배포한다.
+- 사용자가 휴대폰에서 원격 작업 중이어도 주소는 에이전트가 PC의 브라우저에서 연다. 휴대폰 브라우저에 localhost 접속을 요구하지 않는다. 내장 브라우저 연결이 없으면 현재 연결 상태를 확인하고, 이전에 로그인한 일반 Chrome·Edge 프로필을 사용할 수 있는지 살핀다. 최초 로그인이나 실제 복원·갱신 실패가 확인된 경우에만 사용자 조작을 요청한다.
+- 같은 브라우저 프로필의 Firebase 로그인 유지를 보존한다. 일회용 메모리 인증·완료 후 자동 로그아웃 도구를 새로 만들지 않으며, Cloud CLI 인증을 가계부 로그인으로 대신하거나 로그인 검증을 생략하지 않는다. 세부 실행·token 정리는 Firebase runbook을 따른다.
 
 ### Android APK
 

@@ -25,9 +25,10 @@
 
 배포 후보의 정확한 SHA와 release marker는 Firebase wrapper의 provenance로 검증하며 CI는 독립 실행한다.
 
-## 배포 준비 상태
+## 배포 결과
 
 - 구현 `db131ee661574c903e0a6f54381b7b2ba50bf48d`를 push했고 [CI 38515812333](https://github.com/minkue777/household-account/actions/runs/38515812333)를 추적한다.
 - clean HEAD에서 배포 계획은 Functions 세 codebase를 선택했다. production build·architecture 43개 검사·artifact hash 계산을 마쳤다.
-- 실제 서버 배포는 아직 실행하지 않았다. 사용자 로그인 smoke 세션이 없고 현재 연결 가능한 브라우저가 없어, 기존 로그인 프로필에서 `http://localhost:55318/`을 열도록 요청한 상태다. 준비 도구가 로그인 상태를 복원하면 ID token은 저장소 밖 파일로만 전달한다.
-- 후속 Web 변경으로 HEAD가 바뀌면 최신 clean HEAD에서 hash와 manifest를 다시 준비한 뒤 wrapper로 배포한다. 사용자 원장 데이터의 직접 보정은 수행하지 않는다.
+- 처음에는 브라우저 연결이 없어 로그인 확인을 진행하지 못했다. 연결이 복구된 뒤 내장 브라우저에서 고정 로그인 주소를 열었고 저장된 Google 로그인이 자동 복원됐다. 완료 화면과 저장소 밖 token 파일 생성을 확인했다. 휴대폰에서 localhost를 열거나 다시 로그인할 필요는 없었다.
+- 후속 Web 변경을 포함한 clean HEAD `34f57a8ab8b736ffee8129e4c35e67dba6d0c118`에서 hash·manifest를 다시 준비했다. `release-20261014-toss-cashback-34f57a8`의 세 Functions codebase 배포, 실제 사용자 해석·가구 Query·동일 SHA/artifact marker 검증 및 성공 provenance 기록을 완료했다. artifact SHA256은 `100d353a4559998f944af1d63a6e7e1cfffbc9d789bff64dc03a522fa8fe16fe`다.
+- 배포 로그: `TEMP/household-toss-cashback-deploy-20261014.log`. 사용자 원장 데이터는 직접 보정하지 않았다. 토스 구현의 CI `38515812333`은 실제 Android 검사를 포함한 다섯 검사와 CI 결과 요약이 모두 성공했다. 후속 Web·스킬 변경의 전체 CI 결과는 별도로 추적한다.
