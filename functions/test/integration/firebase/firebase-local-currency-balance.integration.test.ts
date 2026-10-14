@@ -1,6 +1,6 @@
 import { deleteApp, initializeApp, type App } from "firebase-admin/app";
-import { getFirestore, type Firestore, type QuerySnapshot } from "firebase-admin/firestore";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { getFirestore, setLogFunction, type Firestore, type QuerySnapshot } from "firebase-admin/firestore";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FirebaseLocalCurrencyBalanceStore } from "../../../src/adapters/firebase/local-currency/firebaseLocalCurrencyBalanceStore";
 import { createLocalCurrencyBalanceApplication } from "../../../src/contexts/household-finance/local-currency/application/localCurrencyBalanceApplication";
@@ -74,7 +74,48 @@ describeWithFirestoreEmulator("Firebase Local Currency balance transactions", ()
       observation({ observationId: "first-daejeon", localCurrencyType: "daejeon", balanceInWon: 20 }),
     ];
 
-    const results = await Promise.all(requests.map(request => application.record(request)));
+    const runTransaction = database.runTransaction.bind(database);
+    const attempts: number[] = [];
+    const firstResults: unknown[] = [];
+    const sdkLog: string[] = [];
+    let release!: () => void;
+    const bothPrepared = new Promise<void>(resolve => { release = resolve; });
+    setLogFunction(message => sdkLog.push(message));
+    const observed = vi.spyOn(database, "runTransaction").mockImplementation(operation => {
+      const index = attempts.push(0) - 1;
+      return runTransaction(async transaction => {
+        const firstAttempt = ++attempts[index] === 1;
+        const result = await operation(transaction);
+        if (firstAttempt) {
+          // 두 최초 선택을 같은 초기 상태에서 준비하고 실제 SDK의 commit 충돌·재시도를 검증합니다.
+          firstResults.push(result);
+          if (firstResults.length === requests.length) release();
+          await bothPrepared;
+        }
+        return result;
+      });
+    });
+    let results: Awaited<ReturnType<typeof application.record>>[];
+    try {
+      const settled = await Promise.allSettled(requests.map(request => application.record(request).finally(release)));
+      results = settled.map(result => {
+        if (result.status === "rejected") throw result.reason;
+        return result.value;
+      });
+      expect(firstResults).toEqual([
+        expect.objectContaining({ kind: "success", status: "created" }),
+        expect.objectContaining({ kind: "success", status: "created" }),
+      ]);
+      expect(attempts).toHaveLength(2);
+      expect(attempts.some(count => count > 1)).toBe(true);
+    } catch (error) {
+      console.error({ attempts, firstResults, sdkLog });
+      throw error;
+    } finally {
+      release();
+      observed.mockRestore();
+      setLogFunction(null);
+    }
 
     expect(results).toEqual([
       expect.objectContaining({ kind: "success", status: "created" }),

@@ -43,3 +43,12 @@
 - 실제 API 36.1 Activity/Keystore/Firebase/production Web을 거치는 Native E2E **4개**와 후속 Native→Web Chromium **1개**가 통과했다. 네 초기 조회의 실제 정상 응답을 2.5초 이상 지연해도 fallback 없이 Listen보다 먼저 반영한다. 같은 Activity 재로딩에서 전체 20초 오류를 확인한 뒤 보류 응답을 전달해 36,890원으로 복구하고 후속 live 47,901원 갱신을 확인했다. 같은 Activity의 추가 시작 총시간 표본은 0개이며 실제 logger 진단 보존도 검증했다.
 - 구현 SHA `13d92778`의 CI는 `38562856907`, 검사 보정 SHA `e85cd5e69a45f680075e3ccea668ad26220094ae`의 CI는 `38563298162`다. 후속 전체 CI와 실제 Android job은 아직 진행 중이며 성공으로 보고하지 않는다. 최초 실행의 실패 이력도 별도로 확인한다. Web 제품 배포는 완료됐고 후속 테스트·문서는 추가 제품 배포가 필요 없다.
 - 로컬 Firebase 서버·Android 에뮬레이터는 정상 종료했다. 운영 업무 데이터는 변경하지 않았다. 이번 검증은 응답 전환과 오류 복구 계약이며 실제 사용자 환경의 단축 시간을 보장하는 성능 측정은 아니다.
+
+### CI 후속: 지역화폐 최초 선택 경합
+
+- 검사 보정 SHA `e85cd5e69a45f680075e3ccea668ad26220094ae`의 CI `38563298162`는 다섯 검사·요약 모두 성공했다. 실제 Android instrumentation/Native Firebase 검사도 실행 후 성공했다. 제품 CI `38562856907`의 Web E2E 실패는 위에서 수정한 `role=alert` 선택 범위 문제이며 별도 새 실패는 없었다.
+- 문서 SHA `bf1ad1e3a8fc0f17c0ce3b73554da397db8b77be`의 CI `38563801816`은 Web/Android/Web E2E 성공, Functions 실패다. 실제 Firebase 통합 검사 151개 중 기존 지역화폐 최초 두 종류 동시 접수 1개가 `3 INVALID_ARGUMENT: Transaction is invalid or closed`로 실패했다. 초기 홈 변경이 이 서버 경로를 바꾸지는 않았다.
+- 보존한 Emulator 로그에는 12:30:21 UTC의 query/commit 잠금 timeout과 12:30:24·28의 닫힌 transaction 재조회 오류가 있다. 최초 실패보다 앞선 잠금 경합은 확인했지만, transaction ID·최초 RPC 상태가 없어 SDK 내부 재시도 경로와 운영 재현 여부까지 확정하지 않았다. 10월 5일 같은 실패도 기록돼 있으며 이미 순차 조회하는 제품 코드에 오류 문자열 재시도 분기를 추가하지 않는다.
+- 검사는 실제 SDK의 두 transaction이 같은 초기 상태에서 쓰기를 준비한 뒤 commit하도록 순서를 고정한다. 두 최초 callback이 모두 `created`인 것과 SDK callback 재시도가 실제 발생한 것을 추가 확인한다. 두 요청은 `allSettled`로 모두 종료한 뒤 정리하며, 실패 시 SDK 로그·시도 횟수·최초 결과를 남긴다. 기존 잔액 2개·receipt 2개·선택 version 3·선택 event 1개·잔액 event 2개·재전송·stale·abort 원자성 및 30초 제한은 유지한다.
+- 변경한 실제 Firestore Emulator 검사 **2 passed (8.60s)**, Functions 테스트 타입 검사가 통과했다. 검사 순서 보강이며 임의 query/commit 교차에서 발생한 SDK/Emulator 오류가 제품에서 해결됐다는 의미는 아니다. 이번 실패 기록은 유지하고 후속 SHA의 전체 CI를 확인한다. 테스트·문서만 바뀌므로 Firebase/Web/APK 추가 배포는 필요 없다.
+- 증거: `TEMP/household-initial-deadline-functions-38563801816.log`, `TEMP/household-initial-deadline-functions-artifacts-38563801816/firestore-debug.log`, `TEMP/household-local-currency-contention-20261014.log`.
