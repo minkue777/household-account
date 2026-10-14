@@ -31,11 +31,15 @@
 
 - 변경 전에는 느린 정상 응답 채택과 전체 무응답 경계 검사가 실패했다. 변경 후 관련 Jest 11개 파일 122개, TypeScript `tsc --noEmit`, 요구사항 catalog·E2E 추적성 검사가 통과했다.
 - 제한된 실행 환경에서는 Vite/Next build가 `spawn EPERM`으로 중단됐다. 사용자 권한 변경 뒤 같은 E2E 준비 경로의 Functions architecture 43개와 세 codebase 빌드가 통과했다. 검사 설정을 바꾸거나 생략하지 않았다.
-- 실제 WebKit·Android 검사는 실행 중이며 배포 완료를 의미하지 않는다. 로컬 로그: `TEMP/household-initial-deadline-{related,prepare,webkit}-20261014.log`.
+- 실제 WebKit·Android 검증과 배포 결과는 아래에 기록한다. 로컬 로그: `TEMP/household-initial-deadline-{related,prepare,webkit,retry-webkit,native,native-compile}-20261014.log`.
 
 ### 후속 검증과 배포
 
 - 제품 `13d927787d18f942bc052c37c98dfcd7b51b24f3`의 Vercel Git 자동배포와 GitHub Production deployment `7065099574`가 성공했다. 운영 `/`·`/sw.js` HTTP 200과 SHA 포함, 해당 SHA `_buildManifest.js` HTTP 200을 확인했다. Firebase·APK는 변경하지 않았다.
 - 실제 Emulator/production build/WebKit에서 지연 초기 응답의 Listen 선행 표시, 마지막 잔액까지 전체 대기, live 전환 후 수정·삭제 3개가 통과했다.
 - 새 무응답·재시도 검사는 오류 상태 도달 후 `role=alert`가 앱 오류와 Next.js `__next-route-announcer__` 두 개에 일치해 실패했다. 제품 오류가 아니라 검사 선택 범위 문제이며, WebKit과 Android 관측을 실제 `main` 오류 영역으로 한정했다. 20초·실제 새로고침·최신 금액·완료 계측 검증은 유지한다.
-- Android instrumentation Kotlin 컴파일은 통과했다. API 36.1 에뮬레이터 시작 때 발생한 시스템 Bluetooth 오류 대화상자만 닫고 HOME 포커스를 확인했다. 앱 오류를 닫거나 검증을 생략하지 않았다. 보정한 WebKit 재시도·Native 실제 검사는 진행 중이다.
+- Android instrumentation Kotlin 컴파일은 통과했다. API 36.1 에뮬레이터 시작 때 발생한 시스템 Bluetooth 오류 대화상자만 닫고 HOME 포커스를 확인했다. 앱 오류를 닫거나 검증을 생략하지 않았다.
+- 보정한 WebKit 무응답·실제 새로고침 검사는 **1 passed (56.7s, production build 포함)**다. 첫 문서에서는 20초 오류·완료 paint 0회·접속 Command 0회, 새 문서에서는 최신 47,901원과 완료 paint·접속 1회를 확인했다. 앞선 3개 성공과 합쳐 관련 브라우저 계약 4개를 확인했다.
+- 실제 API 36.1 Activity/Keystore/Firebase/production Web을 거치는 Native E2E **4개**와 후속 Native→Web Chromium **1개**가 통과했다. 네 초기 조회의 실제 정상 응답을 2.5초 이상 지연해도 fallback 없이 Listen보다 먼저 반영한다. 같은 Activity 재로딩에서 전체 20초 오류를 확인한 뒤 보류 응답을 전달해 36,890원으로 복구하고 후속 live 47,901원 갱신을 확인했다. 같은 Activity의 추가 시작 총시간 표본은 0개이며 실제 logger 진단 보존도 검증했다.
+- 구현 SHA `13d92778`의 CI는 `38562856907`, 검사 보정 SHA `e85cd5e69a45f680075e3ccea668ad26220094ae`의 CI는 `38563298162`다. 후속 전체 CI와 실제 Android job은 아직 진행 중이며 성공으로 보고하지 않는다. 최초 실행의 실패 이력도 별도로 확인한다. Web 제품 배포는 완료됐고 후속 테스트·문서는 추가 제품 배포가 필요 없다.
+- 로컬 Firebase 서버·Android 에뮬레이터는 정상 종료했다. 운영 업무 데이터는 변경하지 않았다. 이번 검증은 응답 전환과 오류 복구 계약이며 실제 사용자 환경의 단축 시간을 보장하는 성능 측정은 아니다.
