@@ -4,11 +4,9 @@ import { Platform } from '@/lib/utils/platform';
 import { isAndroidHostAvailable } from '@/platform/android-host/androidHostBridge';
 
 type Source = 'ledger' | 'categories' | 'currencyPreferences' | 'currencyBalances';
-export const INITIAL_HOME_READ_BUDGET_MS = 750;
-export const ANDROID_INITIAL_HOME_READ_BUDGET_MS = 2000;
 const attempted = new Set<Source>();
 
-/** A bounded server read precedes the watch, so an older watch cannot undo it. */
+/** Publish the server read before starting the watch, so an older watch cannot undo it. */
 export function subscribeWithInitialHomeRead<T>(options: {
   source: Source;
   scope: Readonly<ClientSessionScope> | undefined;
@@ -23,27 +21,21 @@ export function subscribeWithInitialHomeRead<T>(options: {
   }
   attempted.add(source);
   let active = true;
-  let decided = false;
   let unsubscribe: (() => void) | undefined;
   const current = () => active && getClientSessionScope() === scope;
   const startLive = () => {
     if (current()) unsubscribe = options.listen();
   };
   const fallback = () => {
-    if (decided || !current()) return;
-    decided = true;
-    clearTimeout(timer);
+    if (!current()) return;
     recordClientStartupTiming(`${source}InitialReadFallback`);
     startLive();
   };
-  // Android WebView can complete healthy reads after 750ms; include module loading in both budgets.
-  const timer = setTimeout(fallback, isAndroid ? ANDROID_INITIAL_HOME_READ_BUDGET_MS : INITIAL_HOME_READ_BUDGET_MS);
   recordClientStartupTiming(`${source}InitialReadStarted`);
   // The SDK cannot abort this read. Cancellation permanently ignores its result.
-  void Promise.resolve().then(() => current() && !decided ? options.read() : undefined).then(value => {
+  void Promise.resolve().then(() => current() ? options.read() : undefined).then(value => {
     if (!current() || value === undefined) return;
     recordClientStartupTiming(`${source}InitialReadCompleted`);
-    if (decided) return;
     try {
       recordClientStartupTiming(`${source}InitialReadReceived`);
       options.publish(value);
@@ -51,8 +43,6 @@ export function subscribeWithInitialHomeRead<T>(options: {
       fallback();
       return;
     }
-    decided = true;
-    clearTimeout(timer);
     startLive();
   }, () => {
     if (!current()) return;
@@ -61,7 +51,6 @@ export function subscribeWithInitialHomeRead<T>(options: {
   });
   return () => {
     active = false;
-    clearTimeout(timer);
     unsubscribe?.();
   };
 }

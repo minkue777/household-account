@@ -39,7 +39,6 @@ function rows(amount: number, version = 1, fromCache = false) {
 }
 
 describe.each(['iPhone', 'Android'] as const)('[T-WEBVIEW-004][T-SYS-008][AND-012] %s 첫 홈 서버 조회 전환', runtime => {
-  const expectedBudgetMs = runtime === 'Android' ? 2000 : 750;
   beforeEach(() => {
     jest.resetModules(); jest.useFakeTimers();
     mockRead.mockReset(); mockListen.mockReset().mockReturnValue(jest.fn());
@@ -89,48 +88,44 @@ describe.each(['iPhone', 'Android'] as const)('[T-WEBVIEW-004][T-SYS-008][AND-01
     expect(read).toHaveBeenCalledTimes(1);
   });
 
-  it('1230ms 정상 응답은 Android에서 표시하고 iPhone의 기존 750ms 복귀는 유지한다', async () => {
+  it.each([1230, 2500, 5000])('%dms 정상 응답도 먼저 표시하고 그 뒤에만 구독한다', async delayMs => {
     const value = setup(), pending = deferred<number>(), events: string[] = [];
     const cancel = value.subscribeWithInitialHomeRead({ source: 'ledger', scope: value.scope,
       read: () => pending.promise, publish: () => events.push('publish'),
       listen: () => { events.push('listen'); return jest.fn(); } });
     await flush();
-    jest.advanceTimersByTime(750);
-    expect(events).toEqual(runtime === 'Android' ? [] : ['listen']);
-    jest.advanceTimersByTime(480);
+    jest.advanceTimersByTime(delayMs);
+    expect(events).toEqual([]);
     pending.resolve(123); await flush();
-    expect(events).toEqual(runtime === 'Android' ? ['publish', 'listen'] : ['listen']);
+    expect(events).toEqual(['publish', 'listen']);
     const timings = value.diagnostics.completeClientStartupDiagnostics()?.timingsMs;
-    expect(timings?.ledgerInitialReadCompleted).toBe(1230);
-    if (runtime === 'Android') expect(timings).not.toHaveProperty('ledgerInitialReadFallback');
-    else expect(timings).toHaveProperty('ledgerInitialReadFallback');
+    expect(timings?.ledgerInitialReadCompleted).toBe(delayMs);
+    expect(timings?.ledgerInitialReadReceived).toBe(delayMs);
+    expect(timings).not.toHaveProperty('ledgerInitialReadFallback');
     cancel();
   });
 
-  it('Android는 2000ms, iPhone은 750ms 경계에서 한 번 복귀하고 이후 성공 응답도 폐기한다', async () => {
+  it('무응답 자체로 개별 구독을 열지 않으며 취소 뒤 응답은 무시한다', async () => {
     const value = setup(), pending = deferred<number>(), publish = jest.fn(), listen = jest.fn(() => jest.fn());
     const cancel = value.subscribeWithInitialHomeRead({ source: 'ledger', scope: value.scope,
       read: () => pending.promise, publish, listen });
     await flush();
-    jest.advanceTimersByTime(expectedBudgetMs - 1);
+    jest.advanceTimersByTime(20000);
     expect(listen).not.toHaveBeenCalled();
-    jest.advanceTimersByTime(1);
-    expect(listen).toHaveBeenCalledTimes(1);
-    pending.resolve(123); await flush(); jest.runOnlyPendingTimers();
-    expect(publish).not.toHaveBeenCalled();
-    expect(listen).toHaveBeenCalledTimes(1);
-    expect(value.diagnostics.completeClientStartupDiagnostics()?.timingsMs).toHaveProperty('ledgerInitialReadFallback');
+    expect(value.diagnostics.completeClientStartupDiagnostics()?.timingsMs).not.toHaveProperty('ledgerInitialReadFallback');
     cancel();
+    pending.resolve(123); await flush();
+    expect(publish).not.toHaveBeenCalled();
+    expect(listen).not.toHaveBeenCalled();
   });
 
-  it.each(['timeout', 'failure', 'decode'] as const)('%s이면 기존 구독으로 한 번 복귀하며 늦은 응답은 폐기한다', async kind => {
+  it.each(['failure', 'decode'] as const)('%s이면 기존 구독으로 한 번 복귀한다', async kind => {
     const value = setup(), pending = deferred<number>(), publish = jest.fn(), listen = jest.fn(() => jest.fn());
     if (kind === 'decode') publish.mockImplementation(() => { throw new Error('invalid'); });
     const cancel = value.subscribeWithInitialHomeRead({ source: 'ledger', scope: value.scope,
       read: () => pending.promise, publish, listen });
     await flush();
-    if (kind === 'timeout') jest.advanceTimersByTime(expectedBudgetMs);
-    else if (kind === 'failure') pending.reject(new Error('unavailable'));
+    if (kind === 'failure') pending.reject(new Error('unavailable'));
     else pending.resolve(1);
     await flush(); expect(listen).toHaveBeenCalledTimes(1);
     pending.resolve(2); await flush();
@@ -139,7 +134,7 @@ describe.each(['iPhone', 'Android'] as const)('[T-WEBVIEW-004][T-SYS-008][AND-01
     cancel();
   });
 
-  it.each(['cancel', 'session'] as const)('%s 이후 결과와 timer는 표시·구독을 만들지 않는다', async kind => {
+  it.each(['cancel', 'session'] as const)('%s 이후 결과는 표시·구독을 만들지 않는다', async kind => {
     const value = setup(), pending = deferred<number>(), publish = jest.fn(), listen = jest.fn(() => jest.fn());
     const cancel = value.subscribeWithInitialHomeRead({ source: 'ledger', scope: value.scope,
       read: () => pending.promise, publish, listen });
@@ -154,12 +149,12 @@ describe.each(['iPhone', 'Android'] as const)('[T-WEBVIEW-004][T-SYS-008][AND-01
     const value = setup(), pending = deferred<number>(), publish = jest.fn(), listen = jest.fn(() => jest.fn());
     const cancel = value.subscribeWithInitialHomeRead({ source, scope: value.scope,
       read: () => pending.promise, publish, listen });
-    await flush(); jest.advanceTimersByTime(expectedBudgetMs + 200);
-    // The real collector records late failure without re-subscribing or publishing.
+    await flush(); jest.advanceTimersByTime(5000);
+    expect(listen).not.toHaveBeenCalled();
     pending.reject(new Error('private error never logged')); await flush();
     const timings = value.diagnostics.completeClientStartupDiagnostics()?.timingsMs;
-    expect(timings).toHaveProperty(source + 'InitialReadFailed', expectedBudgetMs + 200);
-    expect(timings).toHaveProperty(source + 'InitialReadFallback', expectedBudgetMs);
+    expect(timings).toHaveProperty(source + 'InitialReadFailed', 5000);
+    expect(timings).toHaveProperty(source + 'InitialReadFallback', 5000);
     expect(timings).not.toHaveProperty(source + 'InitialReadReceived');
     expect(publish).not.toHaveBeenCalled(); expect(listen).toHaveBeenCalledTimes(1);
     cancel();
@@ -169,7 +164,7 @@ describe.each(['iPhone', 'Android'] as const)('[T-WEBVIEW-004][T-SYS-008][AND-01
     const value = setup(), pending = deferred<number>();
     const cancel = value.subscribeWithInitialHomeRead({ source: 'ledger', scope: value.scope,
       read: () => pending.promise, publish: jest.fn(), listen: () => jest.fn() });
-    await flush(); jest.advanceTimersByTime(expectedBudgetMs);
+    await flush(); jest.advanceTimersByTime(5000);
     const frozen = value.diagnostics.completeClientStartupDiagnostics();
     pending.resolve(1); await flush();
     expect(value.diagnostics.completeClientStartupDiagnostics()).toEqual(frozen);

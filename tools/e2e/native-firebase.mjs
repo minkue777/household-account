@@ -240,7 +240,8 @@ else {
     assert.equal(startup.platform, 'android');
     assert.equal(startup.sameActivityReloadStartupSamples, 0);
     assert.equal(startup.latestLocalCurrencyBalance, 36890);
-    assert.equal(startup.lateLiteRetainedBalance, 47901, 'Timed-out Lite responses must not overwrite newer real live data');
+    assert.equal(startup.initialLoadTimeoutShown, true, 'Pending initial reads must reach the whole-home error boundary');
+    assert.equal(startup.postInitialLiveBalance, 47901, 'Late initial reads must recover and then reflect newer live data');
     // Observe the actual production logger output. No logging sink or handler is replaced.
     const logText = readLogSince(firebaseLog, logOffset);
     const observations = new Set();

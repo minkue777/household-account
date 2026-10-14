@@ -44,6 +44,8 @@ interface LedgerPageProps {
   transactionType: TransactionType;
 }
 
+const FIRST_HOME_DATA_TIMEOUT_MS = 20_000;
+
 export default function LedgerPage({ transactionType }: LedgerPageProps) {
   useEffect(() => scheduleAfterWebFirstHomeCompletePaint(() => {
     // Optional code preparation: a failed preload is retried on actual first use.
@@ -109,8 +111,16 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
       return current === householdKey ? current : null;
     });
   }, [homeReady, householdKey, isSessionVerified]);
+  const [timedOutHousehold, setTimedOutHousehold] = useState<string | null>(null);
+  useEffect(() => {
+    setTimedOutHousehold(null);
+    if (!isSessionVerified || !householdKey || homeVisible) return;
+    const timer = setTimeout(() => setTimedOutHousehold(householdKey), FIRST_HOME_DATA_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [householdKey, homeVisible, isSessionVerified]);
   const initialReadFailed = readError != null || categoriesError != null || preferencesError
-    || (localCurrencySettled && !localCurrencyReady) || (needsYearlyTotal && yearlyError);
+    || (localCurrencySettled && !localCurrencyReady) || (needsYearlyTotal && yearlyError)
+    || (householdKey !== null && timedOutHousehold === householdKey);
   const availableTags = useMemo(() => Array.from(new Set(
     [...expenses, ...yearlyExpenses].flatMap((expense) => normalizeExpenseTags(expense.tags))
   )), [expenses, yearlyExpenses]);

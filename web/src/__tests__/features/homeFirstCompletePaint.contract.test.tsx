@@ -25,6 +25,7 @@ let ledgerRead = {
 };
 let householdKey = 'household-1';
 let householdLoading = false;
+let sessionVerified = true;
 let preferencesRead = {
   configuration: { leftCard: 'monthlySpent', rightCard: 'monthlyRemainingBudget' } as HomeSummaryConfig,
   ready: true, error: false,
@@ -54,7 +55,7 @@ jest.mock('@/contexts/HouseholdContext', () => ({
     householdKey,
     isLoading: householdLoading,
     isAuthenticated: true,
-    isSessionVerified: true,
+    isSessionVerified: sessionVerified,
   }),
 }));
 
@@ -141,6 +142,7 @@ describe('first home complete paint contract', () => {
     };
     householdKey = 'household-1';
     householdLoading = false;
+    sessionVerified = true;
     preferencesRead = { configuration: { leftCard: 'monthlySpent', rightCard: 'monthlyRemainingBudget' }, ready: true, error: false };
     yearRead = { expenses: [], total: null, error: false };
     frameCallbacks = [];
@@ -152,6 +154,7 @@ describe('first home complete paint contract', () => {
   });
 
   afterEach(() => {
+    jest.useRealTimers();
     jest.restoreAllMocks();
   });
 
@@ -303,6 +306,85 @@ describe('first home complete paint contract', () => {
       expect(markWebFirstHomeCompletePaint).not.toHaveBeenCalled();
     },
   );
+
+  it('[T-LED-001] 일부 응답에도 전체 대기 20초를 연장하지 않고 오류 뒤 늦은 정상 응답으로 복구한다', () => {
+    jest.useFakeTimers({ doNotFake: ['requestAnimationFrame', 'cancelAnimationFrame'] });
+    const view = render(<LedgerPage transactionType="expense" />);
+    act(() => jest.advanceTimersByTime(10000));
+    categoryRead = { isLoading: false, serverSnapshotReady: true, readError: null };
+    view.rerender(<LedgerPage transactionType="expense" />);
+    act(() => jest.advanceTimersByTime(9999));
+    expect(screen.getByRole('status')).toHaveTextContent('로딩중...');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    act(() => jest.advanceTimersByTime(1));
+    expect(screen.getByRole('alert')).toHaveTextContent('가계부를 불러오지 못했습니다.');
+    expect(screen.getByRole('button', { name: '다시 시도' })).toBeVisible();
+    expect(screen.queryByTestId('home-calendar')).not.toBeInTheDocument();
+    flushFrame(); flushFrame();
+    expect(markWebFirstHomeCompletePaint).not.toHaveBeenCalled();
+    prepareHome();
+    view.rerender(<LedgerPage transactionType="expense" />);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByTestId('home-calendar')).toBeVisible();
+    flushFrame(); flushFrame();
+    expect(markWebFirstHomeCompletePaint).toHaveBeenCalledTimes(1);
+  });
+
+  it('[T-LED-001] 가구 전환은 새 대기를 시작하고 해제하면 타이머를 취소한다', () => {
+    jest.useFakeTimers({ doNotFake: ['requestAnimationFrame', 'cancelAnimationFrame'] });
+    const view = render(<LedgerPage transactionType="expense" />);
+    act(() => jest.advanceTimersByTime(20000));
+    expect(screen.getByRole('alert')).toBeVisible();
+    householdKey = 'household-2';
+    view.rerender(<LedgerPage transactionType="expense" />);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    act(() => jest.advanceTimersByTime(19999));
+    expect(screen.getByRole('status')).toHaveTextContent('로딩중...');
+    act(() => jest.advanceTimersByTime(1));
+    expect(screen.getByRole('alert')).toBeVisible();
+    householdKey = 'household-3';
+    view.rerender(<LedgerPage transactionType="expense" />);
+    expect(jest.getTimerCount()).toBe(1);
+    view.unmount();
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  it('[T-LED-001] 인증 대기에는 데이터 제한을 적용하지 않고 인증 해제는 진행 중 대기를 취소한다', () => {
+    jest.useFakeTimers({ doNotFake: ['requestAnimationFrame', 'cancelAnimationFrame'] });
+    sessionVerified = false;
+    const view = render(<LedgerPage transactionType="expense" />);
+    act(() => jest.advanceTimersByTime(30000));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    sessionVerified = true;
+    view.rerender(<LedgerPage transactionType="expense" />);
+    act(() => jest.advanceTimersByTime(10000));
+    sessionVerified = false;
+    view.rerender(<LedgerPage transactionType="expense" />);
+    act(() => jest.advanceTimersByTime(30000));
+    expect(screen.getByRole('status')).toHaveTextContent('로딩중...');
+    expect(jest.getTimerCount()).toBe(0);
+    sessionVerified = true;
+    view.rerender(<LedgerPage transactionType="expense" />);
+    act(() => jest.advanceTimersByTime(19999));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    act(() => jest.advanceTimersByTime(1));
+    expect(screen.getByRole('alert')).toBeVisible();
+  });
+
+  it('[T-LED-001] 첫 준비 후 같은 가구의 갱신에는 전체 대기 제한을 적용하지 않는다', () => {
+    jest.useFakeTimers({ doNotFake: ['requestAnimationFrame', 'cancelAnimationFrame'] });
+    const view = render(<LedgerPage transactionType="expense" />);
+    act(() => jest.advanceTimersByTime(19999));
+    prepareHome();
+    view.rerender(<LedgerPage transactionType="expense" />);
+    const calendar = screen.getByTestId('home-calendar');
+    ledgerRead = { ...ledgerRead, serverSnapshotReady: false, isLoading: true };
+    view.rerender(<LedgerPage transactionType="expense" />);
+    act(() => jest.advanceTimersByTime(30000));
+    expect(screen.getByTestId('home-calendar')).toBe(calendar);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
 
   it('[LED-001] 인증 확인에서 홈 데이터 대기로 넘어가도 같은 로딩 화면을 유지한다', () => {
     householdLoading = true;

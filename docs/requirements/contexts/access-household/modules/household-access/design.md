@@ -588,7 +588,7 @@ partner 선택 정책은 [DEC-022](../../../../governance/decisions.md#dec-022),
 
 ### iPhone 첫 홈 Lite 조회 진단 (2026-10-04, ADM-006 / T-ADM-005)
 
-- 네 원본 `ledger`, `categories`, `currencyPreferences`, `currencyBalances`에 각각 `InitialReadStarted`, `InitialReadReceived`, `InitialReadFallback` 선택 필드를 추가한다. Started는 지연 모듈 로드를 포함한 초기 조회 경계 진입이고 Received는 mapper 전 실제 Lite 결과 수신이다. Fallback은 실패·해석 실패·플랫폼별 예산 초과(Android 2,000ms, iPhone 750ms)로 기존 구독으로 전환한 시각이며 성공으로 해석하지 않는다.
+- 네 원본 `ledger`, `categories`, `currencyPreferences`, `currencyBalances`에 각각 `InitialReadStarted`, `InitialReadReceived`, `InitialReadFallback` 선택 필드를 추가한다. Started는 지연 모듈 로드를 포함한 초기 조회 경계 진입이고 Received는 mapper 전 실제 Lite 결과 수신이다. Fallback은 실제 조회·해석 실패로 기존 구독으로 전환한 시각이며 성공으로 해석하지 않는다. 2026-10-14 원본별 제한 제거 이전 빌드에서는 시간 초과(Android 2,000ms, iPhone 750ms)도 포함하므로 과거 로그는 해당 빌드 기준으로 해석한다.
 - 기존 ListenStarted/ServerSnapshotReceived는 실제 realtime SDK 관측으로 남긴다. Lite 수신을 해당 키에 대입하지 않는다. Lite로 첫 paint가 끝나면 아직 도착하지 않은 realtime 관측은 없어도 된다. 기존 v1 범위·허용 목록·개인정보 제외·완료 동결 계약을 유지하며 서버 확장을 Web보다 먼저 배포한다.
 - 수용·준비 선후 관계와 실제 REST/Listen 전환 검증은 [작업 기록](../../../../../operations/ios-home-initial-read-2026-10-04.md)에 추적한다.
 
@@ -602,4 +602,4 @@ partner 선택 정책은 [DEC-022](../../../../governance/decisions.md#dec-022),
 가입·초대·가구 생성은 필요한 의존성만 받는 함수다. 초기화 완료 저장은 identity 생성 receipt와 구분한 명시적 동작이며 호출 횟수로 저장 정책을 바꾸지 않는다. 완료 상태는 늦은 실패로 내려가지 않으며 삭제 가구는 복원하지 않는다. 가구원 제거/복구는 대상 member의 graph만 읽는다. 명의 조회/변경에 사용하지 않는 members 자료나 가짜 ID 생성기를 전달하지 않는다. [실제 SDK 검증과 추적](../../../../../operations/access-command-simplicity-2026-10-05.md).
 
 ### 초기 조회 완료 관측 (2026-10-12)
-네 원본의 `InitialReadCompleted`/`InitialReadFailed`는 현재 세션에서 Promise가 끝난 시각이다. fallback 뒤 성공도 표시하지 않고 시각만 기록한다. `InitialReadReceived`는 예산 안에 채택한 결과, mapper 실패는 Completed와 Fallback으로 구분한다. 첫 홈 paint 시 진단을 동결하므로 그 이후 완료는 관측할 수 없다. 서버 선택 필드 허용을 Web보다 선행 배포한다. [작업 및 검증](../../../../../operations/ios-notification-startup-2026-10-12.md).
+네 원본의 `InitialReadCompleted`/`InitialReadFailed`는 현재 세션에서 Promise가 끝난 시각이다. `InitialReadReceived`는 mapper에 전달할 결과이며 mapper 실패는 Completed와 Fallback으로 구분한다. 2026-10-14부터 원본별 시간 제한 없이 정상 응답을 채택하며, 이전 빌드의 시간 초과 후 성공은 Completed만 기록하고 표시하지 않았다. 첫 홈 paint 시 진단을 동결하므로 그 이후 완료는 관측할 수 없다. 서버 선택 필드 허용을 Web보다 선행 배포한다. [작업 및 검증](../../../../../operations/ios-notification-startup-2026-10-12.md).

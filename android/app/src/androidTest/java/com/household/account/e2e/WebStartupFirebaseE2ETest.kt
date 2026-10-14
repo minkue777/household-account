@@ -71,7 +71,7 @@ class WebStartupFirebaseE2ETest {
                 .put("balanceInWon", JSONObject().put("integerValue", value.toString())))
             balance(25789)
             // Validate a normal cold launch first, then isolate the repeat-launch Lite success path.
-            // Cold code/auth preparation may legitimately exhaust the bounded initial-read budget.
+            // Keep cold authentication and the controlled delayed-response scenario independently observable.
             for (preparing in listOf(true, false)) {
                 shell("appops set ${context.packageName} SYSTEM_ALERT_WINDOW deny")
                 eventually("Permission guide must precede the real navigation") { !Settings.canDrawOverlays(context) }
@@ -154,7 +154,7 @@ class WebStartupFirebaseE2ETest {
                     assertTrue(webTiming.getDouble(ready) <= webTiming.getDouble("homeReady"))
                     assertTrue(webTiming.getDouble(source + "ListenStarted") >= initialReceived)
                     assertFalse("Held Listen must not supply the first home", webTiming.has(source + "ServerSnapshotReceived"))
-                    assertFalse("Actual Lite requests delayed beyond 750ms must succeed within the Android budget", webTiming.has(source + "InitialReadFallback"))
+                    assertFalse("Slow successful Lite requests must publish before Listen without per-source fallback", webTiming.has(source + "InitialReadFallback"))
                 }
                 assertEquals(startup.getDouble("completePaintAt"), webTiming.getDouble("firstHomeCompletePaint"), 0.01)
                 assertTrue("Real Listen transport must have been held", first.getInt("heldListenRequests") > 0)
@@ -164,7 +164,7 @@ class WebStartupFirebaseE2ETest {
                 }
                 assertTrue("All four actual initial reads must pass the latency gate", delayedReads.size >= 4)
                 delayedReads.forEach { request ->
-                    assertTrue("Actual successful responses must be delivered beyond the old 750ms budget",
+                    assertTrue("Actual successful responses must be delivered beyond the old 2s budget",
                         request.getDouble("deliveredAt") - request.getDouble("startedAt") >= LITE_RESPONSE_DELAY_MS - 10)
                 }
                 val databases = first.getJSONArray("databases").let { entries -> (0 until entries.length()).map(entries::getString) }
@@ -178,34 +178,30 @@ class WebStartupFirebaseE2ETest {
                 balance(36890)
                 evaluate("window.nativeE2e.holdLiteOnNextDocument();true")
                 active.onActivity { webView.reload() }
-                eventually("Same Activity reload creates a new real document with newest server balance") {
-                    evaluate("Boolean(window.nativeE2e && window.nativeE2e.documentId !== ${JSONObject.quote(firstDocumentId)} && document.querySelector('.calendar-glass[aria-busy=\"false\"]') && document.body.innerText.includes('36,890') && window.nativeE2e.commands.some(x=>x.command==='access.record-app-visit.v1' && x.success))") == true
+                eventually("Reload holds all four real initial reads in a new document") {
+                    evaluate("Boolean(window.nativeE2e && window.nativeE2e.documentId !== ${JSONObject.quote(firstDocumentId)} && window.nativeE2e.heldLiteResponses >= 4 && document.querySelector('[role=\"status\"][aria-busy=\"true\"]'))") == true
+                }
+                eventually("The whole first-home deadline must show an error and retry while reads remain pending") {
+                    evaluate("Boolean(document.querySelector('[role=\"alert\"]')?.textContent.includes('가계부를 불러오지 못했습니다.') && document.querySelector('[role=\"alert\"] button')?.textContent === '다시 시도')") == true
+                }
+                assertTrue(evaluate("performance.now() >= 20000 && !document.querySelector('.calendar-glass') && performance.getEntriesByName('household-account:startup:home:first-complete-paint').length === 0 && window.nativeE2e.commands.length === 0") == true)
+                evaluate("window.nativeE2e.releaseLite();true")
+                eventually("Late successful reads recover the same document with the real server balance") {
+                    evaluate("Boolean(document.querySelector('.calendar-glass[aria-busy=\"false\"]') && document.body.innerText.includes('36,890') && !document.querySelector('[role=\"alert\"]') && window.nativeE2e.commands.some(x=>x.command==='access.record-app-visit.v1' && x.success))") == true
                 }
                 val reloaded = JSONObject(evaluate("JSON.stringify(window.nativeE2e)").toString())
                 val commands = reloaded.getJSONArray("commands")
                 assertTrue((0 until commands.length()).map(commands::getJSONObject).none { it.getJSONObject("payload").has("clientStartupDurationMs") })
-                assertTrue(evaluate("performance.getEntriesByName('household-account:startup:home:first-complete-paint').length === 1") == true)
-                eventually("Reload must use real subscriptions while all four late Lite responses remain held") {
-                    evaluate("window.nativeE2e.heldLiteResponses >= 4 && window.nativeE2e.listenRequests > 0") == true
-                }
+                assertTrue(evaluate("performance.getEntriesByName('household-account:startup:home:first-complete-paint').length === 1 && window.nativeE2e.releasedLiteResponses >= 4") == true)
                 balance(47901)
-                eventually("Live data must advance beyond the held Lite response") {
-                    evaluate("document.body.innerText.includes('47,901')") == true
+                eventually("Live data after the late initial read must reflect newer server changes") {
+                    evaluate("document.body.innerText.includes('47,901') && !document.body.innerText.includes('36,890')") == true
                 }
-                evaluate("window.nativeE2e.releaseLite();true")
-                eventually("All actual delayed Lite responses are released") {
-                    evaluate("window.nativeE2e.releasedLiteResponses >= 4") == true
-                }
-                evaluate("requestAnimationFrame(() => requestAnimationFrame(() => { window.nativeE2e.latePaintChecked = true; }));true")
-                eventually("Late-response microtasks and the next paint completed") {
-                    evaluate("window.nativeE2e.latePaintChecked === true") == true
-                }
-                assertTrue("Late Lite data must never overwrite the newer live result", evaluate("document.body.innerText.includes('47,901') && !document.body.innerText.includes('36,890')") == true)
                 File(context.filesDir, "native-startup-e2e-result.json").writeText(JSONObject()
                     .put("platform", "android").put("durationMs", duration)
                     .put("diagnostics", diagnostics)
                     .put("beforeNavigationElapsedMs", beforeNavigationElapsed).put("sameActivityReloadStartupSamples", 0)
-                    .put("latestLocalCurrencyBalance", 36890).put("lateLiteRetainedBalance", 47901).toString())
+                    .put("initialLoadTimeoutShown", true).put("latestLocalCurrencyBalance", 36890).put("postInitialLiveBalance", 47901).toString())
             }
         } finally {
             scenario?.close()
@@ -233,7 +229,7 @@ class WebStartupFirebaseE2ETest {
     }
 
     companion object {
-        private const val LITE_RESPONSE_DELAY_MS = 1250
+        private const val LITE_RESPONSE_DELAY_MS = 2500
         // Hold only Listen transport until the first real home; do not fabricate SDK results or clocks.
         private const val OBSERVE_REAL_OPERATIONS = """
             (() => {

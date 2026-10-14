@@ -215,4 +215,4 @@ readiness를 바꾸지 않는지도 검증한다.
 - [가구·멤버 Command handler](../../../../../../functions/src/bootstrap/commands/accessHouseholdCommandHandlers.ts)
 - [Firestore Rules](../../../../../../firestore.rules)
 
-`ADM-006`/`T-ADM-005`의 2026-10-12 확장: 네 원본 초기 조회의 Promise 성공·거절 시각(`InitialReadCompleted`/`InitialReadFailed`)은 예산 초과 후에도 첫 홈 관측 중인 현재 세션에서 기록한다. 화면 채택(`InitialReadReceived`)과 구분하며 구독 해제·세션 교체·첫 표시 이후 결과는 관측하지 않는다. 원문·ID·URL·오류 메시지를 수집하지 않는다.
+`ADM-006`/`T-ADM-005`의 2026-10-12 확장: 네 원본 초기 조회의 Promise 성공·거절 시각(`InitialReadCompleted`/`InitialReadFailed`)은 지연 시간과 관계없이 첫 홈 관측 중인 현재 세션에서 기록한다. 화면 채택(`InitialReadReceived`)과 구분하며 구독 해제·세션 교체·첫 표시 이후 결과는 관측하지 않는다. 원문·ID·URL·오류 메시지를 수집하지 않는다.

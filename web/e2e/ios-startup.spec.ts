@@ -190,7 +190,7 @@ test.beforeEach(async () => { await resetTestAccount(); });
 
 test.describe('첫 홈 별도 서버 조회', () => {
   test.use({ serviceWorkers: 'block' });
-  test('[T-ADM-005][T-WEBVIEW-004] 실제 Lite 지연 응답은 fallback 뒤 완료 시각만 기록하고 Listen까지 홈을 기다린다', async ({ page, context, request }) => {
+  test('[T-ADM-005][T-WEBVIEW-004] 실제 Lite 지연 응답도 반영하여 Listen보다 먼저 홈을 표시한다', async ({ page, context, request }) => {
     await observeIndexedDbOpens(page, true);
     await createFinanceHousehold(page, request);
     await page.close();
@@ -217,23 +217,84 @@ test.describe('첫 홈 별도 서버 조회', () => {
       await restarted.goto('/');
       await expect.poll(() => restHeld).toBeGreaterThanOrEqual(4);
       await expect.poll(() => listensHeld).toBeGreaterThan(0);
-      // Hold the real Lite results beyond the 750ms budget. Listen remains blocked.
-      await restarted.waitForTimeout(1000);
+      // Both former per-source limits (750ms / 2s) pass while real responses remain held.
+      await restarted.waitForTimeout(2500);
+      await expect(restarted.locator('.calendar-glass')).toHaveCount(0);
       releaseRest();
       await expect.poll(() => restarted.evaluate(() => performance.getEntriesByType('resource')
         .filter(entry => /\/documents(?::batchGet|(?:\/[^?]+)?:runQuery)/.test(entry.name)).length)).toBeGreaterThanOrEqual(4);
-      await restarted.waitForTimeout(100); // Allow SDK Promise callbacks to settle while Listen is still held.
-      await expect(restarted.locator('.calendar-glass')).toHaveCount(0);
-      releaseListen();
       await expect(restarted.locator('.calendar-glass')).toHaveAttribute('aria-busy', 'false');
       const timings = (await acceptedAppVisit(visits)).clientStartupDiagnostics!.timingsMs;
       for (const source of ['ledger', 'categories', 'currencyPreferences', 'currencyBalances']) {
-        expect(timings[source + 'InitialReadCompleted']).toBeGreaterThan(timings[source + 'InitialReadFallback']);
-        expect(timings[source + 'ServerSnapshotReceived']).toBeGreaterThan(timings[source + 'InitialReadCompleted']);
-        expect(timings).not.toHaveProperty(source + 'InitialReadReceived');
+        expect(timings[source + 'InitialReadCompleted'] - timings[source + 'InitialReadStarted']).toBeGreaterThanOrEqual(2500);
+        expect(timings[source + 'InitialReadReceived']).toBeGreaterThanOrEqual(timings[source + 'InitialReadCompleted']);
+        expect(timings[source + 'ListenStarted']).toBeGreaterThanOrEqual(timings[source + 'InitialReadReceived']);
+        expect(timings).not.toHaveProperty(source + 'InitialReadFallback');
+        expect(timings).not.toHaveProperty(source + 'ServerSnapshotReceived');
       }
     } finally {
       releaseRest(); releaseListen();
+      await restarted.unrouteAll({ behavior: 'wait' });
+    }
+  });
+
+  test('[T-LED-001][T-WEBVIEW-004] 첫 홈 무응답은 오류를 표시하고 재시도하면 새 문서의 최신 값으로 복구한다', async ({ page, context, request }, testInfo) => {
+    await observeIndexedDbOpens(page, true);
+    const householdId = await createFinanceHousehold(page, request);
+    await page.close();
+    await writeFirestoreFixture(request, `households/${householdId}/homePreferences/home`, {
+      left: { stringValue: 'MONTHLY_EXPENSE' }, right: { stringValue: 'LOCAL_CURRENCY_BALANCE' },
+      aggregateVersion: { integerValue: '1' }, selectedLocalCurrencyType: { stringValue: 'gyeonggi' },
+    });
+    const balancePath = `households/${householdId}/localCurrencyBalances/gyeonggi`;
+    const balanceFields = (amount: number) => ({
+      localCurrencyType: { stringValue: 'gyeonggi' }, balanceInWon: { integerValue: String(amount) },
+    });
+    await writeFirestoreFixture(request, balancePath, balanceFields(36890));
+    const restarted = await context.newPage();
+    await observeIndexedDbOpens(restarted, true);
+    const visits = observeAppVisits(restarted);
+    let holdFirstDocument = true, heldResponses = 0, release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    await restarted.route(/\/documents(?::batchGet|(?:\/[^?]+)?:runQuery)/, async route => {
+      if (!holdFirstDocument || !route.request().postData()?.includes('localCurrencyBalances')) return route.continue();
+      const response = await route.fetch();
+      expect(response.ok()).toBe(true);
+      heldResponses += 1;
+      await gate;
+      await route.fulfill({ response });
+    });
+    try {
+      await restarted.goto('/');
+      const firstDocument = await restarted.evaluate(() => performance.timeOrigin);
+      await expect.poll(() => heldResponses).toBe(1);
+      await expect(restarted.getByRole('status')).toHaveText('로딩중...');
+      await expect(restarted.locator('.calendar-glass')).toHaveCount(0);
+      await expect(restarted.getByRole('alert')).toHaveText('가계부를 불러오지 못했습니다.다시 시도');
+      const elapsedAtError = await restarted.evaluate(() => performance.now());
+      expect(elapsedAtError).toBeGreaterThanOrEqual(20000);
+      expect(await restarted.evaluate(name => performance.getEntriesByName(name).length, COMPLETE_PAINT)).toBe(0);
+      expect(visits.requests).toHaveLength(0);
+      await writeFirestoreFixture(request, balancePath, balanceFields(47901));
+      holdFirstDocument = false;
+      await Promise.all([
+        restarted.waitForEvent('domcontentloaded'),
+        restarted.getByRole('button', { name: '다시 시도', exact: true }).click(),
+      ]);
+      release();
+      expect(await restarted.evaluate(() => performance.timeOrigin)).not.toBe(firstDocument);
+      await expect(restarted.locator('.calendar-glass')).toHaveAttribute('aria-busy', 'false');
+      const balance = restarted.locator('.balance-card-glass').filter({ hasText: '지역화폐 잔액' });
+      await expect(balance).toContainText('47,901');
+      await expect(balance).not.toContainText('36,890');
+      await expect(restarted.getByRole('alert')).toHaveCount(0);
+      const visit = await acceptedAppVisit(visits);
+      expectServerReadinessOrder(visit.clientStartupDiagnostics!.timingsMs);
+      expect(await restarted.evaluate(name => performance.getEntriesByName(name).length, COMPLETE_PAINT)).toBe(1);
+      await testInfo.attach('home-timeout-retry', { contentType: 'application/json',
+        body: Buffer.from(JSON.stringify({ heldResponses, elapsedAtError, timings: visit.clientStartupDiagnostics!.timingsMs }, null, 2)) });
+    } finally {
+      release();
       await restarted.unrouteAll({ behavior: 'wait' });
     }
   });
@@ -269,7 +330,7 @@ test.describe('첫 홈 별도 서버 조회', () => {
     let release!: () => void;
     const held = new Promise<void>(resolve => { release = resolve; });
     let heldBalanceResponses = 0;
-    // 실제 Lite 서버 응답과 live 전달을 모두 보류하므로 750ms fallback도 값을 우회 전달할 수 없습니다.
+    // 실제 Lite 잔액 응답과 live 전달을 보류하여 일부 준비만으로 홈이 뜨지 않는지 확인합니다.
     await restarted.route('**/google.firestore.v1.Firestore/Listen/channel**', async route => {
       await held;
       await route.continue();
