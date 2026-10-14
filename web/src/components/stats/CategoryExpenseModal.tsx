@@ -1,6 +1,7 @@
 'use client';
 
-import { X } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { ChevronRight, X } from 'lucide-react';
 import { Expense, Category } from '@/types/expense';
 import { useCategoryContext } from '@/contexts/CategoryContext';
 
@@ -18,6 +19,18 @@ export default function CategoryExpenseModal({
   onExpenseClick,
 }: CategoryExpenseModalProps) {
   const { getCategoryLabel, getCategoryColor } = useCategoryContext();
+  const [expandedMonth, setExpandedMonth] = useState<string | null>(null);
+  const months = useMemo(() => {
+    const groups = new Map<string, { expenses: Expense[]; total: number }>();
+    for (const expense of expenses) {
+      const month = expense.date.slice(0, 7);
+      const group = groups.get(month) ?? { expenses: [], total: 0 };
+      group.expenses.push(expense);
+      group.total += expense.amount;
+      groups.set(month, group);
+    }
+    return Array.from(groups).sort(([left], [right]) => right.localeCompare(left));
+  }, [expenses]);
 
   return (
     <div
@@ -25,6 +38,9 @@ export default function CategoryExpenseModal({
       onClick={onClose}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${getCategoryLabel(category)} 지출 내역`}
         className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[80vh] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
@@ -55,29 +71,45 @@ export default function CategoryExpenseModal({
           </button>
         </div>
 
-        {/* 지출 내역 리스트 */}
         <div className="overflow-y-auto max-h-[60vh] p-4">
           <div className="space-y-2">
-            {expenses.map((expense) => (
-              <div
-                key={expense.id}
-                onClick={() => onExpenseClick(expense)}
-                className="flex items-center justify-between p-3 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="font-medium text-slate-800 truncate">
-                    {expense.merchant}
-                  </div>
-                  <div className="text-xs text-slate-500">
-                    {expense.date}
-                    {expense.memo && ` · ${expense.memo}`}
-                  </div>
+            {months.map(([month, group]) => {
+              const [year, monthNumber] = month.split('-');
+              const expanded = expandedMonth === month;
+              return (
+                <div key={month} className="overflow-hidden rounded-xl border border-slate-100">
+                  <button
+                    type="button"
+                    aria-expanded={expanded}
+                    onClick={() => setExpandedMonth(expanded ? null : month)}
+                    className="flex w-full items-center gap-2 bg-slate-50 p-3 text-left hover:bg-slate-100 transition-colors"
+                  >
+                    <ChevronRight aria-hidden="true" className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${expanded ? 'rotate-90' : ''}`} />
+                    <span className="font-medium text-slate-800">{year}년 {Number(monthNumber)}월</span>
+                    <span className="text-xs text-slate-500">{group.expenses.length}건</span>
+                    <span className="ml-auto font-semibold text-slate-800">{group.total.toLocaleString()}원</span>
+                  </button>
+                  {expanded && <div className="divide-y divide-slate-100">
+                    {group.expenses.map(expense => (
+                      <button
+                        type="button"
+                        key={expense.id}
+                        onClick={() => onExpenseClick(expense)}
+                        className="flex w-full items-center justify-between p-3 text-left hover:bg-slate-50 transition-colors"
+                      >
+                        <span className="min-w-0 flex-1">
+                          <span className="block font-medium text-slate-800 truncate">{expense.merchant}</span>
+                          <span className="block text-xs text-slate-500">
+                            {expense.date}{expense.memo && ` · ${expense.memo}`}
+                          </span>
+                        </span>
+                        <span className="ml-3 shrink-0 font-semibold text-slate-800">{expense.amount.toLocaleString()}원</span>
+                      </button>
+                    ))}
+                  </div>}
                 </div>
-                <div className="font-semibold text-slate-800 flex-shrink-0 ml-3">
-                  {expense.amount.toLocaleString()}원
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>

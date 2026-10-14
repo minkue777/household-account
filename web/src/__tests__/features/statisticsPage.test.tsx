@@ -64,9 +64,43 @@ afterEach(() => jest.useRealTimers());
 
 async function openEditor() {
   fireEvent.click(await screen.findByText('상세'));
+  fireEvent.click(screen.getByRole('button', { name: /2026년 9월/ }));
   fireEvent.click(screen.getByText('가게'));
   return screen.getByRole('dialog', { name: '지출 수정' });
 }
+
+it('[T-STAT-005][STAT-004] groups category details by year and month without reading again when a month opens', async () => {
+  read.mockResolvedValue([
+    { ...row, id: 'jan-old', date: '2026-01-02', amount: 100, merchant: '1월 첫 거래' },
+    { ...row, id: 'dec', date: '2025-12-31', amount: 300, merchant: '작년 거래' },
+    { ...row, id: 'jan-new', date: '2026-01-20', amount: 200, merchant: '1월 최근 거래', memo: '기존 메모' },
+    { ...row, id: 'other', date: '2026-01-25', amount: 900, category: 'living', merchant: '다른 카테고리' },
+    { ...row, id: 'zero', date: '2026-09-01', amount: 0, merchant: '0원 거래' },
+  ]);
+  render(<StatsPage />);
+  fireEvent.click(await screen.findByText('상세'));
+  const detail = screen.getByRole('dialog', { name: 'food 지출 내역' });
+  expect(within(detail).getByText('4건 · 600원')).toBeInTheDocument();
+  const months = within(detail).getAllByRole('button', { name: /년 .*월/ });
+  expect(months.map(month => month.textContent)).toEqual([
+    '2026년 9월1건0원', '2026년 1월2건300원', '2025년 12월1건300원',
+  ]);
+  expect(within(detail).queryByText('1월 최근 거래')).not.toBeInTheDocument();
+  fireEvent.click(months[1]);
+  expect(months[1]).toHaveAttribute('aria-expanded', 'true');
+  const trades = within(detail).getAllByRole('button', { name: /1월 .*거래/ });
+  expect(trades[0]).toHaveTextContent('1월 최근 거래');
+  expect(trades[1]).toHaveTextContent('1월 첫 거래');
+  expect(within(detail).getByText('2026-01-20 · 기존 메모')).toBeInTheDocument();
+  expect(within(detail).queryByText('다른 카테고리')).not.toBeInTheDocument();
+  fireEvent.click(months[2]);
+  expect(months[1]).toHaveAttribute('aria-expanded', 'false');
+  expect(within(detail).queryByText('1월 최근 거래')).not.toBeInTheDocument();
+  expect(within(detail).getByText('작년 거래')).toBeInTheDocument();
+  fireEvent.click(months[2]);
+  expect(within(detail).queryByText('작년 거래')).not.toBeInTheDocument();
+  expect(read).toHaveBeenCalledTimes(1);
+});
 
 it('[T-STAT-001][T-STAT-005][STAT-004][STAT-005] distinguishes observed zero, NoData and source failure and advances revision only after a successful command', async () => {
   mockCategories = [category('food', 500), category('living', null)];
@@ -218,6 +252,7 @@ it.each(['success', 'failure'] as const)('a late %s from transaction A does not 
   expect(screen.queryByRole('dialog', { name: '지출 수정' })).not.toBeInTheDocument();
 
   fireEvent.click(screen.getByText('상세'));
+  fireEvent.click(screen.getByRole('button', { name: /2026년 9월/ }));
   fireEvent.click(screen.getByText('둘째 거래'));
   const secondEditor = screen.getByRole('dialog', { name: '지출 수정' });
   fireEvent.change(within(secondEditor).getByPlaceholderText('메모를 입력하세요'), { target: { value: '두번째 거래 작성 중' } });

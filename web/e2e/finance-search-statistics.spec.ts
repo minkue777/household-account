@@ -113,7 +113,8 @@ test('[T-SEA-002][T-SEA-003][SEA-003][SEA-004] 50건이 넘어도 월 전체를 
   await expect(edit.getByPlaceholder('메모를 입력하세요')).toHaveValue('같은 월에서 이어서 수정');
 });
 
-test('[T-LED-009][STAT-001][STAT-002][STAT-003][LED-006] 3·6·12개월과 지정 기간은 서로 다른 실제 합계를 표시하며 차트와 카테고리 선택이 작동한다', async ({ page, request }) => {
+test('[T-LED-009][T-STAT-005][STAT-001][STAT-002][STAT-003][STAT-004][LED-006] 3·6·12개월과 지정 기간은 서로 다른 실제 합계를 표시하며 차트와 카테고리 월별 상세가 작동한다', async ({ page, request }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
   await createFinanceHousehold(page, request);
   for (const [offset, amount] of [[0, 1100], [-2, 2200], [-5, 4400], [-11, 8800], [-13, 17600]]) {
     await addExpenseThroughUi(page, request, { merchant: `통계 ${offset}개월`, amount, date: seoulDate(offset), category: '식비' });
@@ -127,6 +128,25 @@ test('[T-LED-009][STAT-001][STAT-002][STAT-003][LED-006] 3·6·12개월과 지�
     await expect(page.locator('canvas')).toHaveCount(2);
     await expect(page.getByRole('button', { name: new RegExp(`식비.*${expected}.*100%`) })).toBeVisible();
   }
+  await page.getByRole('button', { name: /식비.*3,300원.*100%/ }).click();
+  const detail = page.getByRole('dialog', { name: '식비 지출 내역' });
+  await expect(detail.getByText('2건 · 3,300원', { exact: true })).toBeVisible();
+  const months = detail.getByRole('button', { name: /년 .*월/ });
+  await expect(months).toHaveCount(2);
+  for (const [index, offset, amount] of [[0, 0, '1,100원'], [1, -2, '2,200원']] as const) {
+    const date = seoulDate(offset);
+    await expect(months.nth(index)).toContainText(`${date.slice(0, 4)}년 ${Number(date.slice(5, 7))}월`);
+    await expect(months.nth(index)).toContainText(amount);
+    await expect(months.nth(index)).toHaveAttribute('aria-expanded', 'false');
+  }
+  await expect(detail.getByText('통계 0개월', { exact: true })).toHaveCount(0);
+  await months.nth(0).click();
+  await expect(detail.getByText('통계 0개월', { exact: true })).toBeVisible();
+  await months.nth(1).click();
+  await expect(detail.getByText('통계 -2개월', { exact: true })).toBeVisible();
+  await expect(detail.getByText('통계 0개월', { exact: true })).toHaveCount(0);
+  await page.screenshot({ path: test.info().outputPath('category-monthly.png') });
+  await detail.getByRole('button', { name: '닫기', exact: true }).click();
   for (const label of ['생활비', '육아비', '식비']) await expect(page.getByRole('button', { name: label, exact: true })).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('button', { name: '식비', exact: true }).click();
   await expect(page.getByRole('button', { name: '식비', exact: true })).toHaveAttribute('aria-pressed', 'false');
@@ -135,6 +155,12 @@ test('[T-LED-009][STAT-001][STAT-002][STAT-003][LED-006] 3·6·12개월과 지�
   await page.getByLabel('시작 월').fill(seoulDate(-13).slice(0, 7));
   await page.getByLabel('종료 월').fill(seoulDate(-13).slice(0, 7));
   await expect(total).toHaveText('17,600원');
+  await page.getByRole('button', { name: /식비.*17,600원.*100%/ }).click();
+  await expect(months).toHaveCount(1);
+  await expect(months).toHaveAttribute('aria-expanded', 'false');
+  await months.click();
+  await expect(detail.getByText('통계 -13개월', { exact: true })).toBeVisible();
+  await detail.getByRole('button', { name: '닫기', exact: true }).click();
   await page.getByLabel('시작 월').fill(seoulDate().slice(0, 7));
   await expect(page.locator('p[role="alert"]')).toHaveText('시작 월은 종료 월보다 늦을 수 없습니다.');
   await expect(page.getByText('17,600원', { exact: true })).toHaveCount(0);
@@ -148,6 +174,7 @@ test('[STAT-003][STAT-004] 예산 카테고리만 추이 기본값으로 선택�
   await expect(page.getByRole('button', { name: '취미활동', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('button', { name: '식비', exact: true })).toHaveAttribute('aria-pressed', 'false');
   await page.getByRole('button', { name: /취미활동.*7,000원/ }).click();
+  await page.getByRole('dialog', { name: '취미활동 지출 내역' }).getByRole('button', { name: /년 .*월/ }).click();
   await page.getByText('통계 상세 수정', { exact: true }).click();
   let edit = page.getByRole('dialog', { name: '지출 수정' });
   await edit.locator('input[type="number"]').fill('9000');
@@ -155,6 +182,7 @@ test('[STAT-003][STAT-004] 예산 카테고리만 추이 기본값으로 선택�
   await edit.getByRole('button', { name: '저장', exact: true }).click();
   await expect(page.locator('span.text-xl.font-bold')).toHaveText('9,000원');
   await page.getByRole('button', { name: /식비.*9,000원/ }).click();
+  await page.getByRole('dialog', { name: '식비 지출 내역' }).getByRole('button', { name: /년 .*월/ }).click();
   await page.getByText('통계 상세 수정', { exact: true }).click();
   edit = page.getByRole('dialog', { name: '지출 수정' });
   await edit.getByRole('button', { name: '삭제', exact: true }).click();

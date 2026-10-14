@@ -24,3 +24,10 @@
 - 로컬 로그: `TEMP/household-toss-cashback-{before,unit,types,firebase}-20261014.log`.
 
 배포 후보의 정확한 SHA와 release marker는 Firebase wrapper의 provenance로 검증하며 CI는 독립 실행한다.
+
+## 배포 준비 상태
+
+- 구현 `db131ee661574c903e0a6f54381b7b2ba50bf48d`를 push했고 [CI 38515812333](https://github.com/minkue777/household-account/actions/runs/38515812333)를 추적한다.
+- clean HEAD에서 배포 계획은 Functions 세 codebase를 선택했다. production build·architecture 43개 검사·artifact hash 계산을 마쳤다.
+- 실제 서버 배포는 아직 실행하지 않았다. 사용자 로그인 smoke 세션이 없고 현재 연결 가능한 브라우저가 없어, 기존 로그인 프로필에서 `http://localhost:55318/`을 열도록 요청한 상태다. 준비 도구가 로그인 상태를 복원하면 ID token은 저장소 밖 파일로만 전달한다.
+- 후속 Web 변경으로 HEAD가 바뀌면 최신 clean HEAD에서 hash와 manifest를 다시 준비한 뒤 wrapper로 배포한다. 사용자 원장 데이터의 직접 보정은 수행하지 않는다.

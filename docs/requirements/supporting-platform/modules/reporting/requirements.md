@@ -76,7 +76,7 @@
 | STAT-001 | 현재 명세 | 지출 통계는 최근 3개월, 6개월, 12개월, 사용자 지정 기간을 지원한다. | 사용자 지정 날짜가 불완전하면 12개월로 대체한다. | [stats page](../../../../../web/src/app/stats/page.tsx) | U, E2E |
 | STAT-002 | 현재 명세 | 선택 기간 총지출, 월별 추이, 카테고리별 비중을 표시한다. | 지출만 집계한다. | 같은 근거 | U, I, E2E |
 | STAT-003 | 현재 명세 | 추이 카테고리 초기값은 예산 설정 카테고리이며 없으면 생활비·육아비·식비이다. | 사용자 토글은 현재 영구 저장하지 않는다. | 같은 근거 | U, UI |
-| STAT-004 | 현재 명세 | 카테고리 상세에서 거래를 수정·삭제하고 가맹점 규칙을 저장할 수 있다. | 수정 결과는 화면 상태에도 반영한다. | 같은 근거 | I, E2E |
+| STAT-004 | 현재 명세 | 선택한 조회 기간의 카테고리 상세를 월별 건수·합계로 표시하고, 월을 펼쳐 거래를 수정·삭제하거나 가맹점 규칙을 저장할 수 있다. | 연월 내림차순이며 거래가 없는 월은 제외한다. 월 안의 거래는 최신 날짜순이고 월 펼침은 추가 조회 없이 처리한다. 수정 결과는 화면 상태에도 반영한다. | 같은 근거 | I, E2E |
 | STAT-005 | 결함 | 지출·자산 통계 원천의 유효한 0원, `NoData`, `RetryableFailure`·`ContractFailure`를 서로 다른 결과와 화면 상태로 보존한다. | 지출 통계는 조회 시 계산하므로 Projection freshness 상태를 만들지 않는다. 원천 하나가 실패해도 빈 배열·0원 성공으로 바꾸지 않는다. | [stats page](../../../../../web/src/app/stats/page.tsx), [asset stats](../../../../../web/src/app/assets/stats/page.tsx), [assetService](../../../../../web/src/lib/assetService.ts), [DEC-048](../../../governance/decisions.md#dec-048) | U, C, UI, E2E |
 | STAT-006 | 목표 명세 | 통계 원천 조회는 서버 날짜 범위와 cursor·page limit으로 제한하고, 집계에 필요한 모든 page를 읽은 뒤에만 완전한 결과를 반환한다. 화면은 현재 Actor·가구·query revision과 일치하는 응답만 반영한다. | 전체 원장을 무제한 client 조회하거나 설정 상한에 걸린 부분 합계를 완전한 값처럼 표시하지 않는다. 필터·세션·가구 변경 또는 화면 종료 뒤 도착한 이전 응답은 폐기한다. | [expenseService](../../../../../web/src/lib/expenseService.ts), [assetService](../../../../../web/src/lib/assetService.ts), [stats page](../../../../../web/src/app/stats/page.tsx), [DEC-048](../../../governance/decisions.md#dec-048) | C, I, UI |
 | STAT-AST-001 | 결함 | 자산 통계는 3개월, 6개월, 1년, 전체 기간과 금융자산 전용 토글을 제공하며 전체 기간은 가장 오래된 유효 snapshot부터 시작한다. | 기본 기간은 3개월이며 금융자산 토글은 부동산·대출을 제외한다. 현재 `ALL`은 2020-01-01로 고정되어 그 이전 snapshot을 누락한다. | [asset stats](../../../../../web/src/app/assets/stats/page.tsx) | U, UI, E2E |
@@ -115,7 +115,7 @@
 | T-STAT-PERIOD-005 | UTC 날짜가 다른 자정 경계에서도 Asia/Seoul의 현재 월을 기준으로 기간을 계산한다. | U | STAT-001, DEC-023 |
 | T-STAT-003 | 같은 기간에 지출과 수입·취소 거래·빈 월이 있으면 활성 지출만 총액·월별·카테고리별 집계에 포함한다. | U, I | STAT-002 |
 | T-STAT-004 | 예산 설정 활성 카테고리가 있으면 예산 순서의 초기 추이 목록으로, 없으면 존재하는 호환 기본 카테고리를 사용하며 토글은 저장하지 않는다. | U, UI | STAT-003 |
-| T-STAT-005 | 카테고리 상세에서 거래 변경·삭제·규칙 저장 성공 후 소유 모듈의 receipt·Event와 권위 조회 모델로 수렴하고 query revision을 전진시키며, 실패·Conflict면 기존 상태·revision을 유지한다. | Application, I, E2E | STAT-004 |
+| T-STAT-005 | 카테고리 상세가 선택 기간·카테고리 안에서 연도를 구분해 월별 건수·합계와 최신순 거래를 표시하며 빈 월은 제외하고 펼침에 추가 조회하지 않는다. 거래 변경·삭제·규칙 저장 성공 후 소유 모듈의 receipt·Event와 권위 조회 모델로 수렴하고 query revision을 전진시키며, 실패·Conflict면 기존 상태·revision을 유지한다. | Application, UI, I, E2E | STAT-004 |
 | T-STAT-001 | 0원 원천, 데이터 없음, 저장소·공급자 실패를 각각 반환하면 통계와 화면이 세 상태를 그대로 구분한다. | U, C, UI | STAT-005, DEC-048 |
 | T-STAT-002 | Ledger·자산 원천의 단일/여러 cursor page, cursor 누락·중복·checkpoint 변경·안전 상한 초과, 필터·Actor가 바뀐 뒤 이전 응답 / 통계 조회 / 같은 사실은 page 구성과 무관하게 같은 결과이고 전체 page 완료 뒤만 집계하며 불완전 조회와 오래된 응답은 완전한 결과로 반영하지 않음 | C, I, UI | STAT-006, DEC-048 |
 | T-STAT-AST-003 | 자산 통계 3개월·6개월·1년의 정확한 월 경계와 기본 3개월, `ALL` 최초 유효 snapshot, 금융자산 토글 / 기간 조회 / preset별 포함 snapshot이 정확하고 금융자산 토글 시 부동산과 대출을 제외한다. | U, UI | STAT-AST-001 |
