@@ -1664,6 +1664,8 @@ Cloud Function 왕복 시간 때문에 빠른 편집 화면이 0.5~1초 동안 �
 <a id="dec-070"></a>
 ## DEC-070 토스 캐시백 순지출과 원승인 총액 증거 분리
 
+2026-10-14 [DEC-076](#dec-076)에서 신규 승인 금액 정책을 변경했습니다. 아래는 최초 결정 기록이며 과거 증거·취소·재전송 보존 원칙은 유지합니다.
+
 > 상태: Accepted  
 > 결정일: 2026-09-06  
 > 정책 소유 Context: [Payment Capture](../contexts/payment-capture/requirements.md)  
@@ -1768,3 +1770,17 @@ Cloud Function 왕복 시간 때문에 빠른 편집 화면이 0.5~1초 동안 �
 정규화·요청/응답·오류·동시성 계약과 검증 경계는 [원장 상세 설계](../contexts/household-finance/modules/ledger/design.md)가 소유합니다.
 
 영향 요구사항: LED-011, LED-012, SEA-006, QE-002, QE-010, QE-013. Canonical 테스트: T-LED-011, T-LED-012, T-SEA-004, T-QE-004, T-QE-008.
+
+<a id="dec-076"></a>
+## DEC-076 토스 캐시백 무시와 결제금액 기록
+
+> 상태: Accepted  
+> 결정일: 2026-10-14  
+> 정책 소유 Context: [Payment Capture](../contexts/payment-capture/requirements.md)  
+> 근거: 사용자 요청 “토스 캐시백 금액 고려하도록 파서되어있을텐데 캐시백 무시하게 수정”
+
+- 새 토스 승인 10,000원·캐시백 500원은 원장과 QuickEdit에 10,000원으로 기록합니다. 캐시백 금액 추출·차감·0원 제한 계산을 제거하며 캐시백만 있는 알림은 거래로 만들지 않습니다.
+- 취소는 기존 원승인 총액·가맹점·카드·기간 대조를 유지합니다. 과거 순액 거래의 불변 `approvalAmountInWon`과 최초 receipt를 보존하고 동일 원문 재전송은 최초 결과를 재생합니다.
+- 기존 거래를 일괄 수정하거나 캐시백을 수입·별도 지출로 생성하지 않습니다. 가승인 제외, 날짜·가맹점·카드 해석, 권한·원자성·멱등성은 유지합니다.
+
+영향 요구사항: PARSE-TOSS-001, CAN-003, ING-008, T-PARSE-001, T-PARSE-002, T-CAN-LINEAGE-001.

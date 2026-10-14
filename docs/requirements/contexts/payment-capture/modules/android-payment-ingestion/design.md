@@ -132,7 +132,7 @@ interface CaptureEnvelopeV1 {
 
 ### 3.3 공개 Input Port
 
-토스 승인 parser의 `approvalAmountInWon`은 공개 envelope 밖의 서버 내부 `CaptureSubmissionCommand` → branch context → 승인 저장 Port로 전달합니다. [DEC-070](../../../../governance/decisions.md#dec-070)에 따라 `captureRecords.amountInWon`은 원래 순지출, `captureRecords.approvalAmountInWon`은 캐시백 차감 전 총액입니다. 원장·legacy 지출·QuickEdit에는 순지출을 사용합니다. 기존 wire와 중복 fingerprint를 유지하며 원문 hash에 결박된 이 파생 필드는 기존 receipt identity를 바꾸지 않습니다.
+토스 승인 parser의 `approvalAmountInWon`은 공개 envelope 밖의 서버 내부 `CaptureSubmissionCommand` → branch context → 승인 저장 Port로 전달합니다. [DEC-076](../../../../governance/decisions.md#dec-076)에 따라 신규 토스 승인은 캐시백을 해석·차감하지 않고 `captureRecords.amountInWon`, `approvalAmountInWon`, 원장·QuickEdit에 결제금액을 사용합니다. 과거 순액 기록의 총액 증거와 취소 호환은 유지하며 기존 거래를 다시 계산하지 않습니다. 기존 wire와 중복 fingerprint를 유지하며 원문 hash에 결박된 이 파생 필드는 기존 receipt identity를 바꾸지 않습니다.
 
 | 이름·종류 | 호출자 | 입력 | 결과 | 권한 | 일관성·멱등성 |
 |---|---|---|---|---|---|
@@ -241,7 +241,7 @@ CityGas parser의 최소 성공 조건은 도시가스 청구 문구와 총액�
 
 - 검색 범위는 파싱된 취소일부터 30일 전까지이며 날짜 파싱 실패 시 당일 범위입니다.
 - 금액·정규 가맹점·카드가 모두 일치하는 후보만 취소할 수 있습니다.
-- 토스 캐시백 승인의 취소 금액은 불변 `approvalAmountInWon`과 대조합니다. 필드가 없던 과거 기록은 기존 `amountInWon`으로만 비교하며 캐시백을 추정하지 않습니다. 총액이 유효한 정수가 아니거나 순액보다 작으면 후보에서 제외합니다.
+- 과거 캐시백 차감 기록을 포함한 토스 승인의 취소 금액은 불변 `approvalAmountInWon`과 대조합니다. 필드가 없던 과거 기록은 기존 `amountInWon`으로만 비교하며 캐시백을 추정하지 않습니다. 총액이 유효한 정수가 아니거나 순액보다 작으면 후보에서 제외합니다.
 - 월 분할 그룹은 합계로 원승인을 추정하지 않습니다. [DEC-071](../../../../governance/decisions.md#dec-071)에 따라 불변 승인 금액과 완전 일치하는 유일 계보를 선택합니다. 10,001원 승인을 5,000원씩 두 달로 나누어도 원승인 10,001원 취소로 원본·미래 월분까지 함께 삭제합니다. 원승인 증거가 없는 구형 그룹은 합계 차이가 0원이더라도 `NotFound`입니다.
 - 금액·카드가 같아도 정규 가맹점이 다르면 후보에서 제외합니다. 완전 일치 후보가 없으면 [DEC-012](../../../../governance/decisions.md#dec-012)에 따라 확인 후보를 만들거나 Ledger를 호출하지 않고 `NotFound`입니다.
 - 완전 일치 후보가 둘 이상이면 저장 순서로 선택하지 않고 `NeedsConfirmation`입니다.
@@ -254,7 +254,7 @@ CityGas parser의 최소 성공 조건은 도시가스 청구 문구와 총액�
 승인 Intake는 observationId, sourceType, parser ID/version, 원 amount, 정규화 전 merchant candidate, 최소 card evidence, occurredAt을 `CaptureProvenanceV1`으로 만들어 `RecordCapturedTransaction`에 전달합니다. Ledger가 반환한 `captureLineageId`는 QuickEdit 수정과 모든 분할·합치기 파생 거래가 유지해야 하는 내부 참조입니다.
 
 - provenance는 append-only 내부 snapshot이며 일반 거래 수정 Command의 patch 대상이 아닙니다.
-- 토스의 순지출과 원승인 총액은 별도 증거로 유지하며 수정·분할·합치기 후에도 원 총액으로 취소합니다. 취소 완료 때는 총액을 포함한 결제 상세 증거를 제거하고 기존 최소 tombstone만 남깁니다.
+- 토스 신규 승인은 결제금액 그대로 저장하고 과거 순지출과 원승인 총액은 별도 증거로 유지하며 수정·분할·합치기 후에도 원 총액으로 취소합니다. 취소 완료 때는 총액을 포함한 결제 상세 증거를 제거하고 기존 최소 tombstone만 남깁니다.
 - 전체 알림 원문, title, textLines, 가구 key, 전체 카드 번호는 포함하지 않습니다.
 - capture fingerprint와 provenance는 목적이 다릅니다. fingerprint는 중복 claim용 hash이고 provenance는 취소 후보 사실 복원용 최소 증거입니다.
 - 파생 거래 취소는 provenance와 lineage가 모두 완전해야 하며 `CancellationLineagePolicy`가 대상 lineage를 확정합니다. 불완전 legacy lineage는 추정 삭제하지 않고 typed failure입니다.
@@ -463,7 +463,7 @@ parser golden fixture에는 정상 승인, 지원 취소, 빈 필드, 0원·음�
 | [PARSE-KB-001](requirements.md#52-지원-입력-형식) | Parser Golden | KB parser | 승인·취소·요약형·게시시각 없음, 줄바꿈 없는 inline `MM/DD HH:mm` 본문과 후행 `누적`, `KB국민체크(1164)` 문자 분리형과 `가맹점 사용` | 명의자 무시, inline 가맹점 추출·후행 누적 제거, 사용 접미사 제거, 금액·일시·국민 token 추출 | `T-PARSE-001`, `T-PARSE-002` |
 | [PARSE-NH-001](requirements.md#52-지원-입력-형식) | Parser Golden | NH parser | 승인·승인취소·M/D·농협 token, 문자 앱의 `[Web발신]`·마스킹 헤더·별도 명의자/일시/가맹점·총누적 | 금액·일시·가맹점·카드·취소 구분, 명의자 행은 creator 결정에서 제외 | `T-PARSE-001`, `T-PARSE-002` |
 | [PARSE-NAVER-001](requirements.md#52-지원-입력-형식) | Parser Golden | Naver parser | 승인 문장·게시시각·clock fallback | 승인 후보와 결정 시각 | `T-PARSE-001` |
-| [PARSE-TOSS-001](requirements.md#52-지원-입력-형식) | Parser Golden, Firebase Integration | Toss parser·원장·취소 | 승인·취소·가승인·캐시백이 총액 초과, 수정·분할 후 취소 | 순지출 표시·원승인 총액 보존, 총액 취소 연결, 가승인 제외 | `T-PARSE-001`, `T-PARSE-002`, `T-CAN-LINEAGE-001` |
+| [PARSE-TOSS-001](requirements.md#52-지원-입력-형식) | Parser Golden, Firebase Integration | Toss parser·원장·취소 | 승인·취소·가승인·캐시백이 총액 초과, 수정·분할 후 취소 | 캐시백 무시·결제금액 표시·원승인 총액 보존, 과거 receipt 재생·총액 취소 연결, 가승인 제외 | `T-PARSE-001`, `T-PARSE-002`, `T-CAN-LINEAGE-001` |
 | [PARSE-KAKAO-001](requirements.md#52-지원-입력-형식) | Parser Golden | KakaoPay parser | 완료 제목·가맹점·금액·시각 없음 | 게시시각 또는 clock으로 승인 | `T-PARSE-001` |
 | [PARSE-ONNURI-001](requirements.md#52-지원-입력-형식) | Parser Golden | Onnuri parser | 상품권 결제·시각 없음 | 승인과 시각 fallback | `T-PARSE-001` |
 | [PARSE-PAYBOOC-001](requirements.md#52-지원-입력-형식) | Parser Golden | Paybooc parser | 인라인·분리·취소·0원·빈 merchant | 유효 양수 승인/취소와 카드 정규화 | `T-PARSE-001`, `T-PARSE-002` |

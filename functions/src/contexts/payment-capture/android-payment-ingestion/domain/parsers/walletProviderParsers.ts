@@ -18,7 +18,6 @@ const TOSS_MERCHANT_PATTERN =
   /(?:토스뱅크\s*체크카드|페이스페이\s*\(토스뱅크\))\s*\|\s*(.+)/u;
 const TOSS_AMOUNT_MERCHANT_PATTERN =
   /[\d,]+원\s*결제(?:\s*취소)?\s*\|\s*(.+)/u;
-const TOSS_CASHBACK_PATTERN = /^([\d,]+)원\s*캐시백/mu;
 
 const KAKAO_PAYMENT_TITLE_PATTERN = /결제가\s*완료되었어요/u;
 const KAKAO_PAYMENT_BODY_PATTERN =
@@ -67,10 +66,6 @@ function parseToss(context: ProviderParserContext): AndroidProviderParseResult {
     return { kind: "Ignored", code: "PREAUTHORIZATION" };
   }
   const grossAmount = amountInWon(amountEvent[1]);
-  const cashbackMatch = TOSS_CASHBACK_PATTERN.exec(normalized);
-  const cashback = cashbackMatch === null
-    ? 0
-    : (amountInWon(cashbackMatch[1]) ?? 0);
   if (grossAmount === undefined) {
     return ignoredParseFailure("INVALID_AMOUNT");
   }
@@ -79,9 +74,7 @@ function parseToss(context: ProviderParserContext): AndroidProviderParseResult {
     context,
     payment: {
       type: cancellation ? "cancellation" : "approval",
-      amountInWon: cancellation
-        ? grossAmount
-        : Math.max(grossAmount - cashback, 0),
+      amountInWon: grossAmount,
       ...(cancellation ? {} : { approvalAmountInWon: grossAmount }),
       merchant,
       cardCompany: "토스",

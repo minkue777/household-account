@@ -33,8 +33,9 @@ function setup() {
   const submissions = createCaptureSubmissionApplication({
     branches: createCaptureBranchSubmissionApplication({ receipts: new FirebaseCaptureSubmissionReceiptStore(database), payloads: new Sha256CapturePayloadFingerprint(), transactions: gateway, balances: { recordBalanceObservation: balance } }),
   });
-  const raw = createAndroidRawNotificationSubmissionApplication({ parser: createAndroidProviderParser(), submissions, payloads: new Sha256AndroidRawNotificationHasher(), clock: { now: () => "2026-09-06T00:00:00.000Z" } });
-  return { memory, balance, configuration, submit: (notification: AndroidRawNotificationInput["notification"], packageName = "com.samsung.android.messaging", observationId = "observation.flow") => raw.submit({ actor, input: { contractVersion: "android-raw-notification.v1", observationId, packageName, notification } }) };
+  const parser = createAndroidProviderParser();
+  const raw = createAndroidRawNotificationSubmissionApplication({ parser, submissions, payloads: new Sha256AndroidRawNotificationHasher(), clock: { now: () => "2026-09-06T00:00:00.000Z" } });
+  return { memory, balance, configuration, parser, submit: (notification: AndroidRawNotificationInput["notification"], packageName = "com.samsung.android.messaging", observationId = "observation.flow") => raw.submit({ actor, input: { contractVersion: "android-raw-notification.v1", observationId, packageName, notification } }) };
 }
 
 describe("raw parser부터 실제 Capture receipt와 Firebase Ledger까지", () => {
@@ -44,15 +45,15 @@ describe("raw parser부터 실제 Capture receipt와 Firebase Ledger까지", () 
     textLines: ["토스뱅크 체크카드 | 테스트 가맹점", `${amount.toLocaleString("en-US")}원 결제${cancel ? " 취소" : ""}`, `${cashback}원 캐시백`],
   });
 
-  it("[PARSE-TOSS-001][CAN-003][T-CAN-002] 캐시백 순지출을 저장하고 원승인 총액 취소만 연결하며 재전송은 반복 삭제하지 않는다", async () => {
+  it("[PARSE-TOSS-001][CAN-003][T-CAN-002] 캐시백을 차감하지 않은 결제금액을 저장하고 총액 취소만 연결하며 재전송은 반복 삭제하지 않는다", async () => {
     const subject = setup();
     const approved = await subject.submit(toss(10_000), "viva.republica.toss", "observation.toss.approval");
-    expect(approved).toMatchObject({ kind: "success", value: { transactionResult: { kind: "created", quickEditSnapshot: { amountInWon: 9_500 } } } });
+    expect(approved).toMatchObject({ kind: "success", value: { transactionResult: { kind: "created", quickEditSnapshot: { amountInWon: 10_000 } } } });
     const records = subject.memory.documentsInCollection("households/house/captureRecords");
     expect(records).toHaveLength(1);
-    expect(records[0].value).toMatchObject({ amountInWon: 9_500, approvalAmountInWon: 10_000 });
+    expect(records[0].value).toMatchObject({ amountInWon: 10_000, approvalAmountInWon: 10_000 });
     const ledgerBefore = subject.memory.documentsInCollection("households/house/ledgerTransactions");
-    expect(ledgerBefore[0].value).toMatchObject({ amountInWon: 9_500, amount: 9_500 });
+    expect(ledgerBefore[0].value).toMatchObject({ amountInWon: 10_000, amount: 10_000 });
     expect(subject.memory.documentsInCollection("expenses")).toHaveLength(0);
     expect(await subject.submit(toss(10_000), "viva.republica.toss", "observation.toss.approval")).toEqual(approved);
 
@@ -68,14 +69,39 @@ describe("raw parser부터 실제 Capture receipt와 Firebase Ledger까지", () 
     expect(subject.memory.documentsInCollection("outboxEvents")).toEqual(outboxBefore);
   });
 
-  it("[PARSE-TOSS-001][ING-008] 같은 관찰 ID의 다른 원문은 거부하고 캐시백으로 0원이 된 거래는 생성하지 않는다", async () => {
+  it("[PARSE-TOSS-001][ING-008] 금액 계산에서 무시한 캐시백도 같은 관찰 ID의 원문이 바뀌면 거부한다", async () => {
     const subject = setup();
     const original = await subject.submit(toss(10_000), "viva.republica.toss");
-    // 순액은 같지만 승인 총액과 캐시백이 다른 알림입니다.
-    expect(await subject.submit(toss(11_000, false, 1_500), "viva.republica.toss")).toMatchObject({ kind: "conflict", code: "IDEMPOTENCY_PAYLOAD_MISMATCH" });
+    // 캐시백만 바뀌어도 원문 identity는 다릅니다.
+    expect(await subject.submit(toss(10_000, false, 1_500), "viva.republica.toss")).toMatchObject({ kind: "conflict", code: "IDEMPOTENCY_PAYLOAD_MISMATCH" });
     expect(await subject.submit(toss(10_000), "viva.republica.toss")).toEqual(original);
-    expect(await subject.submit(toss(1_000, false, 1_500), "viva.republica.toss", "observation.toss.zero")).toEqual({ kind: "success", value: { observationId: "observation.toss.zero", completion: "terminal" } });
     expect(subject.memory.documentsInCollection("households/house/ledgerTransactions")).toHaveLength(1);
+  });
+
+  it.each([1_000, 1_500])("[PARSE-TOSS-001] 캐시백 %s원이 결제금액 이상이어도 결제금액을 기록한다", async (cashback) => {
+    const subject = setup();
+    expect(await subject.submit(toss(1_000, false, cashback), "viva.republica.toss"))
+      .toMatchObject({ kind: "success", value: { transactionResult: { kind: "created", quickEditSnapshot: { amountInWon: 1_000 } } } });
+    expect(subject.memory.documentsInCollection("households/house/ledgerTransactions")[0].value.amountInWon).toBe(1_000);
+  });
+
+  it("[PARSE-TOSS-001][ING-008][CAN-003] 배포 전 차감된 승인의 재전송은 최초 결과를 보존하고 총액으로 취소한다", async () => {
+    const subject = setup();
+    const parse = subject.parser.parse.bind(subject.parser);
+    // 배포 전 파서 출력만 재현하고 receipt·원장 저장과 재전송은 실제 경로를 사용합니다.
+    vi.spyOn(subject.parser, "parse").mockImplementationOnce(input => {
+      const result = parse(input);
+      if (result.kind !== "Parsed" || !result.payment) throw new Error("Toss approval required");
+      return { ...result, payment: { ...result.payment, amountInWon: 9_500 } };
+    });
+    const first = await subject.submit(toss(10_000), "viva.republica.toss");
+    expect(first).toMatchObject({ kind: "success", value: { transactionResult: { kind: "created", quickEditSnapshot: { amountInWon: 9_500 } } } });
+    const before = subject.memory.documentsInCollection("households/house/ledgerTransactions");
+    expect(await subject.submit(toss(10_000), "viva.republica.toss")).toEqual(first);
+    expect(subject.memory.documentsInCollection("households/house/ledgerTransactions")).toEqual(before);
+    expect(await subject.submit(toss(10_000, true), "viva.republica.toss", "observation.old-toss.cancel"))
+      .toMatchObject({ kind: "success", value: { transactionResult: { kind: "cancelled" } } });
+    expect(subject.memory.documentsInCollection("households/house/ledgerTransactions")).toHaveLength(0);
   });
 
   const fixture = readContractJson<{ cases: { caseId: string; raw: AndroidRawNotificationInput["notification"] }[] }>("fixtures/payment-capture/android-provider-parser-golden.v1.json");

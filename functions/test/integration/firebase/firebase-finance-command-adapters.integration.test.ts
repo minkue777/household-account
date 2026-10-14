@@ -358,7 +358,6 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
     { transformation: "monthly-split", gross: 10_000, cashback: 500 },
     { transformation: "monthly-split", gross: 10_001, cashback: 0 },
   ])("[PARSE-TOSS-001][CAN-003][T-CAN-006][T-CAN-LINEAGE-001] $gross원 승인·$cashback원 캐시백을 $transformation한 뒤에도 원본·모든 파생을 취소한다", async ({ transformation, gross, cashback }) => {
-    const net = gross - cashback;
     const household = database.collection("households").doc(HOUSEHOLD_ID);
     await household.collection("registeredCards").doc("toss").set({ ownerMemberId: actor.actingMemberId, companyLabel: "토스", lifecycleState: "active" });
     await household.collection("categoryCatalog").doc("current").set(categoryCatalogDocument(HOUSEHOLD_ID, [{ categoryId: "etc" }], { defaultCategoryId: "etc" }));
@@ -388,11 +387,11 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
     if (approved.kind !== "success" || approved.value.transactionResult?.kind !== "created") throw new Error(`Approval required: ${JSON.stringify(approved)}`);
     const transactionId = approved.value.transactionResult.transactionId;
     const canonical = household.collection("ledgerTransactions");
-    expect(approved.value.transactionResult.quickEditSnapshot?.amountInWon).toBe(net);
-    expect((await canonical.doc(transactionId).get()).data()?.amountInWon).toBe(net);
+    expect(approved.value.transactionResult.quickEditSnapshot?.amountInWon).toBe(gross);
+    expect((await canonical.doc(transactionId).get()).data()?.amountInWon).toBe(gross);
     expect((await database.collection("expenses").doc(transactionId).get()).exists).toBe(false);
     const evidence = (await household.collection("captureRecords").get()).docs[0];
-    expect(evidence.data()).toMatchObject({ amountInWon: net, approvalAmountInWon: gross });
+    expect(evidence.data()).toMatchObject({ amountInWon: gross, approvalAmountInWon: gross });
     const handlers = createLedgerHouseholdCommandHandlers(database);
     let derivedIds: string[] = [];
     if (transformation === "edit") {
@@ -402,7 +401,7 @@ describeWithFirestoreEmulator("Firebase finance command adapters", () => {
       const split = await execute(handlers, "ledger.split-existing-transaction-monthly.v1", "split-toss", { transactionId, expectedVersion: 1, months: 2 }) as { transactionIds: string[] };
       derivedIds = split.transactionIds;
       expect(derivedIds).toHaveLength(2);
-      for (const id of derivedIds) expect((await canonical.doc(id).get()).data()?.amountInWon).toBe(Math.floor(net / 2));
+      for (const id of derivedIds) expect((await canonical.doc(id).get()).data()?.amountInWon).toBe(Math.floor(gross / 2));
       expect((await canonical.doc(derivedIds[1]).get()).data()?.accountingDate).toBe("2026-08-21");
     }
     expect((await evidence.ref.get()).data()).toEqual(evidence.data());
