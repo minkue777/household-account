@@ -32,3 +32,10 @@
 - 변경 전에는 느린 정상 응답 채택과 전체 무응답 경계 검사가 실패했다. 변경 후 관련 Jest 11개 파일 122개, TypeScript `tsc --noEmit`, 요구사항 catalog·E2E 추적성 검사가 통과했다.
 - 제한된 실행 환경에서는 Vite/Next build가 `spawn EPERM`으로 중단됐다. 사용자 권한 변경 뒤 같은 E2E 준비 경로의 Functions architecture 43개와 세 codebase 빌드가 통과했다. 검사 설정을 바꾸거나 생략하지 않았다.
 - 실제 WebKit·Android 검사는 실행 중이며 배포 완료를 의미하지 않는다. 로컬 로그: `TEMP/household-initial-deadline-{related,prepare,webkit}-20261014.log`.
+
+### 후속 검증과 배포
+
+- 제품 `13d927787d18f942bc052c37c98dfcd7b51b24f3`의 Vercel Git 자동배포와 GitHub Production deployment `7065099574`가 성공했다. 운영 `/`·`/sw.js` HTTP 200과 SHA 포함, 해당 SHA `_buildManifest.js` HTTP 200을 확인했다. Firebase·APK는 변경하지 않았다.
+- 실제 Emulator/production build/WebKit에서 지연 초기 응답의 Listen 선행 표시, 마지막 잔액까지 전체 대기, live 전환 후 수정·삭제 3개가 통과했다.
+- 새 무응답·재시도 검사는 오류 상태 도달 후 `role=alert`가 앱 오류와 Next.js `__next-route-announcer__` 두 개에 일치해 실패했다. 제품 오류가 아니라 검사 선택 범위 문제이며, WebKit과 Android 관측을 실제 `main` 오류 영역으로 한정했다. 20초·실제 새로고침·최신 금액·완료 계측 검증은 유지한다.
+- Android instrumentation Kotlin 컴파일은 통과했다. API 36.1 에뮬레이터 시작 때 발생한 시스템 Bluetooth 오류 대화상자만 닫고 HOME 포커스를 확인했다. 앱 오류를 닫거나 검증을 생략하지 않았다. 보정한 WebKit 재시도·Native 실제 검사는 진행 중이다.

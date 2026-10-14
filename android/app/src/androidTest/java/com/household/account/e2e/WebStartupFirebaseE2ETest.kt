@@ -182,12 +182,12 @@ class WebStartupFirebaseE2ETest {
                     evaluate("Boolean(window.nativeE2e && window.nativeE2e.documentId !== ${JSONObject.quote(firstDocumentId)} && window.nativeE2e.heldLiteResponses >= 4 && document.querySelector('[role=\"status\"][aria-busy=\"true\"]'))") == true
                 }
                 eventually("The whole first-home deadline must show an error and retry while reads remain pending") {
-                    evaluate("Boolean(document.querySelector('[role=\"alert\"]')?.textContent.includes('가계부를 불러오지 못했습니다.') && document.querySelector('[role=\"alert\"] button')?.textContent === '다시 시도')") == true
+                    evaluate("Boolean(document.querySelector('main [role=\"alert\"]')?.textContent.includes('가계부를 불러오지 못했습니다.') && document.querySelector('main [role=\"alert\"] button')?.textContent === '다시 시도')") == true
                 }
                 assertTrue(evaluate("performance.now() >= 20000 && !document.querySelector('.calendar-glass') && performance.getEntriesByName('household-account:startup:home:first-complete-paint').length === 0 && window.nativeE2e.commands.length === 0") == true)
                 evaluate("window.nativeE2e.releaseLite();true")
                 eventually("Late successful reads recover the same document with the real server balance") {
-                    evaluate("Boolean(document.querySelector('.calendar-glass[aria-busy=\"false\"]') && document.body.innerText.includes('36,890') && !document.querySelector('[role=\"alert\"]') && window.nativeE2e.commands.some(x=>x.command==='access.record-app-visit.v1' && x.success))") == true
+                    evaluate("Boolean(document.querySelector('.calendar-glass[aria-busy=\"false\"]') && document.body.innerText.includes('36,890') && !document.querySelector('main [role=\"alert\"]') && window.nativeE2e.commands.some(x=>x.command==='access.record-app-visit.v1' && x.success))") == true
                 }
                 val reloaded = JSONObject(evaluate("JSON.stringify(window.nativeE2e)").toString())
                 val commands = reloaded.getJSONArray("commands")

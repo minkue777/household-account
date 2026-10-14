@@ -270,7 +270,8 @@ test.describe('첫 홈 별도 서버 조회', () => {
       await expect.poll(() => heldResponses).toBe(1);
       await expect(restarted.getByRole('status')).toHaveText('로딩중...');
       await expect(restarted.locator('.calendar-glass')).toHaveCount(0);
-      await expect(restarted.getByRole('alert')).toHaveText('가계부를 불러오지 못했습니다.다시 시도');
+      const loadError = restarted.getByRole('main').getByRole('alert');
+      await expect(loadError).toHaveText('가계부를 불러오지 못했습니다.다시 시도');
       const elapsedAtError = await restarted.evaluate(() => performance.now());
       expect(elapsedAtError).toBeGreaterThanOrEqual(20000);
       expect(await restarted.evaluate(name => performance.getEntriesByName(name).length, COMPLETE_PAINT)).toBe(0);
@@ -279,7 +280,7 @@ test.describe('첫 홈 별도 서버 조회', () => {
       holdFirstDocument = false;
       await Promise.all([
         restarted.waitForEvent('domcontentloaded'),
-        restarted.getByRole('button', { name: '다시 시도', exact: true }).click(),
+        loadError.getByRole('button', { name: '다시 시도', exact: true }).click(),
       ]);
       release();
       expect(await restarted.evaluate(() => performance.timeOrigin)).not.toBe(firstDocument);
@@ -287,7 +288,7 @@ test.describe('첫 홈 별도 서버 조회', () => {
       const balance = restarted.locator('.balance-card-glass').filter({ hasText: '지역화폐 잔액' });
       await expect(balance).toContainText('47,901');
       await expect(balance).not.toContainText('36,890');
-      await expect(restarted.getByRole('alert')).toHaveCount(0);
+      await expect(loadError).toHaveCount(0);
       const visit = await acceptedAppVisit(visits);
       expectServerReadinessOrder(visit.clientStartupDiagnostics!.timingsMs);
       expect(await restarted.evaluate(name => performance.getEntriesByName(name).length, COMPLETE_PAINT)).toBe(1);
