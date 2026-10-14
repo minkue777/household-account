@@ -56,6 +56,73 @@ test('[T-PWA-006][PWA-001][PWA-002][PWA-003][PWA-008] 실제 로그인·홈 pain
   await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller?.scriptURL)).toContain('candidate=authenticated-update');
 });
 
+test('[T-PWA-006][PWA-008] 실제 worker 전환을 기다리는 동안 추가한 입력은 새로 승인해야 폐기한다', async ({ page, context }) => {
+  await createHouseholdThroughUi(page);
+  await expect.poll(() => page.evaluate(async () => (await navigator.serviceWorker.getRegistration('/'))?.active?.state), { timeout: 35_000 }).toBe('activated');
+  await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller?.scriptURL)).toContain('/sw.js');
+  await page.getByRole('link', { name: '설정', exact: true }).click();
+  await page.getByRole('button', { name: /^카테고리\s*5개$/ }).click();
+  await page.getByRole('button', { name: '생활비 수정', exact: true }).click();
+  const input = page.getByPlaceholder('카테고리명', { exact: true });
+  await input.fill('처음 작성한 이름');
+  await page.evaluate(() => document.fonts.ready.then(() => undefined));
+  await page.evaluate(async () => { await navigator.serviceWorker.register('/sw.js?candidate=delayed-update', { scope: '/' }); });
+  await expect(page.getByRole('button', { name: '갱신', exact: true })).toBeVisible();
+
+  // Hold an actual old-worker static fetch, without replacing its lifecycle or messages.
+  // Prepare a cache miss for this one public asset; query URLs bypass the worker.
+  await page.evaluate(async () => {
+    for (const name of await caches.keys()) await (await caches.open(name)).delete('/icons/icon-512x512.png');
+  });
+  let release!: () => void;
+  const responseAllowed = new Promise<void>(resolve => { release = resolve; });
+  let workerRequest!: (value: boolean) => void;
+  const requestStarted = new Promise<boolean>(resolve => { workerRequest = resolve; });
+  await context.route('**/icons/icon-512x512.png', async route => {
+    if (route.request().serviceWorker()) {
+      workerRequest(true);
+      await responseAllowed;
+    }
+    await route.continue();
+  });
+  const pendingRead = await page.evaluateHandle(() => {
+    const result = { status: 0 };
+    void fetch('/icons/icon-512x512.png', { cache: 'reload' }).then(response => { result.status = response.status; });
+    return result;
+  });
+  let reloads = 0;
+  page.on('request', request => {
+    if (request.isNavigationRequest() && request.frame() === page.mainFrame()) reloads += 1;
+  });
+  try {
+    expect(await requestStarted).toBe(true);
+    await page.getByRole('button', { name: '갱신', exact: true }).click();
+    const confirm = page.getByRole('dialog', { name: '작성 중인 입력이 있습니다', exact: true });
+    await confirm.getByRole('button', { name: '입력 폐기 후 갱신', exact: true }).click();
+    await expect(page.getByRole('button', { name: '갱신 중…', exact: true })).toBeDisabled();
+    await input.fill('갱신 요청 후 새로 쓴 이름');
+    expect(reloads).toBe(0);
+    release();
+    await expect.poll(() => pendingRead.evaluate(result => result.status)).toBe(200);
+    await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller?.scriptURL)).toContain('candidate=delayed-update');
+    await expect(page.getByRole('button', { name: '적용', exact: true })).toBeEnabled();
+    await expect(input).toHaveValue('갱신 요청 후 새로 쓴 이름');
+    expect(reloads).toBe(0);
+    await page.getByRole('button', { name: '적용', exact: true }).click();
+    await confirm.getByRole('button', { name: '계속 작성', exact: true }).click();
+    await expect(input).toHaveValue('갱신 요청 후 새로 쓴 이름');
+    expect(reloads).toBe(0);
+    await page.getByRole('button', { name: '적용', exact: true }).click();
+    await confirm.getByRole('button', { name: '입력 폐기 후 갱신', exact: true }).click();
+    await expect(page.getByRole('heading', { name: '설정', exact: true })).toBeVisible();
+    await expect(input).toHaveCount(0);
+    expect(reloads).toBe(1);
+  } finally {
+    release();
+    await pendingRead.dispose();
+  }
+});
+
 test('[PWA-003][PWA-004] 실제 로그아웃은 이전 runtime cache와 세션을 폐기하고 정적 build cache만 유지한다', async ({ page }) => {
   await createHouseholdThroughUi(page);
   await expect.poll(() => page.evaluate(async () => (await navigator.serviceWorker.getRegistration('/'))?.active?.state), { timeout: 35_000 }).toBe('activated');

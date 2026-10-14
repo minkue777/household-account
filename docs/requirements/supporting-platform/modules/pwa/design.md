@@ -66,7 +66,7 @@ Firebase `register(messaging, { serviceWorkerRegistration, vapidKey })`에는 �
 | `CachePolicy` | navigation HTML, 인증·금융·API 응답과 임의 cross-origin 응답을 cache하지 않는다. build-versioned precache와 공개 아이콘·폰트·이미지의 최대 7일 runtime cache만 허용한다. |
 | `SessionIsolationPolicy` | logout·인증 사용자 변경·household 변경은 이전 generation의 in-memory 응답·진행 중 요청·구독 namespace를 다음 query·endpoint 등록 전에 폐기한다. logout 성공 뒤에는 현재 generation이 없고, 사용자·가구 변경 성공만 명시된 새 generation을 연다. 공개 runtime cache는 actor와 무관하므로 generation에 귀속하지 않는다. generation에 귀속된 Cache Storage 항목은 원칙상 0건이어야 하며 발견되면 보안 계약 위반으로 삭제한다. |
 | `FirebaseWorkerCompatibility` | Web config와 worker config는 같은 build 입력의 산출물이고 SDK 조합은 검증된 matrix 안에 있다. |
-| `UpdatePolicy` | 새 worker는 waiting 상태로 설치한다. 미저장 입력이 없는 사용자의 갱신 동작 또는 모든 client 종료 뒤에만 활성화하며 시간 제한 강제 reload를 하지 않는다. |
+| `UpdatePolicy` | 새 worker는 waiting 상태로 설치한다. 사용자 승인 후 진행 상태를 표시하고 정확한 후보의 실제 controller 전환 뒤 한 번만 reload한다. 대기 중 새 입력은 적용 재승인 전까지 보존하며 시간 제한 강제 reload나 같은 활성화 요청의 반복 전송은 하지 않는다. |
 | `NotificationNavigationPolicy` | 검증된 identifier로 same-origin 홈의 단일 edit query를 만들며 payload URL과 traversal 표현을 신뢰하지 않는다. |
 | `WebResponseSecurityPolicy` | production 응답에 최소 권한 CSP·`frame-ancestors 'none'`·nosniff·안전한 Referrer·Permissions header를 적용하고 HTTPS hosting에서 1년 이상의 HSTS를 적용한다. wildcard framing·unsafe script/connect·`unsafe-url`·`max-age=0`은 build 실패다. |
 
@@ -85,11 +85,14 @@ Firebase `register(messaging, { serviceWorkerRegistration, vapidKey })`에는 �
 
 1. install fixture 목록을 원자적으로 precache한다. 필수 asset 하나라도 실패하면 후보 cache 전체를 폐기하고 성공 install이나 부분 cache로 처리하지 않는다.
 2. 설치가 끝나면 열린 client에 `UPDATE_AVAILABLE`을 알리고 waiting 상태를 유지한다. 기존 active worker가 현재 화면과 background push를 계속 담당한다.
-3. client는 미저장 입력이 없을 때만 사용자의 갱신 선택을 받아 정확한 waiting version에 `ACTIVATE_WAITING_WORKER`를 보낸다. 미저장 입력이 있으면 저장 또는 명시적 폐기 전까지 전송하지 않는다.
+3. client는 미저장 입력이 없거나 사용자가 명시적 폐기를 승인한 경우 정확한 waiting version에 `ACTIVATE_WAITING_WORKER`를 한 번 보낸다. 최초 확인 취소는 입력과 현재 worker를 보존한다. 전송한 뒤에는 진행 상태를 표시하고 중복 활성화 요청을 차단한다.
 4. worker는 요청이 화면이 관찰한 정확한 waiting version과 자신 모두에 일치할 때만 `skipWaiting()`하고, 모든 구 client가 종료된 경우에는 브라우저의 정상 lifecycle로 활성화된다.
 5. activate에서 새 cache가 준비된 뒤 구 version cache를 정리하고 열린 client에 version을 broadcast한다.
-6. 갱신을 선택한 client는 해당 전환의 `controllerchange`를 한 번만 소비해 reload한다. 다른 client를 강제 reload하지 않고 각 client가 갱신 안내를 유지하며, waiting 시간이 길어져도 timeout으로 활성화하거나 reload하지 않는다.
-7. schema 비호환 write에 대한 서버의 `UPDATE_REQUIRED`는 입력을 유지한 명시적 갱신 안내로 전환하며, 구 client가 알 수 없는 schema를 추정해 재전송하지 않는다.
+6. 갱신을 선택한 client는 실제 controller가 승인한 후보인지 확인한다. 승인 이후 새 입력이 없으면 한 번만 reload한다. 새 입력이 생겼으면 현재 값을 유지하고 적용을 다시 승인받는다. 취소하면 화면에 남고, 재승인 시 이미 활성화된 후보에 메시지를 다시 보내지 않고 reload한다. 다른 후보의 전환과 중복 이벤트는 reload 근거가 아니다.
+7. `postMessage` 실패나 후보의 `redundant` 전환은 진행 상태를 해제하고 현재 registration의 후보를 다시 확인한다. 지연 자체는 실패가 아니므로 시간 제한으로 후보를 버리거나 강제 reload하지 않는다. 같은 후보에 재전송해도 Chromium의 미완료 `skipWaiting()`은 활성화 준비를 다시 실행하지 않으므로 주기적 재시도를 추가하지 않는다.
+8. schema 비호환 write에 대한 서버의 `UPDATE_REQUIRED`는 입력을 유지한 명시적 갱신 안내로 전환하며, 구 client가 알 수 없는 schema를 추정해 재전송하지 않는다.
+
+기존 worker가 종료되는 순간 정적 요청이 도착하면 Chromium이 기존 worker를 다시 실행하고 기본 idle 종료를 기다릴 수 있다. Web API는 이 내부 종료 시간을 강제로 재설정하지 않는다. 이 설계는 진행·실패 상태와 입력 보존을 고치며 브라우저 지연 자체를 즉시 제거한다고 보장하지 않는다. 재현 근거와 검증 범위는 [작업 기록](../../../../operations/pwa-activation-race-2026-10-14.md)을 따른다.
 
 ### 5.3 Push·click
 
@@ -183,7 +186,7 @@ web/public/manifest.json
 | PWA-005 | Contract, production build | Firebase worker config generator·실제 artifact | Web/worker config drift, 지원·미지원 SDK 조합, compat·deprecated API·설정 hardcode | 통합 `/sw.js`와 단일 산출 config, drift·미지원·hardcode 조합은 build 실패 | T-PWA-003 |
 | PWA-006 | Unit, 보안 E2E | NotificationNavigationPolicy | `/`, `?`, `#`, Unicode, dot·percent·이중 encoding·역슬래시 traversal, 잘못된 template, 외부·javascript URL | 검증된 단일 edit query만 전달, 수락한 기존 앱 reload 0회, 무응답·구버전·cold 복귀 | T-PWA-004 |
 | PWA-007 | Contract, 보안 E2E | WebResponseSecurityPolicy | document/API, wildcard framing, unsafe script/connect, unsafe referrer, HSTS 0 | directive 의미가 최소 권한인 header만 적용하고 불완전 정책은 build 실패 | T-PWA-005 |
-| PWA-008 | Unit, Integration, production E2E | WorkerVersionHandshake·ActivationPolicy·CachePolicy | 정확한 waiting version, 미저장 form, 장기 waiting, 사용자 갱신, 모든 client 종료, 부분 precache 실패, controllerchange 중복, 7일 경계, 응답이 보류된 비정적 GET | 부분 cache·강제 reload·입력 유실 없이 허용된 client만 한 번 전환하고 공개 runtime cache 유지, 열린 비정적 요청은 갱신 뒤에도 정상 완료 | T-PWA-006 |
+| PWA-008 | Unit, Integration, production E2E | WorkerVersionHandshake·ActivationPolicy·CachePolicy | 정확한 waiting version, 최초 확인 취소, 대기 중 새 입력, 정적 요청 경합, 전송 실패·후보 폐기, 다른 후보·중복 controllerchange, 부분 precache 실패, 7일 경계, 열린 비정적 GET | 진행 상태와 입력 보존, 새 입력은 적용 재승인, 실제 승인 후보로 한 번만 전환, 전송 실패·폐기 복구, 무효 재전송·강제 reload 없음, 기존 cache·비정적 요청 계약 유지 | T-PWA-006 |
 
 추가 필수 시나리오:
 
@@ -193,6 +196,9 @@ web/public/manifest.json
 - 로그아웃 뒤 offline 재방문과 다른 사용자의 로그인에서 이전 가구 응답 부재
 - offline 재방문과 cache version 변경 후 구 client 동작
 - 생성 production artifact를 대상으로 한 Playwright + service-worker E2E
+- 정상 갱신의 15초 활성화 기준은 유지하되 새로고침 후 로그인 화면과 폰트 준비를 먼저 확인한다.
+- 정적 요청 경합은 별도 실제 Chromium 검사에서 worker 디버거를 연결하지 않고 재현한다. 45초 안에 브라우저가 실제 후보를 자연 활성화하고 문서를 보존하는지 검사한다. 이 경합 검사는 정상 갱신의 15초 기준을 대체하지 않는다.
+- 실제 로그인·Emulator E2E는 기존 worker의 정적 HTTP 응답을 보류해 UI 진행·새 입력 보존·재승인 후 한 번 reload를 검사한다. worker와 메시지·시간을 대체하지 않는다.
 
 ## 12. 확정 정책과 구현 순서
 

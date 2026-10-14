@@ -65,6 +65,8 @@ test('[T-PWA-006][T-PWA-002][PWA-004][PWA-008] 온라인 조회의 HTTP 응답�
     });
     await page.reload();
     await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller?.scriptURL)).toBe(`${origin}/sw.js`);
+    await expect(page.getByRole('button', { name: /로그인/ }).first()).toBeVisible();
+    await page.evaluate(() => document.fonts.ready.then(() => undefined));
     const pendingRead = await page.evaluateHandle(() => {
       const result = { settled: false, body: '' };
       void fetch('/__pwa_pending_read').then(response => response.text()).then(body => {
@@ -153,6 +155,10 @@ test('[T-PWA-INSTALL-001][T-PWA-001][T-PWA-003][PWA-001][PWA-002][PWA-003][PWA-0
   await workerObservation.ready();
   await page.reload();
   await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller?.scriptURL)).toContain('/sw.js');
+  // A controller alone does not mean the reloaded login UI and its fonts are ready.
+  // Late static requests during worker shutdown are covered separately by the race test.
+  await expect(page.getByRole('button', { name: /로그인/ }).first()).toBeVisible();
+  await page.evaluate(() => document.fonts.ready.then(() => undefined));
   await page.evaluate(async () => {
     await fetch('/icons/icon-192x192.png');
     await fetch('/?householdId=must-not-cache');

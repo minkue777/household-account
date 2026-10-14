@@ -21,15 +21,43 @@ export function PwaRuntimeUpdate() {
   const { showConfirm } = useAppDialog();
   const [waiting, setWaiting] = useState<{ worker: ServiceWorker; version: string }>();
   const [failed, setFailed] = useState(false);
+  const [phase, setPhase] = useState<'idle' | 'requesting' | 'ready'>('idle');
   const dirty = useRef(new Map<Editable, string>());
-  const requested = useRef<ServiceWorker>();
+  const requested = useRef<{ worker: ServiceWorker; approved: Map<Editable, string>; dispose: () => void }>();
+  const registration = useRef<ServiceWorkerRegistration>();
+  const retryCheck = useRef<() => void>();
+  const confirming = useRef(false);
+  const mounted = useRef(false);
+  const reloaded = useRef(false);
+
+  const currentInputs = () => new Map(Array.from(dirty.current.keys())
+    .filter(element => element.isConnected).map(element => [element, valueOf(element)]));
+  const failedActivation = () => {
+    requested.current?.dispose();
+    requested.current = undefined;
+    setPhase('idle');
+    setWaiting(undefined);
+    setFailed(true);
+  };
+  const controllerChanged = () => {
+    const request = requested.current;
+    if (!request || reloaded.current || navigator.serviceWorker.controller !== request.worker
+      || request.worker.state !== 'activated') return;
+    if (Array.from(currentInputs()).some(([element, value]) => request.approved.get(element) !== value)) {
+      setPhase('ready');
+      return;
+    }
+    reloaded.current = true;
+    request.dispose();
+    reloadPwaWindow();
+  };
 
   useEffect(() => {
     if (process.env.NODE_ENV === 'development' || !('serviceWorker' in navigator)) return;
+    mounted.current = true;
     let cancelled = false;
-    let reloaded = false;
-    let registration: ServiceWorkerRegistration | undefined;
     let lastCheck = 0;
+    const watchedWorkers = new Set<ServiceWorker>();
     const baselines = new WeakMap<Editable, string>();
     const remember = (event: Event) => {
       if (editable(event.target) && !baselines.has(event.target)) baselines.set(event.target, valueOf(event.target));
@@ -42,38 +70,41 @@ export function PwaRuntimeUpdate() {
       else dirty.current.delete(event.target);
     };
     const discoverWaiting = () => {
-      const worker = registration?.waiting;
+      const worker = registration.current?.waiting;
       if (!worker) return;
       const channel = new MessageChannel();
       channel.port1.onmessage = event => {
         channel.port1.close();
-        if (!cancelled && event.data?.type === 'UPDATE_AVAILABLE' && typeof event.data.workerVersion === 'string') {
+        if (!cancelled && registration.current?.waiting === worker && worker.state === 'installed'
+          && event.data?.type === 'UPDATE_AVAILABLE' && typeof event.data.workerVersion === 'string') {
           setWaiting({ worker, version: event.data.workerVersion });
         }
       };
       worker.postMessage({ type: 'GET_WORKER_VERSION' }, [channel.port2]);
     };
-    const updateFound = () => registration?.installing?.addEventListener('statechange', discoverWaiting);
+    const updateFound = () => {
+      const worker = registration.current?.installing;
+      if (worker && !watchedWorkers.has(worker)) {
+        watchedWorkers.add(worker);
+        worker.addEventListener('statechange', discoverWaiting);
+      }
+    };
     const check = () => {
       if (Date.now() - lastCheck < 15 * 60 * 1000) return;
       lastCheck = Date.now();
+      setFailed(false);
       void ensurePwaServiceWorker().then(async value => {
         if (cancelled) return;
-        if (registration !== value) {
-          registration?.removeEventListener('updatefound', updateFound);
-          registration = value;
-          registration.addEventListener('updatefound', updateFound);
+        if (registration.current !== value) {
+          registration.current?.removeEventListener('updatefound', updateFound);
+          registration.current = value;
+          value.addEventListener('updatefound', updateFound);
         }
         discoverWaiting();
-        await registration.update();
-        setFailed(false);
+        await value.update();
       }).catch(() => { if (!cancelled) setFailed(true); });
     };
-    const controllerChanged = () => {
-      if (!requested.current || reloaded || navigator.serviceWorker.controller !== requested.current) return;
-      reloaded = true;
-      reloadPwaWindow();
-    };
+    retryCheck.current = () => { lastCheck = 0; check(); };
     const cancelScheduled = scheduleAfterWebFirstLedgerPaint(() => {
       if (cancelled) return;
       if (isAndroidHostAvailable()) {
@@ -96,8 +127,13 @@ export function PwaRuntimeUpdate() {
     document.addEventListener('change', changed, true);
     return () => {
       cancelled = true;
+      mounted.current = false;
       cancelScheduled();
-      registration?.removeEventListener('updatefound', updateFound);
+      requested.current?.dispose();
+      registration.current?.removeEventListener('updatefound', updateFound);
+      registration.current = undefined;
+      retryCheck.current = undefined;
+      watchedWorkers.forEach(worker => worker.removeEventListener('statechange', discoverWaiting));
       window.removeEventListener('focus', check);
       window.removeEventListener('pageshow', check);
       navigator.serviceWorker.removeEventListener('controllerchange', controllerChanged);
@@ -109,19 +145,49 @@ export function PwaRuntimeUpdate() {
   }, []);
 
   const activate = async () => {
-    if (!waiting || requested.current) return;
-    const hasUnsavedInput = Array.from(dirty.current.keys()).some(element => element.isConnected);
-    if (hasUnsavedInput && !await showConfirm({
-      title: '작성 중인 입력이 있습니다', message: '저장하려면 취소해 주세요. 입력을 폐기하고 새 버전을 여시겠습니까?',
-      confirmLabel: '입력 폐기 후 갱신', cancelLabel: '계속 작성', variant: 'danger',
-    })) return;
-    requested.current = waiting.worker;
-    waiting.worker.postMessage({ type: 'ACTIVATE_WAITING_WORKER', workerVersion: waiting.version });
+    if (!waiting || confirming.current || reloaded.current || (requested.current && phase !== 'ready')) return;
+    confirming.current = true;
+    const previousRequest = requested.current;
+    const worker = previousRequest?.worker ?? waiting.worker;
+    try {
+      if (currentInputs().size && !await showConfirm({
+        title: '작성 중인 입력이 있습니다', message: '저장하려면 취소해 주세요. 입력을 폐기하고 새 버전을 여시겠습니까?',
+        confirmLabel: '입력 폐기 후 갱신', cancelLabel: '계속 작성', variant: 'danger',
+      })) return;
+      if (!mounted.current) return;
+      if (previousRequest) {
+        if (requested.current !== previousRequest || navigator.serviceWorker.controller !== worker
+          || worker.state !== 'activated') { failedActivation(); return; }
+        previousRequest.approved = currentInputs();
+        controllerChanged();
+        return;
+      }
+      if (registration.current?.waiting !== worker && navigator.serviceWorker.controller !== worker) {
+        failedActivation();
+        return;
+      }
+      const stateChanged = () => {
+        if (worker.state === 'redundant') failedActivation();
+        else controllerChanged();
+      };
+      requested.current = { worker, approved: currentInputs(),
+        dispose: () => worker.removeEventListener('statechange', stateChanged) };
+      worker.addEventListener('statechange', stateChanged);
+      setPhase('requesting');
+      worker.postMessage({ type: 'ACTIVATE_WAITING_WORKER', workerVersion: waiting.version });
+      stateChanged();
+    } catch { if (mounted.current) failedActivation(); }
+    finally { confirming.current = false; }
   };
 
   if (waiting) return <div role="status" className="fixed bottom-20 left-4 right-4 z-[80] rounded-xl bg-slate-900 p-4 text-sm text-white shadow-lg">
-    새 버전이 준비되었습니다. <button type="button" onClick={() => void activate()} className="ml-3 underline">갱신</button>
+    {phase === 'ready' ? '새 버전을 적용할 수 있습니다.' : '새 버전이 준비되었습니다.'}
+    <button type="button" onClick={() => void activate()} disabled={phase === 'requesting'} className="ml-3 underline disabled:no-underline">
+      {phase === 'requesting' ? '갱신 중…' : phase === 'ready' ? '적용' : '갱신'}
+    </button>
   </div>;
-  if (failed) return <div role="status" className="px-4 py-2 text-sm text-amber-700">앱 업데이트를 확인하지 못했습니다. 연결 후 다시 확인합니다.</div>;
+  if (failed) return <div role="status" className="px-4 py-2 text-sm text-amber-700">
+    앱 업데이트를 확인하지 못했습니다. <button type="button" onClick={() => retryCheck.current?.()} className="underline">다시 확인</button>
+  </div>;
   return null;
 }
