@@ -53,7 +53,7 @@ describe('[T-LED-001] 문서 최초 시작 화면의 경로·인증 경계', () 
     expect(screen.getByRole('heading')).toHaveTextContent('익태송희네');
     expect(screen.queryByText('또니망고네')).not.toBeInTheDocument();
     act(() => clearSignedInMembershipCache());
-    expect(screen.getByRole('heading').textContent).toBe('');
+    expect(screen.getByRole('heading').textContent).toBe('모두의 가계부');
   });
 
   it('서버에서 확인한 이름을 우선하고 로그아웃·첫 방문에는 저장된 이름을 표시하지 않는다', () => {
@@ -64,7 +64,7 @@ describe('[T-LED-001] 문서 최초 시작 화면의 경로·인증 경계', () 
     for (const sessionState of ['signed-out', 'first-visit', 'legacy-confirmation']) {
       mockSession = { household: null, isLoading: false, isAuthenticated: false, sessionError: null, sessionState };
       view.rerender(guardedPage());
-      expect(screen.getByRole('heading').textContent).toBe('');
+      expect(screen.getByRole('heading').textContent).toBe('모두의 가계부');
     }
   });
 
@@ -73,7 +73,7 @@ describe('[T-LED-001] 문서 최초 시작 화면의 경로·인증 경계', () 
     selectAdminHouseholdView({ householdId: 'household-2', householdName: '조회 가구네' });
     mockSession = { household: null, isLoading: true, isAuthenticated: false, sessionError: null, sessionState: 'resolving' };
     render(guardedPage());
-    expect(screen.getByRole('heading').textContent).toBe('');
+    expect(screen.getByRole('heading').textContent).toBe('모두의 가계부');
   });
 
   it('기기 저장소 접근이 거부되어도 이름만 생략하고 시작 화면을 유지한다', () => {
@@ -81,7 +81,7 @@ describe('[T-LED-001] 문서 최초 시작 화면의 경로·인증 경계', () 
     const read = jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('Storage denied'); });
     try {
       render(guardedPage());
-      expect(screen.getByRole('heading').textContent).toBe('');
+      expect(screen.getByRole('heading').textContent).toBe('모두의 가계부');
       expect(screen.getByRole('status')).toHaveTextContent('로딩중...');
     } finally {
       read.mockRestore();
@@ -123,7 +123,7 @@ describe('[T-LED-001] 문서 최초 시작 화면의 경로·인증 경계', () 
 
   it('현재 가구명을 실제 글자로 표시하고 가구 전환·해제 시 이전 이름을 남기지 않는다', () => {
     const view = render(guardedPage());
-    expect(screen.getByRole('heading').textContent).toBe('');
+    expect(screen.getByRole('heading').textContent).toBe('모두의 가계부');
     expect(screen.getByText('가계부 · 자산')).toBeVisible();
 
     for (const name of ['또니망고네', '익태송희네', '함께 쓰는 가계부']) {
@@ -136,7 +136,7 @@ describe('[T-LED-001] 문서 최초 시작 화면의 경로·인증 경계', () 
     mockSession.household = null;
     mockSession.isAuthenticated = false;
     view.rerender(guardedPage());
-    expect(screen.getByRole('heading').textContent).toBe('');
+    expect(screen.getByRole('heading').textContent).toBe('모두의 가계부');
     expect(screen.queryByText('함께 쓰는 가계부')).not.toBeInTheDocument();
     expect(screen.queryByTestId('household-login')).not.toBeInTheDocument();
     act(() => jest.advanceTimersByTime(2_000));

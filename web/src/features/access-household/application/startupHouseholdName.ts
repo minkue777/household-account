@@ -34,7 +34,7 @@ export function readStartupHouseholdName(
 function paintStartupHouseholdName(readName: () => string): void {
   const title = document.querySelector('.startup-title');
   if (!title) return;
-  const name = readName();
+  const name = readName() || '모두의 가계부';
   title.children[0].textContent = name.endsWith('네') ? name.slice(0, -1) : name;
   title.children[1].textContent = name.endsWith('네') ? '네' : '';
 }

@@ -38,7 +38,7 @@ describe('[T-LED-001] hydration 이전 가구명 표시', () => {
       else localStorage.setItem(SIGNED_IN_MEMBERSHIP_STORAGE_KEY, value);
       expect(readStartupHouseholdName()).toBe('');
       window.eval(STARTUP_HOUSEHOLD_NAME_SCRIPT);
-      expect(document.querySelector('h1')?.textContent).toBe('');
+      expect(document.querySelector('h1')?.textContent).toBe('모두의 가계부');
     }
   });
 
@@ -47,13 +47,13 @@ describe('[T-LED-001] hydration 이전 가구명 표시', () => {
     sessionStorage.setItem(ADMIN_HOUSEHOLD_VIEW_STORAGE_KEY, JSON.stringify({ householdId: 'other', householdName: '다른 가구' }));
     expect(readStartupHouseholdName()).toBe('');
     window.eval(STARTUP_HOUSEHOLD_NAME_SCRIPT);
-    expect(document.querySelector('h1')?.textContent).toBe('');
+    expect(document.querySelector('h1')?.textContent).toBe('모두의 가계부');
     sessionStorage.clear();
     const denied = jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('Storage denied'); });
     try {
       expect(readStartupHouseholdName()).toBe('');
       expect(() => window.eval(STARTUP_HOUSEHOLD_NAME_SCRIPT)).not.toThrow();
-      expect(document.querySelector('h1')?.textContent).toBe('');
+      expect(document.querySelector('h1')?.textContent).toBe('모두의 가계부');
     } finally {
       denied.mockRestore();
     }

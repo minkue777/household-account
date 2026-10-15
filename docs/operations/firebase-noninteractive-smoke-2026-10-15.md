@@ -12,3 +12,5 @@
 추적성: REL-004 / T-REL-004. 실행 코드와 검증 결과는 해당 변경의 commit·CI·배포 기록으로 확인합니다.
 
 검증: 실제 Callable handler의 비로그인 응답은 수정 전 marker 누락으로 실패했고, 수정 후 가구 Membership·quota를 호출하지 않는 거부와 공개 marker 반환을 확인했습니다. 관련 wrapper·scope·Query 단위 검사 4파일 47개, Functions 타입 검사, 실제 Auth/Firestore/Functions Emulator의 Callable 통합 3개가 통과했습니다. 통합 검사는 기존 비로그인 거부와 인증된 가구 생성·지출 저장·조회 경로를 유지합니다. production build의 architecture 43개도 통과했습니다. 로그는 `%TEMP%/household-release-anonymous-{before,unit,types,callable}-20261015.log`에 보존합니다.
+
+운영 배포 `release-20261015-noninteractive-smoke-ac3da95`는 commit `ac3da95dcb1c9a41723d2491bd1b06075ff7c537`에서 세 Functions codebase 모두 완료됐습니다. artifact SHA-256은 `56d20aebbfe5ca7cc728484eb08be5ce43d2bae9d5c89fd1f3c9d6123728d0c7`입니다. wrapper가 실제 서버의 동일 marker와 비로그인 `AUTH_REQUIRED` 거부를 확인하고 성공 provenance를 기록했습니다. `smoke.userAccessChecked=false`이며 운영 사용자 로그인·가구 조회 성공으로 해석하지 않습니다. 대기 중이던 구형 가구명 metadata 호환 수정도 이 배포에 포함됩니다. 로그는 `%TEMP%/household-noninteractive-deploy-20261015.log`입니다.

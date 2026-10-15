@@ -345,7 +345,7 @@ class MainActivity : AppCompatActivity() {
     private fun renderStartupHouseholdName() {
         // 표시용 로컬 읽기 실패가 앱 시작이나 실제 인증 복원을 막지 않게 합니다.
         val name = runCatching { HouseholdPreferences.snapshot(applicationContext)?.householdName }
-            .getOrNull().orEmpty()
+            .getOrNull()?.takeIf { it.isNotBlank() } ?: getString(R.string.app_name)
         findViewById<TextView>(R.id.startupHouseholdName).text = SpannableString(name).apply {
             if (name.endsWith("네")) {
                 setSpan(ForegroundColorSpan(Color.rgb(151, 85, 233)), name.length - 1, name.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)

@@ -194,6 +194,26 @@ test.beforeEach(async () => { await resetTestAccount(); });
 
 test.describe('첫 홈 별도 서버 조회', () => {
   test.use({ serviceWorkers: 'block' });
+  test('[T-LED-001] 가구명이 없는 첫 시작은 앱 이름을 JS 청크보다 먼저 표시한다', async ({ page }) => {
+    let releaseChunks!: () => void;
+    const chunksHeld = new Promise<void>(resolve => { releaseChunks = resolve; });
+    let heldChunks = 0;
+    await page.route('**/_next/static/**/*.js', async route => {
+      heldChunks += 1;
+      await chunksHeld;
+      await route.continue();
+    });
+    try {
+      await page.goto('/', { waitUntil: 'commit' });
+      await expect.poll(() => heldChunks).toBeGreaterThan(0);
+      await expect(page.getByRole('status').getByRole('heading', { name: '모두의 가계부', exact: true })).toBeVisible();
+      await expect(page.getByRole('status').locator('img')).toBeVisible();
+      await expect(page.locator('.calendar-glass')).toHaveCount(0);
+    } finally {
+      releaseChunks();
+      await page.unrouteAll({ behavior: 'wait' });
+    }
+  });
   test('[T-ADM-005][T-WEBVIEW-004] 실제 Lite 지연 응답도 반영하여 Listen보다 먼저 홈을 표시한다', async ({ page, context, request }) => {
     await observeIndexedDbOpens(page, true);
     await createFinanceHousehold(page, request);
@@ -350,15 +370,34 @@ test.describe('첫 홈 별도 서버 조회', () => {
       let releaseChunks!: () => void;
       const chunksHeld = new Promise<void>(resolve => { releaseChunks = resolve; });
       let heldChunks = 0;
+      let releaseParser!: () => void;
+      const parserHeld = new Promise<void>(resolve => { releaseParser = resolve; });
+      let heldParserResponses = 0;
       const hydrationErrors: string[] = [];
       restarted.on('pageerror', error => hydrationErrors.push(error.message));
       restarted.on('console', message => {
-        if (message.type() === 'error' && /hydration|server HTML|did not match|Minified React error #4(?:18|19|21|22|23|25)/i.test(message.text())) hydrationErrors.push(message.text());
+        if (message.type() === 'error' && /hydration|server HTML|did not match|Content Security Policy|Refused to execute.*script|Minified React error #4(?:18|19|21|22|23|25)/i.test(message.text())) hydrationErrors.push(message.text());
       });
       await restarted.route('**/_next/static/**/*.js', async route => {
         heldChunks += 1;
         await chunksHeld;
         await route.continue();
+      });
+      // Pause HTML parsing immediately before the name initializer, as a split response can.
+      // Only this temporary parser pause is injected; production markup, CSP and artwork are used.
+      await restarted.route('**/__e2e_startup_parser_pause.js', async route => {
+        heldParserResponses += 1;
+        await parserHeld;
+        await route.fulfill({ contentType: 'application/javascript', body: 'document.currentScript.remove();' });
+      });
+      await restarted.route(url => url.pathname === '/', async route => {
+        if (!route.request().isNavigationRequest()) return route.continue();
+        const response = await route.fetch();
+        const html = await response.text();
+        const initializer = /<script[^>]*data-startup-household-name[^>]*>/;
+        expect(html.match(initializer)).not.toBeNull();
+        await route.fulfill({ response, body: html.replace(initializer,
+          match => `<script src="/__e2e_startup_parser_pause.js"></script>${match}`) });
       });
       // UI가 저장한 가구명은 실제 Auth 복원 응답보다 먼저 표시하고, 조회 권한으로 쓰지 않습니다.
       await restarted.route('**/identitytoolkit.googleapis.com/v1/accounts:lookup?*', async route => {
@@ -386,10 +425,15 @@ test.describe('첫 홈 별도 서버 조회', () => {
       try {
         const documentResponse = await restarted.goto('/', { waitUntil: 'commit' });
         expect(await documentResponse!.text(), '서버 HTML에 기기별 가구명을 포함하면 안 됩니다.').not.toContain(householdName);
+        await expect.poll(() => heldParserResponses).toBe(1);
+        await expect(restarted.getByRole('status').locator('img'), '이름 초기화 전 파서가 멈춰도 그림만 먼저 표시하면 안 됩니다.').not.toBeVisible();
+        releaseParser();
         await expect.poll(() => heldChunks).toBeGreaterThan(0);
         await expect(restarted.getByRole('heading', { name: householdName })).toBeVisible();
         await expect.poll(() => restarted.evaluate(() => (window as typeof window & { startupTitleFrames: string[] }).startupTitleFrames.length)).toBeGreaterThan(0);
         const firstTitleFrames = await restarted.evaluate(() => (window as typeof window & { startupTitleFrames: string[] }).startupTitleFrames);
+        await testInfo.attach('startup-first-title-frames', { contentType: 'application/json',
+          body: Buffer.from(JSON.stringify({ householdName, firstTitleFrames, heldParserResponses, heldChunks }, null, 2)) });
         expect(firstTitleFrames.every(name => name === householdName), 'JS 청크를 받기 전 그림의 첫 frame에도 가구명이 함께 보여야 합니다.').toBe(true);
         expect(heldAuthResponses).toBe(0);
         expect(firestoreReads).toBe(0);
@@ -499,8 +543,9 @@ test.describe('첫 홈 별도 서버 조회', () => {
         expect(marks['household-account:startup:ledger:first-paint']).toBeGreaterThanOrEqual(marks['household-account:startup:local-currency:ready']);
         expect(hydrationErrors).toEqual([]);
         await testInfo.attach('home-initial-complete-display', { contentType: 'application/json',
-          body: Buffer.from(JSON.stringify({ heldChunks, firstTitleFrames, hydrationErrors, heldAuthResponses, beforeAuthMarks, heldBalanceResponses, marks, frames, artworkLayouts }, null, 2)) });
+          body: Buffer.from(JSON.stringify({ heldParserResponses, heldChunks, firstTitleFrames, hydrationErrors, heldAuthResponses, beforeAuthMarks, heldBalanceResponses, marks, frames, artworkLayouts }, null, 2)) });
       } finally {
+        releaseParser();
         releaseChunks();
         releaseAuth();
         release();

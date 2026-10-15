@@ -204,7 +204,11 @@ class MainActivityInstrumentationTest {
             assertTrue("화면이 커져도 최대 198dp", artwork.width <= 198 * density + 1)
             assertEquals("그림 가운데 배치", content.width / 2f, artwork.left + artwork.width / 2f, 1f)
             assertEquals("구성 전체 세로 가운데 배치", screen.height / 2f, content.top + content.height / 2f, 1f)
-            assertEquals("인증 전에는 다른 가구 이름을 표시하지 않음", "", householdName.text.toString())
+            assertEquals("가구명이 없으면 다른 가구 이름 대신 앱 이름 표시", "모두의 가계부", householdName.text.toString())
+            assertEquals("앱 이름은 한 줄로 표시", 1, householdName.lineCount)
+            assertEquals("앱 이름을 말줄임하지 않음", 0, householdName.layout.getEllipsisCount(0))
+            assertTrue("앱 이름이 제목 너비 안에 표시", householdName.layout.getLineWidth(0) <=
+                householdName.width - householdName.totalPaddingLeft - householdName.totalPaddingRight)
             assertEquals("가구 이름의 높이를 미리 확보",
                 activity.resources.getDimensionPixelSize(R.dimen.startup_title_height), householdName.height)
             assertEquals("그림과 제목 간격",
@@ -358,11 +362,15 @@ class MainActivityInstrumentationTest {
                 assertName("익태송희네")
                 runBlocking { resolve("other-house", null) }
                 observeExistingBridgeReply()
-                assertName("")
+                assertName("모두의 가계부")
+                assertNull("표시용 앱 이름을 가구명으로 저장하지 않음", AndroidSessionMirrorStore(context).load().snapshot?.householdName)
+                runBlocking { resolve("other-house", "  ") }
+                observeExistingBridgeReply()
+                assertName("모두의 가계부")
                 runBlocking { resolve("other-house", "익태송희네") }
                 runBlocking { HouseholdPreferences.clearHouseholdKey(context) }
                 observeExistingBridgeReply()
-                assertName("")
+                assertName("모두의 가계부")
                 assertNull(AndroidSessionMirrorStore(context).load().snapshot)
                 responseReady.countDown()
             }

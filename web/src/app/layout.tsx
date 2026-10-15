@@ -4,7 +4,6 @@ import 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css'
 import './globals.css'
 import AppProviders from '@/components/AppProviders'
 import { isFirebaseEmulatorSuiteConfigured } from '@/platform/firebase/firebaseEmulatorConfig'
-import { STARTUP_HOUSEHOLD_NAME_SCRIPT } from '@/features/access-household/application/startupHouseholdName'
 
 const startupFont = localFont({
   src: '../assets/fonts/Jua-Regular.woff2',
@@ -53,7 +52,6 @@ export default function RootLayout({
         <AppProviders>
           {children}
         </AppProviders>
-        <script dangerouslySetInnerHTML={{ __html: STARTUP_HOUSEHOLD_NAME_SCRIPT }} />
       </body>
     </html>
   )
