@@ -7,6 +7,37 @@ import { ledgerRecords, records, paymentCommand, rawNotification, registerCard, 
 
 test.beforeEach(resetTestAccount);
 
+test('[T-PARSE-001][PARSE-TOSS-001][CARD-004][ING-SAVE-004][ING-008] 토스쇼핑 결제 완료는 본인 토스 등록 후 원금으로 한 번만 저장한다', async ({ page, request }) => {
+  const actor = await createHouseholdThroughUi(page);
+  const raw = () => ({
+    contractVersion: 'android-raw-notification.v1', observationId: randomUUID(),
+    packageName: 'viva.republica.toss', notification: {
+      postedAt: '2026-09-07T06:55:57.398Z', title: '11,512원 결제 완료',
+      bigText: '토스뱅크 ・ 토스쇼핑\n결제한 돈 일부를 돌려받을 수 있어요.',
+      text: '축약 표시', textLines: [],
+    },
+  });
+  expect((await submitRaw(request, actor, raw())).transactionResult).toEqual({ kind: 'rejected', code: 'CARD_NOT_REGISTERED_FOR_ACTOR' });
+  expect(await ledgerRecords(request)).toHaveLength(0);
+  await registerCard(request, actor, '토스');
+  const notification = raw();
+  const first = await submitRaw(request, actor, notification);
+  expect(first.transactionResult.kind).toBe('created');
+  expect(first.transactionResult.quickEditSnapshot).toMatchObject({ merchant: '토스쇼핑', amountInWon: 11512, accountingDate: '2026-09-07', localTime: '15:55' });
+  expect(await submitRaw(request, actor, notification)).toEqual(first);
+  expect((await submitRaw(request, actor, raw())).transactionResult).toMatchObject({ kind: 'duplicate', existingTransactionId: first.transactionResult.transactionId });
+  expect(await ledgerRecords(request)).toEqual([expect.objectContaining({
+    id: first.transactionResult.transactionId, merchant: '토스쇼핑', originalMerchant: '토스쇼핑',
+    amountInWon: 11512, accountingDate: '2026-09-07', localTime: '15:55', creatorMemberId: actor.memberId,
+  })]);
+  expect(await records(request, `households/${actor.householdId}/captureRecords`)).toEqual([expect.objectContaining({
+    transactionId: first.transactionResult.transactionId, amountInWon: 11512, approvalAmountInWon: 11512,
+    cardEvidence: expect.objectContaining({ companyLabel: '토스' }),
+  })]);
+  expect((await submitRaw(request, actor, { ...raw(), notification: { ...notification.notification, title: '11,512원 결제 실패' } })).transactionResult).toBeUndefined();
+  expect(await ledgerRecords(request)).toHaveLength(1);
+});
+
 test('[T-PARSE-001][PARSE-DAEJEON-001][ING-SAVE-004][BAL-002] 대전 카드 상품명에 관계없이 실제 가맹점과 잔액을 저장하고 재전송을 중복 생성하지 않는다', async ({ page, request }) => {
   const actor = await createHouseholdThroughUi(page);
   await registerCard(request, actor, '대전사랑카드', '1357');

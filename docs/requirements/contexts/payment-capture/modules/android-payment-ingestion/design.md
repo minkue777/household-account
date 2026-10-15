@@ -134,6 +134,8 @@ interface CaptureEnvelopeV1 {
 
 토스 승인 parser의 `approvalAmountInWon`은 공개 envelope 밖의 서버 내부 `CaptureSubmissionCommand` → branch context → 승인 저장 Port로 전달합니다. [DEC-076](../../../../governance/decisions.md#dec-076)에 따라 신규 토스 승인은 캐시백을 해석·차감하지 않고 `captureRecords.amountInWon`, `approvalAmountInWon`, 원장·QuickEdit에 결제금액을 사용합니다. 과거 순액 기록의 총액 증거와 취소 호환은 유지하며 기존 거래를 다시 계산하지 않습니다. 기존 wire와 중복 fingerprint를 유지하며 원문 hash에 결박된 이 파생 필드는 기존 receipt identity를 바꾸지 않습니다.
 
+`금액원 결제 완료` 제목과 바로 다음 `토스뱅크 ・ 가맹점` 줄은 한 묶음으로 읽어 같은 승인 저장 경로로 전달합니다. 결제수단은 토스로, 발생일·시각은 수신 시각으로 해석하고 본인의 등록 카드 검증을 그대로 거칩니다. 실패·예정·입출금·금액 없는 취소는 새 완료 양식으로 인정하지 않습니다. 삼성월렛이나 다른 결제수단을 토스로 추정하지 않습니다. `T-PARSE-001·002`의 표시 필드별 계약 검사와 실제 callable E2E에서 미등록 거부·원장/Capture/QuickEdit·동일 및 새 observation 재전송을 검증합니다.
+
 | 이름·종류 | 호출자 | 입력 | 결과 | 권한 | 일관성·멱등성 |
 |---|---|---|---|---|---|
 | `AdmitRawNotification` Android Policy | Notification Listener Adapter | package·title·fullText 또는 분리된 현재 메시지 | forward 또는 ignore | OS listener capability | package allowlist와 다목적 앱 최소화만 수행; 카카오톡 일반·과거 대화 차단, 거래 해석 금지 |

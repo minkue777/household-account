@@ -18,6 +18,8 @@ const TOSS_MERCHANT_PATTERN =
   /(?:토스뱅크\s*체크카드|페이스페이\s*\(토스뱅크\))\s*\|\s*(.+)/u;
 const TOSS_AMOUNT_MERCHANT_PATTERN =
   /[\d,]+원\s*결제(?:\s*취소)?\s*\|\s*(.+)/u;
+const TOSS_PAYMENT_COMPLETE_PATTERN =
+  /^([\d,]+)원 (결제 완료)\n토스뱅크 *・ *([^\n]+)(?:\n|$)/u;
 
 const KAKAO_PAYMENT_TITLE_PATTERN = /결제가\s*완료되었어요/u;
 const KAKAO_PAYMENT_BODY_PATTERN =
@@ -57,11 +59,11 @@ function parseNaver(context: ProviderParserContext): AndroidProviderParseResult 
 
 function parseToss(context: ProviderParserContext): AndroidProviderParseResult {
   const normalized = bodyLines(context.body).join("\n").trim();
-  const amountEvent = TOSS_AMOUNT_EVENT_PATTERN.exec(normalized);
-  const merchantMatch = TOSS_MERCHANT_PATTERN.exec(normalized) ??
-    TOSS_AMOUNT_MERCHANT_PATTERN.exec(normalized);
-  if (amountEvent === null || merchantMatch === null) return ignoredParseFailure();
-  const merchant = merchantMatch[1].trim();
+  const completed = TOSS_PAYMENT_COMPLETE_PATTERN.exec(normalized);
+  const amountEvent = completed ?? TOSS_AMOUNT_EVENT_PATTERN.exec(normalized);
+  const merchant = (completed?.[3] ?? TOSS_MERCHANT_PATTERN.exec(normalized)?.[1] ??
+    TOSS_AMOUNT_MERCHANT_PATTERN.exec(normalized)?.[1])?.trim();
+  if (amountEvent === null || !merchant) return ignoredParseFailure();
   if (merchant.includes("가승인")) {
     return { kind: "Ignored", code: "PREAUTHORIZATION" };
   }
