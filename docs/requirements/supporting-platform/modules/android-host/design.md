@@ -1,5 +1,7 @@
 # Android Host·WebView·QuickEdit 모듈 상세 설계
 
+AND-003의 OS 시작 창과 Native 배경은 하나의 색 리소스를 사용합니다. API 31 전용 테마에서 시스템 시작 아이콘을 투명하게 지정하며, 로고와 글씨는 기존 Native 레이어가 함께 표시합니다. 별도 Activity·타이머 없이 [시작 배경 설계와 검증](../../../../operations/android-launch-background-2026-10-15.md)을 따릅니다.
+
 AND-014의 구간별 계측은 [Android 시작 상세 계측 설계](../../../../operations/android-startup-diagnostics-2026-10-04.md)를 따릅니다. Native Activity clock의 두 준비 mark와 Web navigation clock의 기존 진단을 각각의 범위로 검증하며 서로 차감하지 않습니다. 기존 bridge·방문 명령·total 로그를 확장하고 최신 자료 표시 조건 및 플랫폼별 조회 경로를 유지합니다.
 
 > 요구사항: [Android Host·WebView·QuickEdit 모듈 요구사항](requirements.md)  

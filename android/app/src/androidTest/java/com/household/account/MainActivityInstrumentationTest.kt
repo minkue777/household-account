@@ -6,7 +6,9 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
@@ -30,6 +32,7 @@ import android.widget.Button
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.content.res.use
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -195,6 +198,32 @@ class MainActivityInstrumentationTest {
             val density = activity.resources.displayMetrics.density
             val padding = (24 * density).toInt()
             assertEquals(View.VISIBLE, screen.visibility)
+            val startupBackground = (screen.background as ColorDrawable).color
+            activity.obtainStyledAttributes(intArrayOf(android.R.attr.windowBackground)).use { attributes ->
+                assertEquals("OS 시작 창과 Native 로딩 배경 일치", startupBackground,
+                    (attributes.getDrawable(0) as ColorDrawable).color)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                activity.obtainStyledAttributes(intArrayOf(
+                    android.R.attr.windowSplashScreenBackground,
+                    android.R.attr.windowSplashScreenAnimatedIcon
+                )).use { attributes ->
+                    assertEquals("Android 12 이상 시스템 시작 배경 일치", startupBackground,
+                        attributes.getColor(0, Color.TRANSPARENT))
+                    val icon = requireNotNull(attributes.getDrawable(1))
+                    val bitmap = Bitmap.createBitmap(48, 48, Bitmap.Config.ARGB_8888)
+                    try {
+                        icon.setBounds(0, 0, bitmap.width, bitmap.height)
+                        icon.draw(Canvas(bitmap))
+                        val pixels = IntArray(bitmap.width * bitmap.height)
+                        bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+                        assertTrue("시스템 화면에 별도의 작은 로고를 표시하지 않음",
+                            pixels.all { Color.alpha(it) == 0 })
+                    } finally {
+                        bitmap.recycle()
+                    }
+                }
+            }
             assertEquals(ImageView.ScaleType.FIT_CENTER, artwork.scaleType)
             assertEquals(padding, screen.paddingLeft)
             assertEquals(padding, screen.paddingTop)

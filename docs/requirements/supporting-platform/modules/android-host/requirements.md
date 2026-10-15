@@ -1,5 +1,7 @@
 # Android Host·WebView·QuickEdit 모듈 요구사항
 
+AND-003의 OS 시작 창은 Native 로딩과 같은 배경색을 사용하며 Android 12 이상에서 별도 작은 런처 아이콘을 먼저 표시하지 않습니다. Native 첫 표시에는 그림·가구명 또는 앱 이름·부제가 함께 나옵니다. [시작 배경 계약과 검증](../../../../operations/android-launch-background-2026-10-15.md)을 따르며 기존 최소시간·권한·콘텐츠 준비 조건은 유지합니다.
+
 AND-014 / T-ANDROID-STARTUP-001의 Android 첫 홈 계측은 기존 Native 총시간과 Web navigation 기준 상세 시각을 분리합니다. WebView 설정 완료·최초 navigation 요청, 로그인·서버 조회·화면 준비 및 paint와 bridge 왕복을 선택 진단으로 기록하며 구 APK/Web을 지원합니다. 진단 실패는 접속과 화면에 영향을 주지 않습니다. 초기 계측 배포 뒤 Android 첫 홈에도 아래 Lite 최초 조회 전환 계약을 적용합니다. 계약·검증 추적성은 [Android 시작 상세 계측](../../../../operations/android-startup-diagnostics-2026-10-04.md)을 따릅니다.
 
 > 상위 Bounded Context: 없음 — [지원·읽기·플랫폼 영역](../../requirements.md)  

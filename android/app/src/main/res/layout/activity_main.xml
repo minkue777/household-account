@@ -14,7 +14,7 @@
         android:id="@+id/startupImage"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="#F5F2FD"
+        android:background="@color/startup_background"
         android:contentDescription="@string/startup_loading"
         android:padding="24dp"
         android:visibility="gone">
