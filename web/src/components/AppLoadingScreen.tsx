@@ -42,8 +42,7 @@ export default function AppLoadingScreen() {
         <span className="h-[7px] w-[7px] rounded-full bg-[#4c90ee]" />
         <span className="h-[7px] w-[7px] rounded-full bg-[#d7c7f4]" />
       </div>
-      <span aria-hidden="true" className="startup-admin-status text-gray-500">로딩중...</span>
-      <span className="sr-only">로딩중...</span>
+      <span className="startup-status sr-only text-gray-500">로딩중...</span>
     </div>
   );
 }

@@ -6,7 +6,6 @@
   visibility: hidden;
 }
 
-.startup-admin-status,
 [data-startup-mode="admin"] .startup-brand,
 [data-startup-mode="admin"] .startup-dots {
   display: none;
@@ -16,8 +15,8 @@
   background: #fff;
 }
 
-[data-startup-mode="admin"] .startup-admin-status {
-  display: block;
+[data-startup-mode="admin"] .startup-status {
+  @apply not-sr-only;
 }
 
 .startup-illustration {

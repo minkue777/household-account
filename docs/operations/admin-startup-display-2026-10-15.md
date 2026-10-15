@@ -24,3 +24,5 @@
 | AND-003 | 기존 Native handoff 계약 검사에서 관리자 Suspense도 콘텐츠 준비 전까지 완료 신호를 보내지 않음 |
 
 관련 Jest 3파일 40개와 `tsc --noEmit`이 통과했습니다. E2E 준비의 Functions architecture 43개와 요구사항 248개·시나리오 235개 집계, E2E 추적성 누락 0개도 확인했습니다. 실제 production build·Firebase Emulator 브라우저 검사는 관리자 가구 열기·자산 조회와 일반 iPhone 시작 계약을 함께 확인하며 `%TEMP%/household-admin-startup-e2e-20261015.log`와 해당 SHA의 CI로 추적합니다.
+
+기존 홈 전체 준비 검사까지 확장했을 때 같은 로딩 문구를 시각 표시·접근성용으로 두 번 만든 문제가 1개 검사에서 드러났습니다. 검사를 변경하지 않고 기존 접근성 문구 하나를 관리자 모드에서만 시각적으로 드러내도록 정리했으며 관련 Jest 4파일 62개가 통과했습니다.

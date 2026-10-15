@@ -150,8 +150,8 @@ test('[AST-006][ADM-001][ADM-002][ADM-004][ADM-005][EXT-001][EXT-002][EXT-004] �
         await expect.poll(() => heldChunks).toBeGreaterThan(0);
         const startup = admin.locator('[data-startup-screen]');
         await expect(startup).toHaveAttribute('data-startup-mode', 'admin');
-        await expect(startup.locator('.startup-admin-status')).toHaveText('로딩중...');
-        await expect(startup.locator('.startup-admin-status')).toBeVisible();
+        await expect(startup.locator('.startup-status')).toHaveText('로딩중...');
+        await expect(startup.locator('.startup-status')).toBeVisible();
         await expect(startup.locator('.startup-brand')).toBeHidden();
         await expect(startup.locator('.startup-dots')).toBeHidden();
         await expect.poll(async () => (await startupObservation()).loadingFrames).toBeGreaterThan(0);
