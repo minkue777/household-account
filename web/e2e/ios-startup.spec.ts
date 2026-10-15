@@ -364,6 +364,7 @@ test.describe('첫 홈 별도 서버 조회', () => {
       for (const size of [
         { name: 'mobile', width: 390, height: 844, fit: 'contain' },
         { name: 'narrow-mobile', width: 360, height: 960, fit: 'contain' },
+        { name: 'small-window', width: 240, height: 640, fit: 'contain' },
         { name: 'landscape', width: 844, height: 390, fit: 'contain' },
         { name: 'desktop', width: 1280, height: 800, fit: 'contain' },
       ]) {
@@ -375,26 +376,29 @@ test.describe('첫 홈 별도 서버 조회', () => {
           const screen = image.parentElement!.getBoundingClientRect();
           const screenStyle = getComputedStyle(image.parentElement!);
           const style = getComputedStyle(image);
-          const padding = parseFloat(style.paddingLeft);
-          const scale = Math.min((box.width - padding * 2) / image.naturalWidth,
-            (box.height - padding * 2) / image.naturalHeight);
+          const padding = parseFloat(screenStyle.paddingLeft);
+          const scale = Math.min(box.width / image.naturalWidth, box.height / image.naturalHeight);
           return { x: box.x, y: box.y, width: box.width, height: box.height,
-            left: (box.width - image.naturalWidth * scale) / 2,
-            top: (box.height - image.naturalHeight * scale) / 2,
+            left: box.x + (box.width - image.naturalWidth * scale) / 2,
+            top: box.y + (box.height - image.naturalHeight * scale) / 2,
             scale, padding, position: style.objectPosition, screenWidth: screen.width, screenHeight: screen.height,
+            physicalWidth: image.naturalWidth * scale * devicePixelRatio,
             edges: [screenStyle.left, screenStyle.right, screenStyle.top, screenStyle.bottom].map(parseFloat) };
         });
         // 브라우저 스크롤바를 제외한 실제 fixed 화면을 채우며 1/64 CSS px 반올림만 허용합니다.
         expect(layout.position).toBe('50% 50%');
-        for (const offset of [layout.x, layout.y, ...layout.edges]) expect(offset).toBeCloseTo(0, 1);
-        expect(layout.width).toBeCloseTo(layout.screenWidth, 1);
-        expect(layout.height).toBeCloseTo(layout.screenHeight, 1);
+        for (const offset of layout.edges) expect(offset).toBeCloseTo(0, 1);
+        expect(layout.x + layout.width / 2).toBeCloseTo(layout.screenWidth / 2, 1);
+        expect(layout.y).toBeCloseTo(24, 1);
+        expect(layout.width).toBeCloseTo(Math.min(240, layout.screenWidth - 48), 1);
+        expect(layout.height).toBeCloseTo(layout.screenHeight - 48, 1);
         expect(layout.padding).toBe(24);
-        // 배경을 채우기 위해 확대하지 않고 24px 여백 안에 전체 원본을 보존합니다.
+        // 고밀도 화면에서도 원본 픽셀을 늘리지 않고, 전체 그림을 중앙의 최대 240px 폭 안에 표시합니다.
+        expect(layout.physicalWidth).toBeLessThanOrEqual(941);
         expect(layout.left).toBeGreaterThanOrEqual(24 - 0.05);
         expect(layout.top).toBeGreaterThanOrEqual(24 - 0.05);
-        expect(layout.left + 941 * layout.scale).toBeLessThanOrEqual(layout.width - 24 + 0.05);
-        expect(layout.top + 1672 * layout.scale).toBeLessThanOrEqual(layout.height - 24 + 0.05);
+        expect(layout.left + 941 * layout.scale).toBeLessThanOrEqual(layout.screenWidth - 24 + 0.05);
+        expect(layout.top + 1672 * layout.scale).toBeLessThanOrEqual(layout.screenHeight - 24 + 0.05);
         artworkLayouts.push({ ...size, ...layout });
         await restarted.screenshot({ path: testInfo.outputPath(`startup-brand-${size.name}.png`) });
       }

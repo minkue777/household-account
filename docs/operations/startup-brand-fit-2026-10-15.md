@@ -1,6 +1,6 @@
 # 시작 화면 맞춤·최소 표시와 아이콘 배경 수정
 
-> 현재 구현은 아래 v2.0.3 후속 절의 축소 표시·무손실 원본입니다. 배경은 사용자 참조색 `#F5F2FD`이며 앞선 검증·배포 이력은 보존합니다.
+> 현재 구현은 아래 v2.0.4 후속 절의 최대 240px/dp 표시입니다. 배경은 사용자 참조색 `#F5F2FD`이며 앞선 검증·배포 이력은 보존합니다.
 
 ## 원인과 계약
 
@@ -76,3 +76,21 @@ Web도 최종 리소스로 production build·실제 Emulator WebKit 기존 레�
 실제 Firebase Emulator·production build·WebKit의 마지막 잔액/첫 홈 검사 1개가 통과했습니다(전체 43.1초, 테스트 14.6초). 390×844·360×960·844×390·1280×800에서 전체 이미지와 24px 여백을 확인했습니다. API 36.1 실제 MainActivity의 이미지 보류·회전·표시 전환 검사 1개도 통과했습니다(4.583초). 휴대폰 캡처에서 크기 축소와 잘림 없는 표시를 확인했으며 검증 후 에뮬레이터를 정상 종료했습니다. 로그는 `%TEMP%/household-startup-sharpness-e2e-20261015.log`, `household-startup-sharpness-native-20261015.log`입니다.
 
 Android debug·test·release build가 통과했습니다. 서명 APK는 v2.0.3/code41, 10,961,428바이트, SHA-256 `f898048085b72a240543689c352e672f28b3adb32b432f114907220baa79b165`이며 apksigner v2와 기존 인증서 일치를 확인했습니다. 로그는 `%TEMP%/household-v2.0.3-build-20261015.log`입니다. 요구사항 catalog 248개·test case 235개, E2E 추적성 244개·외부 검증 4개·누락 0개도 확인했습니다. 최소시간·준비 로직은 변경하지 않아 앞선 단위 검사를 반복하지 않았습니다.
+
+## v2.0.4 후속: 표시 폭 상한과 물리 픽셀 검증
+
+사용자는 v2.0.3도 여전히 크고 윤곽이 완전히 선명하지 않다고 보고했습니다. v2.0.3은 양옆 여백만 추가했으므로 390px 화면에서 이미지 폭이 342px이고, DPR 3에서는 1,026 물리 픽셀로 941px 원본보다 크게 표시될 수 있었습니다. 무손실 포맷만으로 고밀도 화면의 확대를 막는 것은 아닙니다. 사용자 기기의 설치 버전·실제 DPR은 확인되지 않아 이 경로를 해당 기기의 확정 원인으로 단정하지 않습니다.
+
+Web/PWA와 Android 모두 이미지 전체 폭을 최대 240px/dp로 제한합니다. 390px 화면 기준 v2.0.3 대비 약 30% 작아지고 화면이 커져도 계속 커지지 않습니다. 바깥 24px/dp 여백과 가로·작은 창의 contain/fitCenter를 유지합니다. Android는 전체 배경용 FrameLayout과 폭 상한을 가진 기본 ImageView를 사용하며 새로운 사용자 정의 View나 타이머를 추가하지 않습니다. 전체 시작 레이어의 노출·오류·Web 전환은 기존 View 계약을 그대로 사용합니다.
+
+941×1672 무손실 원본 파일은 다시 생성·변환하지 않습니다. Web의 DPR 3에서는 최대 720 물리 픽셀로 표시되며, 실제 Android에서도 표시된 물리 너비가 drawable 원본 너비 이내인지 검증합니다. 원본에 있는 부드러운 3D 음영까지 벡터처럼 바뀐다고 주장하지 않습니다. 기존 마지막 서버 응답 대기·회전·오류·최소 1.2초·계측은 유지하고 크기 및 원본 대비 표시 해상도를 검증합니다. Android v2.0.4/code42와 Web Git 자동배포 대상입니다.
+
+실제 Emulator·production build·WebKit의 첫 홈/마지막 잔액 검사 1개가 통과했습니다(전체 41.4초, 테스트 13.9초). DPR 3 및 390×844·360×960·240×640·844×390·1280×800에서 폭 상한·중앙 배치·전체 내용 보존·원본 픽셀 이내 표시를 확인했습니다. 실제 API 36.1 MainActivity의 요청 보류·회전·Web 전환 검사 1개도 통과했습니다(5.981초). 최종 Android 세로·가로 및 WebKit DPR 3 캡처를 확인했습니다. WebKit 확인 캡처에서는 로딩 타이머만 정지했으며 계약 검사는 타이머를 바꾸지 않은 위 E2E 결과입니다. 로그는 `%TEMP%/household-startup-cap-{e2e,native,build}-20261015.log`입니다.
+
+Android debug·test·release build가 통과했습니다(27초). APK는 10,961,596바이트, SHA-256 `fab13bcf4c7e5440bcfc52598a2814a3269f07665ead5c9355d127984267be2a`이며 v2 서명을 검증했습니다. 요구사항 248개·test case 235개·E2E 추적 누락 0개, diff 검사를 통과했습니다. 실제 Android와 Firebase 에뮬레이터 및 확인용 Web 서버를 종료했습니다.
+
+### 앞선 CI 결과와 미확정 실패 보존
+
+v2.0.1의 `38699457238`은 실제 Android를 포함한 다섯 검사·요약이 모두 성공했습니다. v2.0.2의 `38700717664`는 Android·Functions·Web 성공, Web E2E 112 passed/1 failed입니다. `ios-startup.spec.ts:102`의 검색 chunk 고의 실패 후 재시도에서 입력란을 30초 안에 찾지 못했습니다. trace에는 최초 abort 후 재요청·continue가 있고, 이후 검색/shared chunk·font·Listen에 `WebKit encountered an internal error`, Auth IndexedDB connection closing 오류가 함께 기록됐습니다. 재시도 요청에는 완료 HTTP 응답이 없으며 화면은 검색 로딩을 유지했습니다. 실패의 최초 원인은 미확정이며 크기 수정으로 해결됐다고 하지 않습니다.
+
+동일 검사를 실제 Emulator·production WebKit에서 변경 없이 한 차례 재현 시도한 결과 1 passed(36.0초, 테스트 11.5초)로 실패가 재현되지 않았습니다. 기존 30초 기준·chunk 재요청 횟수·검색·편집·서버 저장 검증을 유지했습니다. 로그 `%TEMP%/household-startup-retry-repro-20261015.log`, CI 로그 `household-startup-v202-ci-38700717664.log`, artifact `household-startup-v202-ci-artifacts-38700717664`, trace `household-startup-v202-trace-38700717664`에 관측을 보존하며 다음 전체 CI 결과를 후속 확인합니다.

@@ -176,6 +176,28 @@ class MainActivityInstrumentationTest {
                 } else null
             }
         )
+        fun assertArtworkLayout(activity: MainActivity) {
+            val screen = activity.findViewById<View>(R.id.startupImage)
+            val artwork = activity.findViewById<ImageView>(R.id.startupArtwork)
+            val density = activity.resources.displayMetrics.density
+            val padding = (24 * density).toInt()
+            assertEquals(View.VISIBLE, screen.visibility)
+            assertEquals(ImageView.ScaleType.FIT_CENTER, artwork.scaleType)
+            assertEquals(padding, screen.paddingLeft)
+            assertEquals(padding, screen.paddingTop)
+            assertTrue("화면이 커져도 최대 240dp", artwork.width <= 240 * density + 1)
+            assertEquals("가운데 배치", screen.width / 2f, artwork.left + artwork.width / 2f, 1f)
+            val displayedImage = RectF(artwork.drawable.bounds)
+            artwork.imageMatrix.mapRect(displayedImage)
+            assertTrue("물리 픽셀도 원본을 확대하지 않음", displayedImage.width() <= artwork.drawable.intrinsicWidth)
+            displayedImage.offset(artwork.left.toFloat(), artwork.top.toFloat())
+            assertTrue("24dp 여백 안에 전체 원본 보존", displayedImage.left >= padding - 1 &&
+                displayedImage.top >= padding - 1 && displayedImage.right <= screen.width - padding + 1 &&
+                displayedImage.bottom <= screen.height - padding + 1)
+            val visibleBounds = Rect()
+            assertTrue(screen.getGlobalVisibleRect(visibleBounds))
+            assertEquals("시스템 UI 또는 부모에 의해 잘리지 않음", screen.height, visibleBounds.height())
+        }
         try {
             withObservedWebViewLifecycle(document) { scenario ->
                 assertTrue("실제 WebView 시작 이미지 요청", requested.await(5, TimeUnit.SECONDS))
@@ -184,22 +206,8 @@ class MainActivityInstrumentationTest {
                 }
                 assertEquals("false", evaluateWebView(scenario, "document.images[0].complete"))
                 scenario.onActivity { activity ->
-                    val artwork = activity.findViewById<ImageView>(R.id.startupImage)
-                    assertEquals(View.VISIBLE, artwork.visibility)
                     assertEquals(View.GONE, activity.findViewById<View>(R.id.permissionLayout).visibility)
-                    assertEquals(ImageView.ScaleType.FIT_CENTER, artwork.scaleType)
-                    val padding = (24 * activity.resources.displayMetrics.density).toInt()
-                    assertEquals(padding, artwork.paddingLeft)
-                    assertEquals(padding, artwork.paddingTop)
-                    val displayedImage = RectF(artwork.drawable.bounds)
-                    artwork.imageMatrix.mapRect(displayedImage)
-                    displayedImage.offset(artwork.paddingLeft.toFloat(), artwork.paddingTop.toFloat())
-                    assertTrue("확대 없이 24dp 여백 안에 전체 원본 보존", displayedImage.left >= padding - 1 &&
-                        displayedImage.top >= padding - 1 && displayedImage.right <= artwork.width - padding + 1 &&
-                        displayedImage.bottom <= artwork.height - padding + 1)
-                    val visibleBounds = Rect()
-                    assertTrue(artwork.getGlobalVisibleRect(visibleBounds))
-                    assertEquals("시스템 UI 또는 부모에 의해 잘리지 않음", artwork.height, visibleBounds.height())
+                    assertArtworkLayout(activity)
                 }
                 InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()?.let { screenshot ->
                     File(context.getExternalFilesDir(null), "startup-native.png").outputStream().use {
@@ -211,16 +219,9 @@ class MainActivityInstrumentationTest {
                 waitUntil("가로 화면에서도 시작 이미지의 전체 문구 보존") {
                     var landscape = false
                     scenario.onActivity { activity ->
-                        val artwork = activity.findViewById<ImageView>(R.id.startupImage)
-                        landscape = artwork.width > artwork.height
-                        if (landscape) {
-                            assertEquals(View.VISIBLE, artwork.visibility)
-                            assertEquals(ImageView.ScaleType.FIT_CENTER, artwork.scaleType)
-                            val displayedImage = RectF(artwork.drawable.bounds)
-                            artwork.imageMatrix.mapRect(displayedImage)
-                            assertTrue(displayedImage.top >= 0 && displayedImage.bottom <= artwork.height &&
-                                displayedImage.left >= 0 && displayedImage.right <= artwork.width)
-                        }
+                        val screen = activity.findViewById<View>(R.id.startupImage)
+                        landscape = screen.width > screen.height
+                        if (landscape) assertArtworkLayout(activity)
                     }
                     landscape
                 }
