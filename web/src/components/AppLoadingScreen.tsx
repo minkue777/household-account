@@ -1,5 +1,5 @@
 import Image from 'next/image';
-import startupBrand from '@/assets/startup-brand.jpg';
+import startupBrand from '@/assets/startup-brand.webp';
 
 export default function AppLoadingScreen() {
   return (
@@ -9,7 +9,7 @@ export default function AppLoadingScreen() {
         alt=""
         priority
         unoptimized
-        className="app-startup-artwork h-full w-full object-contain"
+        className="h-full w-full object-contain p-6"
       />
       <span className="sr-only">로딩중...</span>
     </div>

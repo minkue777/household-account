@@ -358,12 +358,12 @@ test.describe('첫 홈 별도 서버 조회', () => {
       const artwork = restarted.getByRole('status').locator('img');
       await expect(artwork).toBeVisible();
       await expect.poll(() => artwork.evaluate((image: HTMLImageElement) =>
-        image.complete && image.naturalWidth === 720 && image.naturalHeight === 1280)).toBe(true);
+        image.complete && image.naturalWidth === 941 && image.naturalHeight === 1672)).toBe(true);
       const viewport = restarted.viewportSize()!;
       const artworkLayouts = [];
       for (const size of [
-        { name: 'mobile', width: 390, height: 844, fit: 'cover' },
-        { name: 'narrow-mobile', width: 360, height: 960, fit: 'cover' },
+        { name: 'mobile', width: 390, height: 844, fit: 'contain' },
+        { name: 'narrow-mobile', width: 360, height: 960, fit: 'contain' },
         { name: 'landscape', width: 844, height: 390, fit: 'contain' },
         { name: 'desktop', width: 1280, height: 800, fit: 'contain' },
       ]) {
@@ -375,12 +375,13 @@ test.describe('첫 홈 별도 서버 조회', () => {
           const screen = image.parentElement!.getBoundingClientRect();
           const screenStyle = getComputedStyle(image.parentElement!);
           const style = getComputedStyle(image);
-          const ratios = [box.width / image.naturalWidth, box.height / image.naturalHeight];
-          const scale = style.objectFit === 'cover' ? Math.max(...ratios) : Math.min(...ratios);
+          const padding = parseFloat(style.paddingLeft);
+          const scale = Math.min((box.width - padding * 2) / image.naturalWidth,
+            (box.height - padding * 2) / image.naturalHeight);
           return { x: box.x, y: box.y, width: box.width, height: box.height,
             left: (box.width - image.naturalWidth * scale) / 2,
             top: (box.height - image.naturalHeight * scale) / 2,
-            scale, position: style.objectPosition, screenWidth: screen.width, screenHeight: screen.height,
+            scale, padding, position: style.objectPosition, screenWidth: screen.width, screenHeight: screen.height,
             edges: [screenStyle.left, screenStyle.right, screenStyle.top, screenStyle.bottom].map(parseFloat) };
         });
         // 브라우저 스크롤바를 제외한 실제 fixed 화면을 채우며 1/64 CSS px 반올림만 허용합니다.
@@ -388,22 +389,12 @@ test.describe('첫 홈 별도 서버 조회', () => {
         for (const offset of [layout.x, layout.y, ...layout.edges]) expect(offset).toBeCloseTo(0, 1);
         expect(layout.width).toBeCloseTo(layout.screenWidth, 1);
         expect(layout.height).toBeCloseTo(layout.screenHeight, 1);
-        if (size.fit === 'cover') {
-          expect(layout.left).toBeLessThanOrEqual(0.05);
-          expect(layout.top).toBeCloseTo(0, 1);
-          // 원본 JPG의 제목·부제 및 하단 점은 좌우 장식이 잘려도 전부 보여야 합니다.
-          for (const content of [{ x: 150, y: 710, width: 425, height: 145 }, { x: 320, y: 1100, width: 80, height: 25 }]) {
-            expect(layout.left + content.x * layout.scale).toBeGreaterThanOrEqual(-0.05);
-            expect(layout.left + (content.x + content.width) * layout.scale).toBeLessThanOrEqual(layout.width + 0.05);
-            expect(layout.top + content.y * layout.scale).toBeGreaterThanOrEqual(-0.05);
-            expect(layout.top + (content.y + content.height) * layout.scale).toBeLessThanOrEqual(layout.height + 0.05);
-          }
-        } else {
-          expect(layout.left).toBeGreaterThanOrEqual(-0.05);
-          expect(layout.top).toBeGreaterThanOrEqual(-0.05);
-          expect(layout.left + 720 * layout.scale).toBeLessThanOrEqual(layout.width + 0.05);
-          expect(layout.top + 1280 * layout.scale).toBeLessThanOrEqual(layout.height + 0.05);
-        }
+        expect(layout.padding).toBe(24);
+        // 배경을 채우기 위해 확대하지 않고 24px 여백 안에 전체 원본을 보존합니다.
+        expect(layout.left).toBeGreaterThanOrEqual(24 - 0.05);
+        expect(layout.top).toBeGreaterThanOrEqual(24 - 0.05);
+        expect(layout.left + 941 * layout.scale).toBeLessThanOrEqual(layout.width - 24 + 0.05);
+        expect(layout.top + 1672 * layout.scale).toBeLessThanOrEqual(layout.height - 24 + 0.05);
         artworkLayouts.push({ ...size, ...layout });
         await restarted.screenshot({ path: testInfo.outputPath(`startup-brand-${size.name}.png`) });
       }

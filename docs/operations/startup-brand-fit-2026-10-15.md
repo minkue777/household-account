@@ -1,6 +1,6 @@
 # 시작 화면 맞춤·최소 표시와 아이콘 배경 수정
 
-> 현재 색상은 아래 v2.0.2 후속 절의 사용자 참조색 `#F5F2FD`입니다. 최초 v2.0.1 검증·배포 이력은 보존합니다.
+> 현재 구현은 아래 v2.0.3 후속 절의 축소 표시·무손실 원본입니다. 배경은 사용자 참조색 `#F5F2FD`이며 앞선 검증·배포 이력은 보존합니다.
 
 ## 원인과 계약
 
@@ -62,3 +62,17 @@ v2.0.1의 `f53039ade9d904dfdfe93d9af063ebc978f389bb`는 Vercel Git 배포와 Pro
 최종 색상으로 실제 Android 시작 이미지 검사 1개가 통과했습니다(10.809초). 세로·가로 캡처에서 이미지 안팎이 동일한 단색이고 로고·제목·하단 점이 보존됨을 확인했습니다. 서명 release build 통과, v2.0.2/code40, 10,803,595바이트, SHA-256 `d5c587c955b471ae70794fd2c17b1bd8ce738b8f909f3ed8e42d42b6d009b3e8`입니다. apksigner v2 검증과 기존 인증서 일치를 확인했습니다. 로그는 `%TEMP%/household-brand-color-capture-20261015.log`, `household-v2.0.2-release-20261015.log`입니다.
 
 Web도 최종 리소스로 production build·실제 Emulator WebKit 기존 레이아웃/마지막 잔액 검사 1개를 통과했습니다(테스트 14.1초). 4종 화면의 16개 모서리 모두 RGB `(245, 242, 253)`으로 일치하고 중앙 내용 보존을 육안 확인했습니다. 기능 코드는 바꾸지 않아 앞선 단위 계약을 재반복하지 않았습니다. 로그는 `%TEMP%/household-startup-brand-v202-layout-e2e-20261015.log`입니다.
+
+## v2.0.3 후속: 과도한 확대와 압축 선명도 개선
+
+사용자가 로딩 이미지가 크고 깨져 보인다고 보고했습니다. 720×1280 JPEG를 긴 휴대폰 높이에 맞춰 cover/centerCrop으로 확대하면서 고밀도 화면의 물리 픽셀보다 부족한 원본을 늘렸습니다. 배경은 이미 단색이므로 화면을 이미지로 채울 필요가 없습니다.
+
+모든 비율에서 Web `contain + 24px padding`, Android 기본 `ImageView fitCenter + 24dp padding`으로 통일합니다. 비율별 cover CSS와 전용 `StartupArtworkView`를 제거합니다. 390×844 화면 기준 로고의 폭은 약 28% 작아지며 전체 시안은 보존합니다. 단색 배경·아이콘·하단 문구 삭제·최소 1.2초·준비/오류/계측 계약은 유지합니다.
+
+새로 그림을 생성하거나 저해상도 파일을 확대하지 않고 이전 내장 imagegen의 941×1672 투명 원본을 사용합니다. `web/src/assets/startup-brand-foreground.png`를 해당 원본으로 복원하고 같은 `#F5F2FD` 배경의 무손실 WebP를 Web `startup-brand.webp`와 Android `startup_brand.webp`에 동일하게 저장했습니다. 표시 자산은 194,808바이트이며 이전 JPEG의 양자화 손실을 재적용하지 않습니다. JPEG 참조/파일을 제거했습니다.
+
+검사는 실제 브라우저와 Android에서 24px/dp 여백, 전체 이미지 보존, 941×1672 원본 로드와 기존 서버 준비·실패 조건을 확인하도록 변경합니다. Android v2.0.3/code41과 Web Git 자동배포 대상이며 Firebase 실행 코드는 변경하지 않습니다.
+
+실제 Firebase Emulator·production build·WebKit의 마지막 잔액/첫 홈 검사 1개가 통과했습니다(전체 43.1초, 테스트 14.6초). 390×844·360×960·844×390·1280×800에서 전체 이미지와 24px 여백을 확인했습니다. API 36.1 실제 MainActivity의 이미지 보류·회전·표시 전환 검사 1개도 통과했습니다(4.583초). 휴대폰 캡처에서 크기 축소와 잘림 없는 표시를 확인했으며 검증 후 에뮬레이터를 정상 종료했습니다. 로그는 `%TEMP%/household-startup-sharpness-e2e-20261015.log`, `household-startup-sharpness-native-20261015.log`입니다.
+
+Android debug·test·release build가 통과했습니다. 서명 APK는 v2.0.3/code41, 10,961,428바이트, SHA-256 `f898048085b72a240543689c352e672f28b3adb32b432f114907220baa79b165`이며 apksigner v2와 기존 인증서 일치를 확인했습니다. 로그는 `%TEMP%/household-v2.0.3-build-20261015.log`입니다. 요구사항 catalog 248개·test case 235개, E2E 추적성 244개·외부 검증 4개·누락 0개도 확인했습니다. 최소시간·준비 로직은 변경하지 않아 앞선 단위 검사를 반복하지 않았습니다.

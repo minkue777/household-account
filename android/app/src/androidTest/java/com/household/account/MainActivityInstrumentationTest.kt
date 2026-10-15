@@ -166,13 +166,13 @@ class MainActivityInstrumentationTest {
         val responseReady = CountDownLatch(1)
         val document = LocalWebViewDocument(
             TrustedWebOrigin.APP_URL,
-            "<!doctype html><html><body>로그인 또는 홈 준비 화면<img src='/native-test/startup.jpg'></body></html>",
+            "<!doctype html><html><body>로그인 또는 홈 준비 화면<img src='/native-test/startup.webp'></body></html>",
             subresourceResponse = { request ->
-                if (request.url.path == "/native-test/startup.jpg") {
+                if (request.url.path == "/native-test/startup.webp") {
                     requested.countDown()
                     check(responseReady.await(15, TimeUnit.SECONDS))
                     val image = context.resources.openRawResource(R.drawable.startup_brand)
-                    WebResourceResponse("image/jpeg", null, image)
+                    WebResourceResponse("image/webp", null, image)
                 } else null
             }
         )
@@ -187,15 +187,16 @@ class MainActivityInstrumentationTest {
                     val artwork = activity.findViewById<ImageView>(R.id.startupImage)
                     assertEquals(View.VISIBLE, artwork.visibility)
                     assertEquals(View.GONE, activity.findViewById<View>(R.id.permissionLayout).visibility)
-                    assertEquals(ImageView.ScaleType.CENTER_CROP, artwork.scaleType)
+                    assertEquals(ImageView.ScaleType.FIT_CENTER, artwork.scaleType)
+                    val padding = (24 * activity.resources.displayMetrics.density).toInt()
+                    assertEquals(padding, artwork.paddingLeft)
+                    assertEquals(padding, artwork.paddingTop)
                     val displayedImage = RectF(artwork.drawable.bounds)
                     artwork.imageMatrix.mapRect(displayedImage)
-                    assertEquals("휴대폰 상단에 단색 여백이 없음", 0f, displayedImage.top, 1f)
-                    assertEquals("휴대폰 하단에 단색 여백이 없음", artwork.height.toFloat(), displayedImage.bottom, 1f)
-                    val brandContent = RectF(145f, 355f, 575f, 1125f)
-                    artwork.imageMatrix.mapRect(brandContent)
-                    assertTrue("로고·제목·하단 점 보존", brandContent.left >= 0 && brandContent.top >= 0 &&
-                        brandContent.right <= artwork.width && brandContent.bottom <= artwork.height)
+                    displayedImage.offset(artwork.paddingLeft.toFloat(), artwork.paddingTop.toFloat())
+                    assertTrue("확대 없이 24dp 여백 안에 전체 원본 보존", displayedImage.left >= padding - 1 &&
+                        displayedImage.top >= padding - 1 && displayedImage.right <= artwork.width - padding + 1 &&
+                        displayedImage.bottom <= artwork.height - padding + 1)
                     val visibleBounds = Rect()
                     assertTrue(artwork.getGlobalVisibleRect(visibleBounds))
                     assertEquals("시스템 UI 또는 부모에 의해 잘리지 않음", artwork.height, visibleBounds.height())
@@ -237,7 +238,7 @@ class MainActivityInstrumentationTest {
                         artworkHidden = activity.findViewById<View>(R.id.startupImage).visibility == View.GONE
                     }
                     artworkHidden && evaluateWebView(scenario,
-                        "document.images[0].complete && document.images[0].naturalWidth === 720") == "true"
+                        "document.images[0].complete && document.images[0].naturalWidth === 941") == "true"
                 }
                 scenario.moveToState(Lifecycle.State.CREATED)
                 scenario.moveToState(Lifecycle.State.RESUMED)
