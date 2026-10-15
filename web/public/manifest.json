@@ -1,6 +1,6 @@
 {
-  "name": "가계부",
-  "short_name": "가계부",
+  "name": "모두의 가계부",
+  "short_name": "모두의 가계부",
   "description": "가족 지출 관리 앱",
   "start_url": "/",
   "display": "standalone",

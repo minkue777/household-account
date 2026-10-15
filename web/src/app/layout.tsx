@@ -4,6 +4,7 @@ import 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css'
 import './globals.css'
 import AppProviders from '@/components/AppProviders'
 import { isFirebaseEmulatorSuiteConfigured } from '@/platform/firebase/firebaseEmulatorConfig'
+import { STARTUP_HOUSEHOLD_NAME_SCRIPT } from '@/features/access-household/application/startupHouseholdName'
 
 const startupFont = localFont({
   src: '../assets/fonts/Jua-Regular.woff2',
@@ -12,13 +13,13 @@ const startupFont = localFont({
 })
 
 export const metadata: Metadata = {
-  title: '가계부',
+  title: '모두의 가계부',
   description: '가족 지출 관리 앱',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: '가계부',
+    title: '모두의 가계부',
   },
   formatDetection: {
     telephone: false,
@@ -52,6 +53,7 @@ export default function RootLayout({
         <AppProviders>
           {children}
         </AppProviders>
+        <script dangerouslySetInnerHTML={{ __html: STARTUP_HOUSEHOLD_NAME_SCRIPT }} />
       </body>
     </html>
   )

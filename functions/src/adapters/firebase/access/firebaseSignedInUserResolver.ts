@@ -99,7 +99,8 @@ function householdView(
     const value = candidate as Record<string, unknown>;
     const id = typeof value.id === "string" ? value.id.trim() : "";
     const memberName = typeof value.name === "string" ? value.name.trim() : "";
-    const aggregateVersion = value.aggregateVersion;
+    // 구형 표시용 목록에는 버전이 없지만 canonical member의 검증과는 별개입니다.
+    const aggregateVersion = value.aggregateVersion === undefined ? 1 : value.aggregateVersion;
     if (
       id === "" ||
       memberName === "" ||

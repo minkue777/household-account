@@ -7,7 +7,8 @@ export type MembershipFoundResolution = Extract<
   { kind: 'membership-found' }
 >;
 
-const STORAGE_KEY = 'household-account.signed-in-membership.v1';
+export const SIGNED_IN_MEMBERSHIP_STORAGE_KEY = 'household-account.signed-in-membership.v1';
+const STORAGE_KEY = SIGNED_IN_MEMBERSHIP_STORAGE_KEY;
 const CHANGED_EVENT = 'household-account:membership-cache-changed';
 
 interface StoredMembership {
@@ -157,11 +158,6 @@ export function readSignedInMembershipCache(
   if (typeof window === 'undefined' || principalUid.trim() === '') return undefined;
   const stored = readStoredMembership();
   return stored?.principalUid === principalUid ? stored.resolution : undefined;
-}
-
-/** 시작 화면의 표시용 이름입니다. 인증이나 데이터 접근 scope로 사용하지 않습니다. */
-export function readLastVerifiedHouseholdName(): string {
-  return readStoredMembership()?.resolution.household?.name ?? '';
 }
 
 export function subscribeSignedInMembershipCache(onChange: () => void): () => void {

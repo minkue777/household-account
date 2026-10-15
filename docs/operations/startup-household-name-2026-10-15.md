@@ -36,3 +36,5 @@ Android SessionMirror unit 5개와 debug·test·release 빌드가 통과했습�
 표시용 snapshot 읽기 실패 경계를 반영한 최종 Android debug·test·release 빌드도 통과했고(5초), 실제 3개 검사를 다시 실행해 모두 통과했습니다(5.665초). API 36.1 AVD와 Firebase 에뮬레이터를 정상 종료했습니다. APK는 11,987,770바이트, SHA-256 `799b1c6e0770b81d64e5ff094af50974fea303106ad2c80500fa94014ac672cf`이며 기존 인증서의 v2 서명을 확인했습니다. 최종 로그는 `%TEMP%/household-startup-name-native-build-final-20261015.log`, `household-startup-name-native-final-20261015.log`입니다.
 
 이전 v2.0.6 CI `38709693760`은 functions·web·android와 실제 android-instrumentation이 성공했으며 web-e2e 결과는 후속 확인합니다. 요구사항 catalog 248개·test case 235개, E2E 추적 누락 0개를 확인했습니다.
+
+사용자의 재현 보고로 구형 운영 표시 목록의 버전 누락이 서버 가구명 응답 자체를 생략하는 문제와 Web 첫 HTML의 빈 제목 구간을 추가 확인했습니다. 최초 검증이 놓친 경계와 수정은 [후속 원인·검증 기록](startup-name-legacy-metadata-2026-10-15.md)에 보존합니다. 이 문서의 최초 검증만으로 실제 운영 재실행의 이름 선행 표시가 보장되었다고 해석하지 않습니다.

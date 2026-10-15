@@ -1,10 +1,10 @@
 import {
   clearSignedInMembershipCache,
   readSignedInMembershipCache,
-  readLastVerifiedHouseholdName,
   subscribeSignedInMembershipCache,
   writeSignedInMembershipCache,
 } from '@/features/access-household/application/signedInMembershipCache';
+import { readStartupHouseholdName } from '@/features/access-household/application/startupHouseholdName';
 
 const resolution = {
   kind: 'membership-found' as const,
@@ -100,20 +100,20 @@ describe('로그인 Membership cache 계약', () => {
   });
 
   it('표시용 이름만 읽으며 손상·가구 ID 불일치·구형 이름 누락은 빈 이름으로 처리한다', () => {
-    expect(readLastVerifiedHouseholdName()).toBe('');
+    expect(readStartupHouseholdName()).toBe('');
     writeSignedInMembershipCache('uid-1', resolutionWithHousehold);
-    expect(readLastVerifiedHouseholdName()).toBe('저장된 가계부');
+    expect(readStartupHouseholdName()).toBe('저장된 가계부');
     expect(readSignedInMembershipCache('uid-2')).toBeUndefined();
     writeSignedInMembershipCache('uid-1', { ...resolutionWithHousehold, household: { ...resolutionWithHousehold.household!, id: 'other-household' } });
-    expect(readLastVerifiedHouseholdName()).toBe('');
+    expect(readStartupHouseholdName()).toBe('');
     writeSignedInMembershipCache('uid-1', resolution);
-    expect(readLastVerifiedHouseholdName()).toBe('');
+    expect(readStartupHouseholdName()).toBe('');
     window.localStorage.setItem('household-account.signed-in-membership.v1', '{broken');
-    expect(readLastVerifiedHouseholdName()).toBe('');
+    expect(readStartupHouseholdName()).toBe('');
   });
 
   it('같은 문서와 다른 창의 저장·제거를 알리고 구독 해제 후에는 알리지 않는다', () => {
-    const changed = jest.fn(() => readLastVerifiedHouseholdName());
+    const changed = jest.fn(() => readStartupHouseholdName());
     const unsubscribe = subscribeSignedInMembershipCache(changed);
     writeSignedInMembershipCache('uid-1', resolutionWithHousehold);
     expect(changed).toHaveLastReturnedWith('저장된 가계부');

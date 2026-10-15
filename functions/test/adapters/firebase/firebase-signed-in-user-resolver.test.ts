@@ -266,6 +266,52 @@ describe("Firebase signed-in user resolver", () => {
     });
   });
 
+  it("구형 표시용 가구원 버전이 없어도 가구명을 반환하고 canonical 버전은 보존한다", async () => {
+    const source = database(activeFixture({
+      household: {
+        name: "또니망고네",
+        createdAt: new Date("2026-07-23T00:00:00.000Z"),
+        members: [
+          { id: memberId, name: "민규" },
+          { id: "member-2", name: "진선", aggregateVersion: 7 },
+        ],
+      },
+    }));
+
+    await expect(resolveFirebaseSignedInUser(source, principalUid)).resolves.toMatchObject({
+      membership: { memberId, aggregateVersion: 3 },
+      household: {
+        id: householdId,
+        name: "또니망고네",
+        members: [
+          { id: memberId, name: "민규", aggregateVersion: 1 },
+          { id: "member-2", name: "진선", aggregateVersion: 7 },
+        ],
+      },
+    });
+  });
+
+  it.each([null, 0, -1, 1.5, "1"])("표시용 가구원의 명시된 잘못된 버전 %s는 보정하지 않는다", async aggregateVersion => {
+    const resolution = await resolveFirebaseSignedInUser(database(activeFixture({
+      household: {
+        name: "또니망고네",
+        createdAt: new Date("2026-07-23T00:00:00.000Z"),
+        members: [{ id: memberId, name: "민규", aggregateVersion }],
+      },
+    })), principalUid);
+
+    expect(resolution).toMatchObject({ kind: "membership-found", membership: { aggregateVersion: 3 } });
+    expect(resolution).not.toHaveProperty("household");
+  });
+
+  it.each([undefined, null, 0, -1, 1.5, "1"])("canonical 가구원 버전 %s는 누락·오류를 허용하지 않는다", async aggregateVersion => {
+    const fixture = activeFixture();
+    await expect(resolveFirebaseSignedInUser(database({
+      ...fixture,
+      member: { ...fixture.member, aggregateVersion },
+    }), principalUid)).rejects.toMatchObject({ code: "MEMBER_PROFILE_INVARIANT_BROKEN" });
+  });
+
   it("batches the same canonical membership, member and household references once", async () => {
     const source = database(activeFixture());
     const batch = vi.spyOn(source, "getAll");

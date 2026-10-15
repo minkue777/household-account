@@ -11,6 +11,7 @@ import { createAdminHouseholdAccessHandlers } from "../../../src/bootstrap/admin
 import { createAdminMemberAccessHandlers } from "../../../src/bootstrap/admin/handlers/adminMemberAccessHandlers";
 import { principalClaimId } from "../../../src/adapters/firebase/access/firebasePrincipalMembershipClaim";
 import { resolveFirebaseSignedInUser } from "../../../src/adapters/firebase/access/firebaseSignedInUserResolver";
+import { issueWebViewSessionToken } from "../../../src/bootstrap/firebaseWebViewSession";
 import { verifiedSystemAdministrator } from "../../../src/bootstrap/verifiedSystemAdministrator";
 import { FirebaseHouseholdCommandMembershipAdapter } from "../../../src/adapters/firebase/commands/firebaseHouseholdCommandInfrastructure";
 import type {
@@ -73,6 +74,48 @@ describeWithFirestoreEmulator("Firebase Access command adapters", () => {
 
   afterAll(async () => {
     if (app !== undefined) await deleteApp(app);
+  });
+
+  it("[T-WEBVIEW-004] 구형 가구원 표시 목록도 실제 세션 응답에 가구명과 버전을 포함한다", async () => {
+    const principalUid = "legacy-startup-user";
+    const created = await createAccessHouseholdCommandHandlers(database)
+      .get("access.create-household-with-self.v1")!.execute(context({
+        principalUid,
+        command: "access.create-household-with-self.v1",
+        commandId: "create-legacy-startup",
+        payload: { householdName: "또니망고네", memberName: "민규" },
+      })) as { householdId: string; memberId: string };
+    const household = database.doc(`households/${created.householdId}`);
+    const legacyMembers = [
+      { id: created.memberId, name: "민규" },
+      { id: "legacy-member-2", name: "진선" },
+      { id: "legacy-member-3", name: "지운" },
+    ];
+    await household.update({ members: legacyMembers });
+    await household.collection("members").doc(created.memberId).update({ aggregateVersion: 3 });
+
+    const response = await issueWebViewSessionToken({
+      principalUid,
+      issue: async (_uid, claims) => `test-token:${String(claims.hcaClient)}`,
+      resolveSignedInUser: uid => resolveFirebaseSignedInUser(database, uid),
+    });
+
+    expect(response).toMatchObject({
+      principalUid,
+      customToken: "test-token:web",
+      nativeCustomToken: "test-token:native",
+      signedInUserResolution: {
+        kind: "membership-found",
+        membership: { householdId: created.householdId, memberId: created.memberId, aggregateVersion: 3 },
+        household: {
+          id: created.householdId,
+          name: "또니망고네",
+          members: legacyMembers.map(member => ({ ...member, aggregateVersion: 1 })),
+        },
+      },
+    });
+    expect((await household.get()).data()?.members).toEqual(legacyMembers);
+    expect((await household.collection("members").doc(created.memberId).get()).data()?.aggregateVersion).toBe(3);
   });
 
   it("[T-HH-003] 같은 저장소 재호출도 receipt를 재생하고 초기화 완료·삭제를 되돌리지 않는다", async () => {

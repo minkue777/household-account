@@ -1,4 +1,5 @@
-const STORAGE_KEY = 'household-account.admin-household-view.v1';
+export const ADMIN_HOUSEHOLD_VIEW_STORAGE_KEY = 'household-account.admin-household-view.v1';
+const STORAGE_KEY = ADMIN_HOUSEHOLD_VIEW_STORAGE_KEY;
 
 export interface AdminHouseholdViewSelection {
   householdId: string;

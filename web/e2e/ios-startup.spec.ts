@@ -327,9 +327,12 @@ test.describe('첫 홈 별도 서버 조회', () => {
       await observeIndexedDbOpens(restarted, true);
       await restarted.addInitScript(() => {
         const phases: string[] = [];
-        Object.assign(window, { homeStartupFrames: phases });
+        const titleFrames: string[] = [];
+        Object.assign(window, { homeStartupFrames: phases, startupTitleFrames: titleFrames });
         const observeFrame = () => {
           const loading = document.querySelector('[role="status"][aria-busy="true"]');
+          const artwork = loading?.querySelector('img');
+          if (artwork?.complete && artwork.naturalWidth > 0) titleFrames.push(loading?.querySelector('h1')?.textContent ?? '');
           const complete = document.querySelector('.calendar-glass') && document.querySelectorAll('.balance-card-glass').length === 2;
           const phase = complete ? 'home' : loading?.querySelector('.sr-only')?.textContent === '로딩중...' ? 'loading' : 'gap';
           if ((phases.length > 0 || phase === 'loading') && phases.at(-1) !== phase) phases.push(phase);
@@ -344,6 +347,19 @@ test.describe('첫 홈 별도 서버 조회', () => {
       let release!: () => void;
       const held = new Promise<void>(resolve => { release = resolve; });
       let heldBalanceResponses = 0;
+      let releaseChunks!: () => void;
+      const chunksHeld = new Promise<void>(resolve => { releaseChunks = resolve; });
+      let heldChunks = 0;
+      const hydrationErrors: string[] = [];
+      restarted.on('pageerror', error => hydrationErrors.push(error.message));
+      restarted.on('console', message => {
+        if (message.type() === 'error' && /hydration|server HTML|did not match|Minified React error #4(?:18|19|21|22|23|25)/i.test(message.text())) hydrationErrors.push(message.text());
+      });
+      await restarted.route('**/_next/static/**/*.js', async route => {
+        heldChunks += 1;
+        await chunksHeld;
+        await route.continue();
+      });
       // UI가 저장한 가구명은 실제 Auth 복원 응답보다 먼저 표시하고, 조회 권한으로 쓰지 않습니다.
       await restarted.route('**/identitytoolkit.googleapis.com/v1/accounts:lookup?*', async route => {
         const response = await route.fetch();
@@ -368,7 +384,16 @@ test.describe('첫 홈 별도 서버 조회', () => {
         await route.fulfill({ response });
       });
       try {
-        await restarted.goto('/');
+        const documentResponse = await restarted.goto('/', { waitUntil: 'commit' });
+        expect(await documentResponse!.text(), '서버 HTML에 기기별 가구명을 포함하면 안 됩니다.').not.toContain(householdName);
+        await expect.poll(() => heldChunks).toBeGreaterThan(0);
+        await expect(restarted.getByRole('heading', { name: householdName })).toBeVisible();
+        await expect.poll(() => restarted.evaluate(() => (window as typeof window & { startupTitleFrames: string[] }).startupTitleFrames.length)).toBeGreaterThan(0);
+        const firstTitleFrames = await restarted.evaluate(() => (window as typeof window & { startupTitleFrames: string[] }).startupTitleFrames);
+        expect(firstTitleFrames.every(name => name === householdName), 'JS 청크를 받기 전 그림의 첫 frame에도 가구명이 함께 보여야 합니다.').toBe(true);
+        expect(heldAuthResponses).toBe(0);
+        expect(firestoreReads).toBe(0);
+        releaseChunks();
         await expect.poll(() => heldAuthResponses).toBeGreaterThan(0);
         await expect(restarted.getByRole('heading', { name: householdName })).toBeVisible();
         await expect(restarted.getByRole('status').locator('img')).toBeVisible();
@@ -472,9 +497,11 @@ test.describe('첫 홈 별도 서버 조회', () => {
         const marks = await restarted.evaluate(() => Object.fromEntries(performance.getEntriesByType('mark')
           .filter(entry => entry.name.startsWith('household-account:startup:')).map(entry => [entry.name, entry.startTime])));
         expect(marks['household-account:startup:ledger:first-paint']).toBeGreaterThanOrEqual(marks['household-account:startup:local-currency:ready']);
+        expect(hydrationErrors).toEqual([]);
         await testInfo.attach('home-initial-complete-display', { contentType: 'application/json',
-          body: Buffer.from(JSON.stringify({ heldAuthResponses, beforeAuthMarks, heldBalanceResponses, marks, frames, artworkLayouts }, null, 2)) });
+          body: Buffer.from(JSON.stringify({ heldChunks, firstTitleFrames, hydrationErrors, heldAuthResponses, beforeAuthMarks, heldBalanceResponses, marks, frames, artworkLayouts }, null, 2)) });
       } finally {
+        releaseChunks();
         releaseAuth();
         release();
         await restarted.unrouteAll({ behavior: 'wait' });
