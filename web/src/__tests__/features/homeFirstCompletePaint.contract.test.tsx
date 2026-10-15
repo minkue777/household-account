@@ -392,6 +392,8 @@ describe('first home complete paint contract', () => {
     const view = render(content);
     const loadingMarkup = screen.getByRole('status').outerHTML;
     expect(screen.getByRole('status')).toHaveTextContent('로딩중...');
+    expect(screen.getByRole('status').querySelector('img')).toHaveAttribute('alt', '');
+    expect(screen.getByText('로딩중...')).toHaveClass('sr-only');
     householdLoading = false;
     view.rerender(<HouseholdGuard><LedgerPage transactionType="expense" /></HouseholdGuard>);
     expect(screen.getByRole('status').outerHTML).toBe(loadingMarkup);

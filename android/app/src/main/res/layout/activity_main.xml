@@ -10,6 +10,16 @@
         android:layout_height="match_parent"
         android:visibility="gone" />
 
+    <ImageView
+        android:id="@+id/startupImage"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#F8F5FE"
+        android:contentDescription="@string/startup_loading"
+        android:scaleType="fitCenter"
+        android:src="@drawable/startup_brand"
+        android:visibility="gone" />
+
     <LinearLayout
         android:id="@+id/permissionLayout"
         android:layout_width="match_parent"

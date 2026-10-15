@@ -14,6 +14,8 @@ import android.view.View
 import android.view.ViewGroup
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceError
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.webkit.RenderProcessGoneDetail
@@ -56,6 +58,7 @@ class MainActivity : AppCompatActivity() {
     private var webView: WebView? = null
     private var webMessageScope: CoroutineScope? = null
     private lateinit var permissionLayout: LinearLayout
+    private lateinit var startupImage: View
     private lateinit var hostBridge: AndroidHostBridge
     private val resumeRefreshGate = FirstResumeRefreshGate()
     private val webStartupGate = OneShotExecutionGate()
@@ -74,6 +77,7 @@ class MainActivity : AppCompatActivity() {
 
         webView = findViewById(R.id.webView)
         permissionLayout = findViewById(R.id.permissionLayout)
+        startupImage = findViewById(R.id.startupImage)
 
         if (BuildConfig.DEBUG) {
             WebView.setWebContentsDebuggingEnabled(true)
@@ -203,6 +207,24 @@ class MainActivity : AppCompatActivity() {
         webMessageScope = messageScope
         view.apply {
             webViewClient = object : WebViewClient() {
+                override fun onPageFinished(view: WebView, url: String?) {
+                    // 첫 문서의 이미지까지 표시할 수 있을 때 Web의 준비 화면으로 넘깁니다.
+                    if (webView !== view) return
+                    view.postVisualStateCallback(0, object : WebView.VisualStateCallback() {
+                        override fun onComplete(requestId: Long) {
+                            if (webView === view) startupImage.visibility = View.GONE
+                        }
+                    })
+                }
+
+                override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
+                    if (webView === view && request.isForMainFrame) startupImage.visibility = View.GONE
+                }
+
+                override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, response: WebResourceResponse) {
+                    if (webView === view && request.isForMainFrame) startupImage.visibility = View.GONE
+                }
+
                 override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean =
                     handleRendererGone(view, detail)
 
@@ -326,6 +348,7 @@ class MainActivity : AppCompatActivity() {
         view.visibility = View.VISIBLE
 
         if (!webNavigationStarted) {
+            startupImage.visibility = View.VISIBLE
             webNavigationStarted = true
             appLaunchDurationClock.markNavigationRequested()
             pendingNavigation?.let { view.restoreState(it) }
@@ -360,6 +383,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun showPermissionScreen() {
         webView?.visibility = View.GONE
+        startupImage.visibility = View.GONE
         permissionLayout.visibility = View.VISIBLE
     }
 

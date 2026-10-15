@@ -34,7 +34,11 @@ test.describe('첫 홈의 사용 시점 코드 로드', () => {
     await createFinanceHousehold(page, request);
     await expect.poll(() => page.evaluate(name => performance.getEntriesByName(name).length, COMPLETE_PAINT)).toBe(1);
     expect(requestedChunks.filter(file => deferredChunks.includes(file) && !detailChunks.includes(file)), '다른 닫힌 기능은 사용 전에 요청하지 않아야 합니다.').toEqual([]);
-    await expect.poll(() => detailChunks.every(file => requestedChunks.includes(file))).toBe(true);
+    // 요청 이벤트는 시작에 발생하지만 Resource Timing은 응답 완료 뒤에 추가됩니다.
+    await expect.poll(() => page.evaluate(files => {
+      const completed = performance.getEntriesByType('resource').map(entry => new URL(entry.name).pathname.split('/').at(-1));
+      return files.every(file => completed.includes(file));
+    }, detailChunks)).toBe(true);
     const detailTiming = await page.evaluate(({ files, mark }) => ({
       requests: performance.getEntriesByType('resource').filter(entry => files.includes(new URL(entry.name).pathname.split('/').at(-1)!)).map(entry => ({ file: new URL(entry.name).pathname.split('/').at(-1)!, requestedAt: entry.startTime })),
       paintedAt: performance.getEntriesByName(mark)[0].startTime,
@@ -351,6 +355,22 @@ test.describe('첫 홈 별도 서버 조회', () => {
         performance.getEntriesByName(`household-account:startup:${phase}`).length === 1))).toBe(true);
       await expect(restarted.getByRole('status')).toHaveAttribute('aria-busy', 'true');
       await expect(restarted.getByRole('status')).toHaveText('로딩중...');
+      const artwork = restarted.getByRole('status').locator('img');
+      await expect(artwork).toBeVisible();
+      await expect.poll(() => artwork.evaluate((image: HTMLImageElement) =>
+        image.complete && image.naturalWidth === 720 && image.naturalHeight === 1280)).toBe(true);
+      const viewport = restarted.viewportSize()!;
+      const artworkLayout = await artwork.evaluate(image => {
+        const box = image.getBoundingClientRect();
+        return { x: box.x, y: box.y, width: box.width, height: box.height, fit: getComputedStyle(image).objectFit };
+      });
+      expect(artworkLayout).toEqual({ x: 0, y: 0, ...viewport, fit: 'contain' });
+      await restarted.screenshot({ path: testInfo.outputPath('startup-brand-mobile.png') });
+      await restarted.setViewportSize({ width: 1280, height: 800 });
+      await expect(artwork).toBeVisible();
+      await expect(restarted.getByRole('status')).toHaveCSS('position', 'fixed');
+      await restarted.screenshot({ path: testInfo.outputPath('startup-brand-desktop.png') });
+      await restarted.setViewportSize(viewport);
       await expect(restarted.locator('.calendar-glass')).toHaveCount(0);
       await expect(restarted.locator('.balance-card-glass')).toHaveCount(0);
       expect(await restarted.evaluate(() => performance.getEntriesByName('household-account:startup:ledger:first-paint').length)).toBe(0);

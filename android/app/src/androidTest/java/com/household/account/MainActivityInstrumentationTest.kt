@@ -15,6 +15,7 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceError
 import android.webkit.WebResourceResponse
 import android.webkit.RenderProcessGoneDetail
 import android.widget.Button
@@ -102,6 +103,7 @@ class MainActivityInstrumentationTest {
 
                 assertEquals(View.VISIBLE, permissionLayout.visibility)
                 assertEquals(View.GONE, webView.visibility)
+                assertEquals(View.GONE, activity.findViewById<View>(R.id.startupImage).visibility)
                 assertEquals(View.VISIBLE, notificationPermission.visibility)
                 assertEquals(View.VISIBLE, overlayPermission.visibility)
                 assertTrue(notificationPermission.isEnabled)
@@ -147,6 +149,70 @@ class MainActivityInstrumentationTest {
                 }
                 loadedUrl == TrustedWebOrigin.APP_URL ||
                     originalUrl == TrustedWebOrigin.APP_URL
+            }
+        }
+    }
+
+    @Test
+    fun startupArtworkRemainsUntilTheFirstDocumentImageIsReadyToDraw() {
+        grantMandatoryPermissions()
+        val requested = CountDownLatch(1)
+        val responseReady = CountDownLatch(1)
+        val document = LocalWebViewDocument(
+            TrustedWebOrigin.APP_URL,
+            "<!doctype html><html><body>로그인 또는 홈 준비 화면<img src='/native-test/startup.jpg'></body></html>",
+            subresourceResponse = { request ->
+                if (request.url.path == "/native-test/startup.jpg") {
+                    requested.countDown()
+                    check(responseReady.await(15, TimeUnit.SECONDS))
+                    val image = context.resources.openRawResource(R.drawable.startup_brand)
+                    WebResourceResponse("image/jpeg", null, image)
+                } else null
+            }
+        )
+        try {
+            withObservedWebViewLifecycle(document) { scenario ->
+                assertTrue("실제 WebView 시작 이미지 요청", requested.await(5, TimeUnit.SECONDS))
+                assertEquals("false", evaluateWebView(scenario, "document.images[0].complete"))
+                scenario.onActivity { activity ->
+                    assertEquals(View.VISIBLE, activity.findViewById<View>(R.id.startupImage).visibility)
+                    assertEquals(View.GONE, activity.findViewById<View>(R.id.permissionLayout).visibility)
+                }
+                responseReady.countDown()
+                waitUntil("Web 이미지가 표시될 준비가 되면 네이티브 시작 화면 종료") {
+                    var artworkHidden = false
+                    scenario.onActivity { activity ->
+                        artworkHidden = activity.findViewById<View>(R.id.startupImage).visibility == View.GONE
+                    }
+                    artworkHidden && evaluateWebView(scenario,
+                        "document.images[0].complete && document.images[0].naturalWidth === 720") == "true"
+                }
+                scenario.moveToState(Lifecycle.State.CREATED)
+                scenario.moveToState(Lifecycle.State.RESUMED)
+                scenario.onActivity { activity ->
+                    assertEquals(View.GONE, activity.findViewById<View>(R.id.startupImage).visibility)
+                }
+            }
+        } finally {
+            responseReady.countDown()
+        }
+    }
+
+    @Test
+    fun startupArtworkDoesNotCoverTheRealMainDocumentHttpError() {
+        grantMandatoryPermissions()
+        val document = LocalWebViewDocument(
+            TrustedWebOrigin.APP_URL,
+            "<!doctype html><html><body>서버 연결 오류</body></html>",
+            statusCode = 503
+        )
+        withObservedWebViewLifecycle(document) { scenario ->
+            waitUntil("시작 이미지 대신 실제 HTTP 오류 문서 표시") {
+                var artworkHidden = false
+                scenario.onActivity { activity ->
+                    artworkHidden = activity.findViewById<View>(R.id.startupImage).visibility == View.GONE
+                }
+                artworkHidden && evaluateWebViewText(scenario, "document.body.textContent") == "서버 연결 오류"
             }
         }
     }
@@ -608,7 +674,12 @@ class MainActivityInstrumentationTest {
         }
     }
 
-    private data class LocalWebViewDocument(val url: String, val html: String)
+    private data class LocalWebViewDocument(
+        val url: String,
+        val html: String,
+        val statusCode: Int = 200,
+        val subresourceResponse: (WebResourceRequest) -> WebResourceResponse? = { null }
+    )
 
     /** Observe the real WebView teardown; never replace its renderer or destruction behavior. */
     private class LifecycleObservedWebView(
@@ -639,12 +710,24 @@ class MainActivityInstrumentationTest {
                 override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean =
                     client.onRenderProcessGone(view, detail)
 
+                override fun onPageFinished(view: WebView, url: String?) =
+                    client.onPageFinished(view, url)
+
+                override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) =
+                    client.onReceivedError(view, request, error)
+
+                override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, response: WebResourceResponse) =
+                    client.onReceivedHttpError(view, request, response)
+
                 override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse =
                     if (request?.isForMainFrame == true && request.url.toString().substringBefore('#') == document.url) {
-                        WebResourceResponse("text/html", "UTF-8", document.html.byteInputStream())
+                        WebResourceResponse("text/html", "UTF-8", document.statusCode,
+                            if (document.statusCode == 200) "OK" else "Service Unavailable",
+                            emptyMap(), document.html.byteInputStream())
                     } else {
                         // Never let an unexpected navigation or subresource contact the live site.
-                        WebResourceResponse("text/plain", "UTF-8", 404, "Not Found", emptyMap(), "".byteInputStream())
+                        request?.let(document.subresourceResponse)
+                            ?: WebResourceResponse("text/plain", "UTF-8", 404, "Not Found", emptyMap(), "".byteInputStream())
                     }
             })
         }
