@@ -28,3 +28,11 @@ Web 관련 단위 5개 파일 57개(CSP 포함)와 타입 검사가 통과했습
 첫 prototype은 Next server compiler가 함수 내부 `typeof window` 분기를 상수평가해 직렬화한 함수가 빈 문자열만 반환하도록 바뀌어 실제 build 검사가 실패했습니다. 함수의 외부 환경 분기를 제거하고 기존 저장소 접근 예외 경계에서 SSR 빈 값을 처리하도록 수정했습니다. 최초 실패와 generated HTML을 보존하며 기대값·시간 제한을 약화하지 않았습니다. 로그는 `%TEMP%/household-startup-name-first-frame-{e2e,e2e-fixed,unit-final}-20261015.log`입니다.
 
 이전 CI 실패/진행 이력은 성공으로 덮지 않습니다. 배포 대상은 Firebase 세 codebase·Web Git 자동배포·서명 Android APK이며 운영 가계부 데이터는 변경하지 않습니다. 배포용 기존 로그인 복원과 재시도가 `auth/network-request-failed`로 실패해 실제 Firebase 로그인 smoke가 준비되기 전에는 서버 배포 완료로 보고하지 않습니다. Web·APK는 기존 서버와 호환되므로 독립 배포합니다.
+
+## 배포 확인과 로그인 차단
+
+제품 후보 `91f6296e741ad0ad65f2510f2daeb8eeade2be13`의 Vercel Git 배포와 GitHub Production deployment `7089317359`가 성공했습니다. 운영 문서·서비스 워커의 정확한 SHA, 해당 build manifest의 HTTP 200, Web/Apple 제목과 PWA name/short_name의 `모두의 가계부`를 확인했습니다. v2.0.8 GitHub Release의 APK를 다시 내려받아 HTTP 200·크기·위 SHA-256·기존 v2 서명을 검증했습니다. 이전 `38712095725` CI는 다섯 검사·요약 모두 성공했습니다. 제품 후보의 CI는 `38715579310`으로 별도 추적합니다.
+
+Firebase manifest `release-20261015-startup-name-91f6296`의 배포 전 검사는 승인됐으나 실제 배포는 시작하지 않았습니다. 로그인 재시도에서도 내장 브라우저는 `auth/network-request-failed`를 표시했고, 공개 Firebase 설정 주소를 직접 열었을 때 `net::ERR_BLOCKED_BY_CLIENT`를 반환했습니다. OS에서 같은 공개 설정 요청은 HTTP 200이며 localhost Origin/CORS와 authorizedDomains도 정상입니다. SDK·Google API script·Auth iframe도 OS에서는 HTTP 200입니다. 이는 브라우저 경로의 차단 증거이며, 정확히 어떤 설정이나 정책이 차단했는지는 아직 확정하지 않았습니다. 인증 자격을 출력하거나 다른 인증으로 smoke를 대체하지 않았습니다.
+
+별도로 로그인 도구는 팝업 결과를 버리고 `onAuthStateChanged`에만 완료 제출을 맡기고 있었습니다. 같은 UID로 재로그인하면 SDK가 해당 이벤트를 다시 보내지 않으므로, 갱신 실패 뒤 팝업 로그인이 성공해도 제출을 놓칠 수 있었습니다. 팝업의 `result.user`를 직접 제출하고 진행 중 Promise를 공유해 최초 이벤트와 결과가 겹쳐도 갱신·제출을 한 번만 실행하도록 수정했습니다. 실제 도구 HTML 스크립트에서 두 경로를 실행하는 회귀는 수정 전 실패, 수정 후 기존 CLI 경계 포함 6개 통과했습니다. 타입·Node 문법 검사도 통과했습니다. 이 도구 수정은 브라우저 네트워크 차단을 해결하지 않으며 앱 runtime·APK를 다시 배포할 변경은 아닙니다.

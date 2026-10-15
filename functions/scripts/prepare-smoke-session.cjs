@@ -58,21 +58,30 @@ async function main() {
       const auth = initializeAuth(initializeApp(${JSON.stringify(config)}), {persistence:browserLocalPersistence});
       const status = document.getElementById('status'), button = document.getElementById('login');
       let delivered = false;
+      let submitting = null;
       const logout = document.getElementById('logout');
       async function submitSession(user) {
         if (delivered) return;
+        if (submitting) return submitting;
         button.disabled = true; status.textContent = 'Google 로그인을 기다리고 있습니다.';
-        try {
-          const token = await user.getIdToken(true);
-          const response = await fetch('/session', {method:'POST',signal:AbortSignal.timeout(15000),headers:{'content-type':'application/json','x-release-nonce':${JSON.stringify(nonce)}},body:JSON.stringify({token})});
-          const body = await response.json();
-          if (!response.ok) throw new Error(body.code);
+        submitting = (async () => {
+          try {
+            const token = await user.getIdToken(true);
+            const response = await fetch('/session', {method:'POST',signal:AbortSignal.timeout(15000),headers:{'content-type':'application/json','x-release-nonce':${JSON.stringify(nonce)}},body:JSON.stringify({token})});
+            const body = await response.json();
+            if (!response.ok) throw new Error(body.code);
 
-          delivered = true;
-          status.textContent = '확인 완료했습니다. 다음 배포에서는 이 브라우저의 로그인을 자동으로 재사용합니다. 창을 닫으셔도 됩니다.';
-        } catch (error) {
-          status.textContent = '로그인을 완료하지 못했습니다. ' + (error.code || error.message || 'UNKNOWN');
-          button.disabled = false;
+            delivered = true;
+            status.textContent = '확인 완료했습니다. 다음 배포에서는 이 브라우저의 로그인을 자동으로 재사용합니다. 창을 닫으셔도 됩니다.';
+          } catch (error) {
+            status.textContent = '로그인을 완료하지 못했습니다. ' + (error.code || error.message || 'UNKNOWN');
+            button.disabled = false;
+          }
+        })();
+        try {
+          await submitting;
+        } finally {
+          submitting = null;
         }
       };
       onAuthStateChanged(auth, user => {
@@ -89,7 +98,8 @@ async function main() {
         status.textContent = 'Google 로그인 창을 기다리고 있습니다.';
         button.disabled = true;
         try {
-          await signInWithPopup(auth, new GoogleAuthProvider(), browserPopupRedirectResolver);
+          const result = await signInWithPopup(auth, new GoogleAuthProvider(), browserPopupRedirectResolver);
+          await submitSession(result.user);
         } catch (error) {
           status.textContent = '로그인을 완료하지 못했습니다. ' + (error.code || 'UNKNOWN');
           button.disabled = false;
