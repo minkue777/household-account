@@ -2,6 +2,24 @@
 @tailwind components;
 @tailwind utilities;
 
+[data-startup-mode="pending"] .startup-brand {
+  visibility: hidden;
+}
+
+.startup-admin-status,
+[data-startup-mode="admin"] .startup-brand,
+[data-startup-mode="admin"] .startup-dots {
+  display: none;
+}
+
+[data-startup-mode="admin"] {
+  background: #fff;
+}
+
+[data-startup-mode="admin"] .startup-admin-status {
+  display: block;
+}
+
 .startup-illustration {
   width: min(50.77vw, 198px);
 }

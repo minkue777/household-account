@@ -1,5 +1,6 @@
 import { ADMIN_HOUSEHOLD_VIEW_STORAGE_KEY } from './adminHouseholdViewSelection';
 import { SIGNED_IN_MEMBERSHIP_STORAGE_KEY } from './signedInMembershipCache';
+import { readStartupDisplayMode } from './startupDisplayMode';
 
 /**
  * 표시용 이름만 읽습니다. 인증 scope를 복원하지 않습니다.
@@ -31,13 +32,14 @@ export function readStartupHouseholdName(
   }
 }
 
-function paintStartupHouseholdName(readName: () => string): void {
+function paintStartupHouseholdName(readName: () => string, readMode: () => string): void {
   const title = document.querySelector('.startup-title');
   if (!title) return;
+  title.closest('[data-startup-screen]')?.setAttribute('data-startup-mode', readMode());
   const name = readName() || '모두의 가계부';
   title.children[0].textContent = name.endsWith('네') ? name.slice(0, -1) : name;
   title.children[1].textContent = name.endsWith('네') ? '네' : '';
 }
 
 // 사용자 값은 HTML에 포함하지 않습니다. 기기의 기존 cache를 읽고 textContent로만 넣습니다.
-export const STARTUP_HOUSEHOLD_NAME_SCRIPT = `(${paintStartupHouseholdName.toString()})(()=>(${readStartupHouseholdName.toString()})(${JSON.stringify(SIGNED_IN_MEMBERSHIP_STORAGE_KEY)},${JSON.stringify(ADMIN_HOUSEHOLD_VIEW_STORAGE_KEY)}))`;
+export const STARTUP_HOUSEHOLD_NAME_SCRIPT = `(${paintStartupHouseholdName.toString()})(()=>(${readStartupHouseholdName.toString()})(${JSON.stringify(SIGNED_IN_MEMBERSHIP_STORAGE_KEY)},${JSON.stringify(ADMIN_HOUSEHOLD_VIEW_STORAGE_KEY)}),()=>(${readStartupDisplayMode.toString()})(${JSON.stringify(ADMIN_HOUSEHOLD_VIEW_STORAGE_KEY)}))`;

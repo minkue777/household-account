@@ -5,7 +5,7 @@ import { documents, fixture, runScheduled, setEmulatorAdminClaims } from './port
 
 test.beforeEach(async () => { await resetTestAccount(); });
 
-test('[AST-006][ADM-001][ADM-002][ADM-004][ADM-005][EXT-001][EXT-002][EXT-004] 관리자 권한은 실제 token으로 검증하고 비용·삭제 자산 복구·가구 조회 전용 화면까지 연결된다', async ({ page, browser, request }) => {
+test('[AST-006][ADM-001][ADM-002][ADM-004][ADM-005][EXT-001][EXT-002][EXT-004] 관리자 권한은 실제 token으로 검증하고 비용·삭제 자산 복구·가구 조회 전용 화면까지 연결된다', async ({ page, browser, request }, testInfo) => {
   const scope = await createHouseholdThroughUi(page, '관리 대상 가구');
   const created = await executeHouseholdCommand<{ assetId: string }>(request, { ...scope, command: 'portfolio.create-asset.v1', payload: { asset: { name: '복구할 예금', type: 'savings', owner: '가구', ownerRef: { kind: 'household' }, currency: 'KRW', currentBalance: 25_000, isActive: true, order: 1 } } });
   await executeHouseholdCommand(request, { ...scope, command: 'portfolio.delete-asset.v1', payload: { assetId: created.assetId, expectedVersion: 1 } });
@@ -120,12 +120,65 @@ test('[AST-006][ADM-001][ADM-002][ADM-004][ADM-005][EXT-001][EXT-002][EXT-004] �
     await reason.getByRole('textbox').fill('E2E 오삭제 복구');
     await reason.getByRole('button', { name: '복구', exact: true }).click();
     await expect.poll(async () => (await documents(request, `households/${scope.householdId}/assets`)).find(x => x.id === created.assetId)?.lifecycleState).toBe('active');
-    await household.getByRole('button', { name: '가계부 열기', exact: true }).click();
+    await admin.addInitScript(() => {
+      const observation = { loadingFrames: 0, brandFrames: 0 };
+      Object.assign(window, { adminStartupObservation: observation });
+      const observe = () => {
+        const startup = document.querySelector('[data-startup-screen]');
+        if (startup) {
+          observation.loadingFrames += 1;
+          if (Array.from(startup.querySelectorAll('.startup-brand, .startup-dots')).some(element => {
+            const style = getComputedStyle(element);
+            return style.display !== 'none' && style.visibility !== 'hidden' && element.getBoundingClientRect().height > 0;
+          })) observation.brandFrames += 1;
+        }
+        if (startup || observation.loadingFrames === 0) requestAnimationFrame(observe);
+      };
+      requestAnimationFrame(observe);
+    });
+    const startupObservation = () => admin.evaluate(() => (window as typeof window & {
+      adminStartupObservation: { loadingFrames: number; brandFrames: number };
+    }).adminStartupObservation);
+    const openWithoutBrand = async (open: () => Promise<unknown>) => {
+      let release!: () => void;
+      const held = new Promise<void>(resolve => { release = resolve; });
+      let heldChunks = 0;
+      const chunks = '**/_next/static/**/*.js';
+      await admin.route(chunks, async route => { heldChunks += 1; await held; await route.continue(); });
+      try {
+        await open();
+        await expect.poll(() => heldChunks).toBeGreaterThan(0);
+        const startup = admin.locator('[data-startup-screen]');
+        await expect(startup).toHaveAttribute('data-startup-mode', 'admin');
+        await expect(startup.locator('.startup-admin-status')).toHaveText('로딩중...');
+        await expect(startup.locator('.startup-admin-status')).toBeVisible();
+        await expect(startup.locator('.startup-brand')).toBeHidden();
+        await expect(startup.locator('.startup-dots')).toBeHidden();
+        await expect.poll(async () => (await startupObservation()).loadingFrames).toBeGreaterThan(0);
+        expect((await startupObservation()).brandFrames, 'hydration 전 첫 HTML에도 관리자 조회에서 브랜드를 표시하지 않습니다.').toBe(0);
+      } finally {
+        release();
+        await admin.unrouteAll({ behavior: 'wait' });
+      }
+    };
+    await openWithoutBrand(async () => {
+      await Promise.all([
+        admin.waitForURL(url => url.pathname === '/', { waitUntil: 'commit' }),
+        household.getByRole('button', { name: '가계부 열기', exact: true }).click({ noWaitAfter: true }),
+      ]);
+    });
     await expect(admin.getByText('관리자 조회 전용 ·', { exact: false })).toBeVisible();
     await expect(admin.getByRole('link', { name: '관리자 화면', exact: true })).toBeVisible();
-    await admin.goto('/assets');
+    await expect(admin.locator('.calendar-glass')).toHaveAttribute('aria-busy', 'false');
+    const homeStartup = await startupObservation();
+    expect(homeStartup.brandFrames, '인증 복원·실제 원장 준비 중에도 관리자 브랜드 화면을 표시하지 않습니다.').toBe(0);
+    await openWithoutBrand(() => admin.goto('/assets', { waitUntil: 'commit' }));
     await expect(admin.locator(`[data-asset-id="${created.assetId}"]`)).toContainText('25,000');
     await expect(admin.getByRole('link', { name: '관리자 화면', exact: true })).toBeVisible();
+    const assetsStartup = await startupObservation();
+    expect(assetsStartup.brandFrames, '조회 대상이 유지된 새 문서에서도 브랜드를 표시하지 않습니다.').toBe(0);
+    await testInfo.attach('admin-startup-frames', { contentType: 'application/json',
+      body: Buffer.from(JSON.stringify({ homeStartup, assetsStartup }, null, 2)) });
     await admin.goto('/assets/stats');
     await expect(admin.getByRole('button', { name: '3개월', exact: true })).toBeVisible();
     await expect(admin.getByRole('link', { name: '관리자 화면', exact: true })).toBeVisible();

@@ -1,0 +1,26 @@
+# 관리자 조회의 브랜드 시작 화면 생략
+
+## 범위와 원인
+
+`/admin` 직접 진입은 기존에도 인증·최소 2초 표시를 기다리지 않았습니다. 관리자 화면의 `가계부 열기`는 선택한 가구를 현재 탭의 sessionStorage에 저장하고 `/` 새 문서를 엽니다. 이 경로와 조회 중 새로고침에는 일반 가계부의 브랜드 시작 화면과 2초 대기가 적용되고 있었습니다. 공통 Suspense fallback도 같은 화면을 사용합니다.
+
+## 계약·설계
+
+- 입력: `/admin` 또는 그 하위 경로, 기존 관리자 조회 선택이 남은 현재 탭입니다.
+- 결과: 인증·조회 중에는 간단한 `로딩중...`만 표시하고 그림·가구명·부제·점을 생략합니다. 문서 최초 최소 2초 대기를 적용하지 않습니다. 일반 사용자 Web·PWA·Android 시작 화면은 기존 시안과 최소시간을 유지합니다.
+- 실패: 관리자 선택은 표시 모드의 힌트일 뿐입니다. 실제 token의 관리자 권한, 가구 조회 범위, 홈 전체 데이터 준비, 기존 오류·재시도 조건을 유지합니다. 저장소 접근이 거부되면 일반 표시로 돌아가며 `/admin` 경로 판정은 저장소와 무관합니다.
+- 저장: 기존 sessionStorage 선택만 읽습니다. 새 저장소·쿠키·서버 요청·권한 상태를 만들지 않습니다.
+
+`readStartupDisplayMode` 하나를 최초 HTML 이름 초기화와 React 양쪽에서 사용합니다. HTML에서 초기화가 실행되기 전 제목은 숨기고, 그림이 파싱되기 전에 표시 모드를 적용하여 hydration 전 브랜드 깜빡임도 막습니다. React는 `useSyncExternalStore`의 서버 snapshot으로 최초 HTML을 유지하고 클라이언트의 같은 표시 정책으로 이어갑니다. 기존 inline script의 CSP hash는 production artifact 생성이 계속 산출합니다.
+
+`StartupDisplayProvider`는 관리자 모드에서 timer를 만들지 않고 표시 준비를 즉시 반환합니다. `AppLoadingScreen`의 Native 대기 marker와 cleanup은 유지하므로 관리자의 단순 로딩도 실제 화면이 준비되기 전 완료 신호로 오인하지 않습니다. APK·Firebase 실행 코드 변경은 없고 Web Git 배포만 필요합니다.
+
+## 검증 추적성
+
+| 계약 | 검증 |
+|---|---|
+| LED-001 / T-LED-001 | 일반 최소 2초·이름·오류 보존, 관리자 인증 대기·최소시간 생략, 첫 HTML과 hydration 표시 정책 일치 |
+| ADM-005 | 실제 관리자 `가계부 열기` 및 자산 조회 새 문서의 JS 청크를 보류해 hydration 전 브랜드 미표시 확인, 실제 권한·조회·복구 흐름 보존 |
+| AND-003 | 기존 Native handoff 계약 검사에서 관리자 Suspense도 콘텐츠 준비 전까지 완료 신호를 보내지 않음 |
+
+관련 Jest 3파일 40개와 `tsc --noEmit`이 통과했습니다. E2E 준비의 Functions architecture 43개와 요구사항 248개·시나리오 235개 집계, E2E 추적성 누락 0개도 확인했습니다. 실제 production build·Firebase Emulator 브라우저 검사는 관리자 가구 열기·자산 조회와 일반 iPhone 시작 계약을 함께 확인하며 `%TEMP%/household-admin-startup-e2e-20261015.log`와 해당 SHA의 CI로 추적합니다.

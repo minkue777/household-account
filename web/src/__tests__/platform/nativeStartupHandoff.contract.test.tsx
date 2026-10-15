@@ -40,6 +40,7 @@ describe('Native 시작 화면에서 준비된 실제 Web 화면으로 전환', 
     sessionStorage.clear();
     mockLoginReady = false;
     mockPathname = '/';
+    window.history.replaceState({}, '', '/');
     mockAuthenticated = false;
     mockReplace.mockClear();
     window.__HOUSEHOLD_NATIVE_STARTUP__ = true;
@@ -121,6 +122,7 @@ describe('Native 시작 화면에서 준비된 실제 Web 화면으로 전환', 
 
   it.each(['/', '/admin'])('%s의 실제 Suspense가 해소되기 전에는 시작 화면을 유지한다', async pathname => {
     mockPathname = pathname;
+    window.history.replaceState({}, '', pathname);
     mockAuthenticated = true;
     let ready = false;
     let finish!: () => void;
@@ -132,6 +134,7 @@ describe('Native 시작 화면에서 준비된 실제 Web 화면으로 전환', 
     render(<NativeStartupHandoff><HouseholdGuard><DeferredPage /></HouseholdGuard></NativeStartupHandoff>);
     nextFrame();
     expect(screen.getByRole('status')).toHaveAttribute('data-startup-screen');
+    expect(screen.getByRole('status')).toHaveAttribute('data-startup-mode', pathname === '/admin' ? 'admin' : 'brand');
     expect(postMessage).not.toHaveBeenCalled();
 
     await act(async () => { ready = true; finish(); await pending; });

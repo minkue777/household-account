@@ -1,6 +1,7 @@
 import { ADMIN_HOUSEHOLD_VIEW_STORAGE_KEY } from '@/features/access-household/application/adminHouseholdViewSelection';
 import { SIGNED_IN_MEMBERSHIP_STORAGE_KEY, writeSignedInMembershipCache } from '@/features/access-household/application/signedInMembershipCache';
 import { readStartupHouseholdName, STARTUP_HOUSEHOLD_NAME_SCRIPT } from '@/features/access-household/application/startupHouseholdName';
+import { readStartupDisplayMode } from '@/features/access-household/application/startupDisplayMode';
 
 function remember(name: string) {
   writeSignedInMembershipCache('uid-1', {
@@ -14,7 +15,8 @@ describe('[T-LED-001] hydration 이전 가구명 표시', () => {
   beforeEach(() => {
     localStorage.clear();
     sessionStorage.clear();
-    document.body.innerHTML = '<h1 class="startup-title"><span></span><span></span></h1>';
+    window.history.replaceState({}, '', '/');
+    document.body.innerHTML = '<div data-startup-screen data-startup-mode="pending"><h1 class="startup-title"><span></span><span></span></h1></div>';
   });
 
   it.each(['또니망고네', '익태송희네', '함께 쓰는 가계부', '<img src=x onerror=alert(1)>네'])('저장된 %s를 HTML 해석 없이 실제 문자로 먼저 표시한다', name => {
@@ -25,6 +27,7 @@ describe('[T-LED-001] hydration 이전 가구명 표시', () => {
     expect(document.querySelector('h1')?.textContent).toBe(name);
     expect(document.querySelector('img')).toBeNull();
     expect(document.querySelectorAll('h1 > span')).toHaveLength(2);
+    expect(document.querySelector('[data-startup-screen]')).toHaveAttribute('data-startup-mode', 'brand');
     expect(document.querySelector('h1 > span:last-child')?.textContent).toBe(name.endsWith('네') ? '네' : '');
   });
 
@@ -48,14 +51,25 @@ describe('[T-LED-001] hydration 이전 가구명 표시', () => {
     expect(readStartupHouseholdName()).toBe('');
     window.eval(STARTUP_HOUSEHOLD_NAME_SCRIPT);
     expect(document.querySelector('h1')?.textContent).toBe('모두의 가계부');
+    expect(document.querySelector('[data-startup-screen]')).toHaveAttribute('data-startup-mode', 'admin');
     sessionStorage.clear();
     const denied = jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('Storage denied'); });
     try {
       expect(readStartupHouseholdName()).toBe('');
       expect(() => window.eval(STARTUP_HOUSEHOLD_NAME_SCRIPT)).not.toThrow();
       expect(document.querySelector('h1')?.textContent).toBe('모두의 가계부');
+      expect(document.querySelector('[data-startup-screen]')).toHaveAttribute('data-startup-mode', 'brand');
     } finally {
       denied.mockRestore();
     }
+  });
+
+  it.each([
+    ['/admin', 'admin'], ['/admin/households', 'admin'], ['/administrator', 'brand'], ['/', 'brand'],
+  ])('%s의 첫 HTML과 hydration이 같은 표시 모드 %s를 사용한다', (path, mode) => {
+    window.history.replaceState({}, '', path);
+    expect(readStartupDisplayMode()).toBe(mode);
+    window.eval(STARTUP_HOUSEHOLD_NAME_SCRIPT);
+    expect(document.querySelector('[data-startup-screen]')).toHaveAttribute('data-startup-mode', mode);
   });
 });

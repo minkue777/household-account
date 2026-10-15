@@ -27,6 +27,7 @@ describe('[T-LED-001] 문서 최초 시작 화면의 경로·인증 경계', () 
   beforeEach(() => {
     jest.useFakeTimers();
     mockPathname = '/assets';
+    window.history.replaceState({}, '', '/assets');
     window.localStorage.clear();
     window.sessionStorage.clear();
     mockSession = { household: null, isLoading: false, isAuthenticated: true, sessionError: null, sessionState: 'ready' };
@@ -68,12 +69,30 @@ describe('[T-LED-001] 문서 최초 시작 화면의 경로·인증 경계', () 
     }
   });
 
-  it('관리자 다른 가구 조회 중에는 본인 가구의 저장된 이름을 사용하지 않는다', () => {
+  it('관리자 가구 조회는 인증을 기다리되 브랜드 최소시간은 적용하지 않는다', () => {
     rememberHousehold('본인 가구네');
     selectAdminHouseholdView({ householdId: 'household-2', householdName: '조회 가구네' });
     mockSession = { household: null, isLoading: true, isAuthenticated: false, sessionError: null, sessionState: 'resolving' };
-    render(guardedPage());
-    expect(screen.getByRole('heading').textContent).toBe('모두의 가계부');
+    const view = render(guardedPage());
+    expect(screen.getByRole('status')).toHaveAttribute('data-startup-mode', 'admin');
+    expect(screen.queryByTestId('page-content')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('household-login')).not.toBeInTheDocument();
+    mockSession = { household: { name: '조회 가구네' }, isLoading: false, isAuthenticated: true, sessionError: null, sessionState: 'ready' };
+    view.rerender(guardedPage());
+    expect(screen.getByTestId('page-content')).toBeVisible();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  it('관리자 선택만으로 인증을 우회하지 않고 권한 오류 후 로그인 복구로 간다', () => {
+    selectAdminHouseholdView({ householdId: 'household-2', householdName: '조회 가구네' });
+    mockSession = { household: null, isLoading: true, isAuthenticated: false, sessionError: null, sessionState: 'resolving' };
+    const view = render(guardedPage());
+    expect(screen.queryByTestId('page-content')).not.toBeInTheDocument();
+    mockSession = { household: null, isLoading: false, isAuthenticated: false, sessionError: '권한 없음', sessionState: 'error' };
+    window.sessionStorage.clear();
+    view.rerender(guardedPage());
+    expect(screen.getByTestId('household-login')).toBeVisible();
+    expect(screen.queryByTestId('page-content')).not.toBeInTheDocument();
   });
 
   it('기기 저장소 접근이 거부되어도 이름만 생략하고 시작 화면을 유지한다', () => {
@@ -90,6 +109,7 @@ describe('[T-LED-001] 문서 최초 시작 화면의 경로·인증 경계', () 
 
   it.each(['/assets', '/settings', '/stats'])('인증된 %s 직접 진입은 최초 2초 후 페이지를 표시한다', pathname => {
     mockPathname = pathname;
+    window.history.replaceState({}, '', pathname);
     const view = render(guardedPage());
     expect(screen.getByRole('status')).toHaveTextContent('로딩중...');
     expect(screen.queryByTestId('page-content')).not.toBeInTheDocument();
