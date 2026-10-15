@@ -34,8 +34,8 @@ export default function RootLayout({
   return (
     <html lang="ko">
       <head>
-        <link rel="apple-touch-icon" href="/icons/household-v2-apple-touch.png" />
-        <link rel="icon" type="image/png" href="/icons/household-v2-192.png" />
+        <link rel="apple-touch-icon" href="/icons/household-v3-apple-touch.png" />
+        <link rel="icon" type="image/png" href="/icons/household-v3-192.png" />
         {!isFirebaseEmulatorSuiteConfigured() && <>
           <link rel="preconnect" href="https://securetoken.googleapis.com" crossOrigin="anonymous" />
           <link rel="preconnect" href="https://firestore.googleapis.com" />

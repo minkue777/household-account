@@ -4,18 +4,18 @@
   "description": "가족 지출 관리 앱",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f8f5fe",
+  "background_color": "#f5f2fd",
   "theme_color": "#ffffff",
   "orientation": "portrait",
   "icons": [
     {
-      "src": "/icons/household-v2-192.png",
+      "src": "/icons/household-v3-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icons/household-v2-512.png",
+      "src": "/icons/household-v3-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"

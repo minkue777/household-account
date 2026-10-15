@@ -1,5 +1,7 @@
 # 시작 화면 맞춤·최소 표시와 아이콘 배경 수정
 
+> 현재 색상은 아래 v2.0.2 후속 절의 사용자 참조색 `#F5F2FD`입니다. 최초 v2.0.1 검증·배포 이력은 보존합니다.
+
 ## 원인과 계약
 
 - 아이콘은 원본에 흰색 둥근 사각 타일이 들어 있고 Android adaptive icon이 바깥 모양을 다시 씌워 이중 배경으로 보였습니다. 지갑·사람 카드·동전 그림을 보존하면서 원본 타일을 제거합니다. Android는 투명 foreground와 단일 배경을, Web/iOS는 단일 평면 배경을 사용합니다.
@@ -46,3 +48,17 @@ Android 실제 MainActivity 19개가 통과했고, 새 시안·문구 삭제 후
 ## 배포 범위
 
 Android v2.0.1 / versionCode 39와 Web Git 자동배포 대상입니다. Firebase 실행 코드는 변경하지 않습니다. 기존 v2.0.0 APK는 덮어쓰지 않습니다. 실제 검증·배포 결과는 확인 후 기록합니다.
+
+## v2.0.2 후속: 시작 화면·아이콘 단색 배경
+
+사용자가 그라데이션 대신 단색 배경을 요청한 뒤 `1000017850.jpg`를 색상 기준으로 지정했습니다. 빈 배경의 대표 RGB는 `(245, 242, 253)`이므로 `#F5F2FD`로 통일합니다. 시작 화면 JPEG·Web 로딩 요소·PWA 시작 배경·Android 시작 이미지 배경·adaptive/legacy 앱 아이콘·Web/iOS 아이콘에 같은 색을 사용합니다. 지갑·제목·부제·하단 점의 배치, 삭제한 슬로건, 문서당 최소 1.2초 정책은 유지합니다.
+
+내장 imagegen으로 배경만 투명 분리했습니다. 프롬프트 핵심은 “Remove the entire gradient background, making it fully transparent. Preserve all foreground in its exact placement and scale: wallet/cards/coins, '또니망고네', '가계부 · 자산', three dots. Keep full 9:16 canvas, no trimming/repositioning, no deleted slogan.”입니다. 투명 원본은 `web/src/assets/startup-brand-foreground.png`, 동일한 단색 합성 결과는 `web/src/assets/startup-brand.jpg`와 Android `drawable-nodpi/startup_brand.jpg`입니다. JPEG 네 모서리의 실제 디코딩 값도 `(245, 242, 253)`으로 확인했습니다(720×1280, 36,955바이트).
+
+기존 투명 아이콘 원본으로 동일 크기·배치를 유지하여 배경만 합성합니다. 새 Web URL은 `/icons/household-v3-{192,512,apple-touch}.png`이며 기존 v1/v2 파일은 설치된 앱의 캐시 호환을 위해 보존합니다. Android는 v2.0.2 / code 40으로 발행하며 이미 공개·다운로드·서명 확인한 v2.0.1을 덮어쓰지 않습니다.
+
+v2.0.1의 `f53039ade9d904dfdfe93d9af063ebc978f389bb`는 Vercel Git 배포와 Production `7086677858` 성공, 운영 root·sw·해당 SHA buildManifest HTTP 200을 확인했습니다. CI `38699457238`의 미완료 결과는 후속 후보와 함께 확인하며, 새 버전 공개가 이전 실제 Android 검사를 대체하지 않습니다.
+
+최종 색상으로 실제 Android 시작 이미지 검사 1개가 통과했습니다(10.809초). 세로·가로 캡처에서 이미지 안팎이 동일한 단색이고 로고·제목·하단 점이 보존됨을 확인했습니다. 서명 release build 통과, v2.0.2/code40, 10,803,595바이트, SHA-256 `d5c587c955b471ae70794fd2c17b1bd8ce738b8f909f3ed8e42d42b6d009b3e8`입니다. apksigner v2 검증과 기존 인증서 일치를 확인했습니다. 로그는 `%TEMP%/household-brand-color-capture-20261015.log`, `household-v2.0.2-release-20261015.log`입니다.
+
+Web도 최종 리소스로 production build·실제 Emulator WebKit 기존 레이아웃/마지막 잔액 검사 1개를 통과했습니다(테스트 14.1초). 4종 화면의 16개 모서리 모두 RGB `(245, 242, 253)`으로 일치하고 중앙 내용 보존을 육안 확인했습니다. 기능 코드는 바꾸지 않아 앞선 단위 계약을 재반복하지 않았습니다. 로그는 `%TEMP%/household-startup-brand-v202-layout-e2e-20261015.log`입니다.
