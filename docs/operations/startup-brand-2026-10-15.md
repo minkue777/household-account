@@ -41,3 +41,11 @@ Android는 네이티브 초기 화면에서 동일한 이미지로 WebView의 �
 - Android v1.2.35 / versionCode 37의 release build와 APK v2 서명을 확인했습니다. APK 크기는 10,821,907바이트, SHA-256은 `e8ed348c8485c019ef5a3e96f337611e108b390926bd47d8a8f08e5430bc2084`입니다. 기존 공개 버전은 덮어쓰지 않습니다.
 - 운영 Web은 이 변경을 포함한 SHA의 Git 자동배포를 확인합니다. `/_next/static/media/startup-brand.1473839b.jpg`를 서버 HTML에서 우선 preload하며 앱 아이콘은 `/icons/household-v1-{192,512,apple-touch}.png`입니다.
 - Firebase 변경은 없어 배포하지 않습니다. 전체 CI는 push SHA를 기준으로 별도 후속 확인합니다.
+
+## 2.0.x 버전 전환
+
+사용자 요청에 따라 이후 앱 릴리즈는 2.0.x로 이어갑니다. 첫 버전은 v2.0.0 / versionCode 38이며, 승인한 시작 화면·아이콘을 포함합니다. 이미 공개된 v1.2.35를 덮어쓰지 않고 새 버전으로 배포합니다. 앱 ID·서명·저장 형식·API 계약은 그대로여서 기존 앱 위에 업데이트할 수 있습니다.
+
+release build와 APK v2 서명을 확인했으며 이전 v1.2.35와 서명 인증서가 같습니다. APK 크기는 10,821,899바이트, SHA-256은 `9a099caba13b3065092d827d71eb87e9d93fd6e0ac31282b1709121bd2fc4ec8`입니다. 버전 표시는 Native versionName을 그대로 사용하며 1.x 고정 로직이 없습니다. 빌드 로그는 `TEMP/household-v2-release-20261015.log`입니다.
+
+시작 화면 구현 `5ea875c55196660258eba26e49f3e7c52ef2d75c`의 Vercel Git 배포와 운영 HTML·Service Worker SHA, 이미지·아이콘 HTTP 200·로컬 파일 hash 일치를 확인했습니다. 버전 전환은 Android 빌드 설정과 이 기록만 변경하며 Web·Firebase 재배포는 필요하지 않습니다.
