@@ -34,4 +34,9 @@
 
 ## 전달 상태
 
-제품 후보 `26caa98685dc899a489283817a2ef1007ba96f4a`의 commit·production build·배포 manifest 준비를 완료했습니다. GitHub CLI의 기존 인증이 HTTP 401로 거부되어 push와 Firebase wrapper의 actor 확인이 완료되지 않았습니다. 내장 브라우저의 가계부 로그인 복원도 `auth/network-request-failed`를 반환했고 Google 로그인 갱신 화면을 열어 두었습니다. 서버 배포·CI 완료로 보고하지 않습니다. 인증 후 최종 clean SHA의 manifest를 다시 고정하고 세 codebase 배포와 CI를 진행해야 합니다. Web·APK 변경은 없습니다.
+GitHub 인증 갱신과 내장 브라우저의 가계부 로그인 자동 복원을 확인한 뒤 최종 SHA `c71e5854f83f35cd28f5ad0db469bd42073ddefc`를 push했습니다. 이전 HTTP 401·로그인 복원 실패는 해소됐습니다.
+
+- Firebase wrapper로 `release-20261015-toss-shopping-c71e585`의 `default`·`payment-capture`·`access-session` 세 codebase 배포를 완료했습니다. 실제 로그인 membership 확인과 운영 Query, 해당 SHA·artifact marker 검증 및 배포 결과 기록까지 성공했습니다.
+- 배포 artifact SHA256: `6fb2e71c116e3e0bf017c1850c306cc497db8b1da7f3b51725e32018bb90fb47`. 증거는 `TEMP/household-toss-shopping-deploy-c71e585-20261015.log`에 있습니다.
+- 제품 CI [38664759636](https://github.com/minkue777/household-account/actions/runs/38664759636)는 별도로 실행 중이며, 다섯 검사와 결과 요약의 최종 결과는 후속 자동화로 확인합니다. Android instrumentation은 변경 범위 미해당으로 성공했으며 실제 기기 검사를 실행한 것으로 해석하지 않습니다.
+- Web·APK 실행 코드 변경은 없으며 추가 배포는 필요하지 않습니다. 후속 배포 결과 문서 변경도 재배포 대상이 아닙니다.
