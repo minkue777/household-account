@@ -40,7 +40,7 @@ export default defineConfig({
     },
     {
       name: 'ios-webkit',
-      testMatch: ['ios-startup.spec.ts', 'notification-deeplink.spec.ts', 'settings-navigation.spec.ts'],
+      testMatch: ['ios-startup.spec.ts', 'notification-deeplink.spec.ts', 'settings-navigation.spec.ts', 'google-popup.spec.ts'],
       use: { ...devices['iPhone 13'] },
     },
   ],

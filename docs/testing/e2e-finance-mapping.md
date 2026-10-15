@@ -80,6 +80,8 @@ Canonical 연결은 `T-LED-001`의 동일 월 route 이동·server 준비 상태
 
 `access-household.spec.ts`는 계정마다 독립 BrowserContext를 사용합니다. 실제 Auth Emulator 계정 로그인만 허용하며 principal/member를 브라우저 전역에 주입하지 않습니다. 테스트 계정은 Emulator 이메일 로그인으로 인증 주체를 준비하며, Google 동의 화면이나 실제 OAuth 공급자 가용성을 검증하지 않습니다.
 
+2026-10-16 추가한 `google-popup.spec.ts`는 실제 앱 `/admin`의 Google 로그인 버튼과 Firebase SDK·Auth Emulator Google widget을 사용합니다. 클릭 전 GApi 초기화, 실제 Google provider 인증 결과, 관리자 권한 거부와 일반 홈의 최초 인증 복원, Safari 팝업 닫기 후 재시도를 확인합니다. iPhone UA·standalone 분기는 실행하지만 설치된 실제 iPhone의 팝업 차단 정책이나 운영 Google 계정 인증을 대체하지 않습니다. 무응답 뒤 버튼 복구와 늦은 인증 경합은 별도 Provider/SDK 경계 검사로 연결합니다. [설계·검증 기록](../operations/ios-pwa-google-popup-2026-10-16.md).
+
 | 요구사항 | 실제 E2E 범위 | 추가 경계 |
 |---|---|---|
 | HH-001 | 유효 legacy 후보와 불완전 후보의 첫 로그인 분기 | Native-only 저장값은 Android instrumentation |

@@ -197,7 +197,7 @@ Value Object는 `HouseholdName`, `MemberDisplayName`, `AssetOwnerProfileName`, `
 
 #### 5.2.2 반복 실행의 Session 복원 순서
 
-일반 브라우저와 iPhone PWA는 `initializeAuth`에 기존 저장 우선순위(IndexedDB → localStorage → sessionStorage)를 명시하고 팝업 resolver를 초기 의존성에서 제외합니다. 모바일에서 팝업용 외부 스크립트·iframe 준비가 기존 사용자 복원을 기다리게 하지 않으며 Firebase의 계정·토큰 검증과 observer는 그대로 사용합니다. 실제 Google 로그인은 `signInWithPopup`의 세 번째 인자로 `browserPopupRedirectResolver`를 전달합니다. Android의 localStorage 영속 Auth 정책은 유지합니다.
+일반 브라우저와 iPhone PWA는 `initializeAuth`에 기존 저장 우선순위(IndexedDB → localStorage → sessionStorage)와 `browserPopupRedirectResolver`를 명시합니다. 모바일/Safari에서는 SDK가 로그인 클릭 전에 GApi를 로드하고 인증 iframe 연결을 시작합니다. SDK 초기화 완료를 iframe의 모든 응답 완료로 해석하지 않습니다. 2026-09-07의 준비 지연은 2026-10-16에 철회했습니다. 클릭 이후 외부 준비를 기다리면 iOS 사용자 활성화를 잃을 수 있으므로 로그인 가능한 상태를 우선하며, 사전 준비에 따른 재방문 시간 비용을 숨기지 않습니다. Firebase의 계정·토큰 검증과 observer는 유지합니다. 실제 Google 로그인도 같은 resolver를 사용하고, PWA가 창 차단·닫힘을 통지하지 않아도 3분 뒤 실패로 반환하여 오류와 재시도를 제공합니다. 시간 초과는 인증 취소나 로그아웃이 아니며 뒤늦게 성공한 유효 사용자는 기존 observer로 처리합니다. Android의 localStorage 영속 Auth와 Native 로그인은 유지하며 팝업을 준비하지 않습니다. [원인·검증 경계](../../../../../operations/ios-pwa-google-popup-2026-10-16.md).
 
 1. Android WebView도 Firebase Auth observer의 첫 결과를 먼저 기다립니다. 영속 Web Auth 사용자가 있으면 해당 사용자를 사용하고, 첫 화면 선행 단계에서 강제 token refresh나 Native custom-token 교환을 반복하지 않습니다.
 2. observer가 사용자를 반환하지 않은 Android WebView만 Native 로그인 세션으로 fallback합니다. custom-token 교환 중 observer가 먼저 같은 사용자를 반환해도 Native 응답의 Membership 해석이 끝날 때까지 별도 `ResolveSignedInUser`를 시작하지 않습니다.

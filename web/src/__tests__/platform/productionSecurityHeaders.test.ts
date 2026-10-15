@@ -19,7 +19,7 @@ describe('실제 production header 생성기', () => {
     headers.find((header: any) => header.key === 'Strict-Transport-Security').value = 'max-age=0';
     expect(() => validateSecurityHeaders(headers)).toThrow('INVALID_HSTS');
   });
-  it.each(['false', 'true'])('Emulator 설정 %s에서도 실제 종목 카탈로그 Storage origin을 제한적으로 허용한다', emulatorSuite => {
+  it.each(['false', 'true'])('Emulator 설정 %s에서 Storage와 인증 iframe origin을 제한적으로 허용한다', emulatorSuite => {
     const previousSuite = process.env.NEXT_PUBLIC_FIREBASE_EMULATOR_SUITE;
     const previousProject = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
     try {
@@ -31,6 +31,13 @@ describe('실제 production header 생성기', () => {
       expect(connectSources).toContain('https://firebasestorage.googleapis.com');
       expect(connectSources).not.toEqual(expect.arrayContaining(['https:', 'http:', '*']));
       expect(connectSources.some((source: string) => source.includes('*'))).toBe(false);
+      const frameSources = csp.split(';').map((directive: string) => directive.trim().split(/\s+/))
+        .find((directive: string[]) => directive[0] === 'frame-src').slice(1);
+      expect(frameSources).toEqual([
+        `https://${emulatorSuite === 'true' ? 'demo-household-account-e2e' : 'household-account-6f300'}.firebaseapp.com`,
+        'https://accounts.google.com',
+        ...(emulatorSuite === 'true' ? ['http://127.0.0.1:9099'] : []),
+      ]);
       expect(() => validateSecurityHeaders(securityHeaders())).not.toThrow();
     } finally {
       if (previousSuite === undefined) delete process.env.NEXT_PUBLIC_FIREBASE_EMULATOR_SUITE;

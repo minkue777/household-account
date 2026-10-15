@@ -34,10 +34,11 @@ import { logOut, onAuthChange, signInWithGoogleSession } from '@/lib/authService
 import { recordClientStartupTiming } from '@/platform/performance/clientStartupDiagnostics';
 
 describe('Browser and iPhone PWA auth bootstrap contract', () => {
-  it('기존 브라우저 저장 우선순위를 유지하고 재방문 초기화에 팝업 resolver를 넣지 않는다', () => {
+  it('기존 저장 우선순위를 유지하고 모바일 로그인 클릭 전에 팝업 resolver를 준비한다', () => {
     expect(initializeAuth).toHaveBeenCalledTimes(1);
     expect(initializeAuth).toHaveBeenCalledWith({ name: 'web-app' }, {
       persistence: [indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence],
+      popupRedirectResolver: browserPopupRedirectResolver,
     });
     expect(getAuth).not.toHaveBeenCalled();
     expect(signInWithPopup).not.toHaveBeenCalled();
@@ -95,5 +96,26 @@ describe('Browser and iPhone PWA auth bootstrap contract', () => {
     await logOut();
     expect(signOut).toHaveBeenCalledWith({ runtime: 'browser-auth', currentUser: null });
     expect(requestAndroidHost).not.toHaveBeenCalled();
+  });
+
+  it('iOS PWA 팝업이 응답하지 않으면 대기를 끝내고 다음 로그인을 허용한다', async () => {
+    jest.useFakeTimers();
+    try {
+      jest.mocked(signInWithPopup).mockReturnValueOnce(new Promise(() => {}));
+      const pending = signInWithGoogleSession();
+      const settled = jest.fn();
+      void pending.then(settled);
+      await jest.advanceTimersByTimeAsync(179_999);
+      expect(settled).not.toHaveBeenCalled();
+      await jest.advanceTimersByTimeAsync(1);
+      await expect(pending).resolves.toBeNull();
+
+      const user = { uid: 'retry-after-silent-popup' };
+      jest.mocked(signInWithPopup).mockResolvedValueOnce({ user } as never);
+      await expect(signInWithGoogleSession()).resolves.toEqual({ user });
+      expect(jest.getTimerCount()).toBe(0);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

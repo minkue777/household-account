@@ -35,13 +35,14 @@ export interface AuthenticatedWebSession {
 
 function createAuth() {
   try {
-    // 저장 방식은 유지하고 모바일 Auth 복원 앞의 팝업 iframe 준비만 미룹니다.
-    // resolver는 실제 팝업 로그인에서 전달합니다. Android는 기존 LOCAL을 유지합니다.
-    return initializeAuth(app, {
-      persistence: isAndroidHostAvailable()
-        ? browserLocalPersistence
-        : [indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence],
-    });
+    // 모바일/Safari는 클릭 전에 인증 iframe을 준비해야 사용자 활성화 안에 창을 엽니다.
+    // Android는 Native 로그인을 사용하므로 브라우저 팝업을 준비하지 않습니다.
+    return initializeAuth(app, isAndroidHostAvailable()
+      ? { persistence: browserLocalPersistence }
+      : {
+          persistence: [indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence],
+          popupRedirectResolver: browserPopupRedirectResolver,
+        });
   } catch {
     return getAuth(app);
   }
@@ -73,6 +74,7 @@ connectConfiguredAuthEmulator();
 
 const googleProvider = new GoogleAuthProvider();
 const ANDROID_WEB_AUTH_REFRESH_TIMEOUT_MS = 5_000;
+const GOOGLE_POPUP_TIMEOUT_MS = 180_000;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -242,7 +244,13 @@ export async function signInWithGoogleSession(): Promise<AuthenticatedWebSession
     if (isAndroidHostAvailable()) {
       return await signInFromAndroidHost();
     }
-    const result = await signInWithPopup(auth, googleProvider, browserPopupRedirectResolver);
+    // iOS PWA의 SDK 팝업에는 Window 핸들이 없어 차단·닫힘이 통지되지 않을 수 있습니다.
+    // 대기를 끝내 재시도를 허용하며, 늦게 성공한 유효 인증은 기존 observer가 처리합니다.
+    const result = await withinDeadline(
+      signInWithPopup(auth, googleProvider, browserPopupRedirectResolver),
+      GOOGLE_POPUP_TIMEOUT_MS,
+      'GOOGLE_POPUP_TIMEOUT'
+    );
     return { user: result.user };
   } catch (error) {
     return null;

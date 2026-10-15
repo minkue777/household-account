@@ -829,6 +829,8 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
           : await signInWithGoogleSession();
       const user = session?.user ?? null;
       if (!user) {
+        // 팝업 대기 중 다른 창/SDK observer가 확정한 인증을 늦은 실패로 되돌리지 않습니다.
+        if (activeUserRef.current) return;
         setSessionError('Google 로그인을 완료하지 못했습니다.');
         setSessionState('signed-out');
         return;
