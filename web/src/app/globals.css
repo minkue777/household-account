@@ -2,6 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
+/* 긴 휴대폰 화면에서는 좌우 장식만 잘라 상하의 단색 여백을 없앱니다. */
+@media (min-aspect-ratio: 3/8) and (max-aspect-ratio: 9/16) {
+  .app-startup-artwork { object-fit: cover; }
+}
+
 :root {
   --background: #f8fafc;
   --foreground: #1e293b;

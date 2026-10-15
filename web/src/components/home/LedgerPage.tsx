@@ -20,6 +20,7 @@ import { useCategoryContext } from '@/contexts/CategoryContext';
 import { useLedgerReadModel } from '@/contexts/LedgerReadModelContext';
 import { normalizeExpenseTags } from '@/lib/utils/expenseTags';
 import { scheduleAfterWebFirstHomeCompletePaint } from '@/platform/performance/webStartupPerformance';
+import { useStartupDisplayReady } from '@/contexts/StartupDisplayContext';
 
 const AddExpenseModal = deferHomeContent(
   () => import(/* webpackChunkName: "home-add-expense" */ '@/components/expense/AddExpenseModal'), '내역 추가',
@@ -47,6 +48,7 @@ interface LedgerPageProps {
 const FIRST_HOME_DATA_TIMEOUT_MS = 20_000;
 
 export default function LedgerPage({ transactionType }: LedgerPageProps) {
+  const startupDisplayReady = useStartupDisplayReady();
   useEffect(() => scheduleAfterWebFirstHomeCompletePaint(() => {
     // Optional code preparation: a failed preload is retried on actual first use.
     void ExpenseDetail.preload().catch(() => {});
@@ -103,14 +105,15 @@ export default function LedgerPage({ transactionType }: LedgerPageProps) {
   const homeReady = isSessionVerified && serverSnapshotReady && categoriesServerSnapshotReady
     && localCurrencyReady && preferencesReady && (!needsYearlyTotal || yearlyTotal !== null);
   const [displayedHousehold, setDisplayedHousehold] = useState<string | null>(null);
-  const homeVisible = isSessionVerified && householdKey !== null && (homeReady || displayedHousehold === householdKey);
+  const homeVisible = isSessionVerified && householdKey !== null
+    && ((homeReady && startupDisplayReady) || displayedHousehold === householdKey);
   useLayoutEffect(() => {
     setDisplayedHousehold(current => {
       if (!isSessionVerified) return null;
-      if (homeReady) return householdKey;
+      if (homeReady && startupDisplayReady) return householdKey;
       return current === householdKey ? current : null;
     });
-  }, [homeReady, householdKey, isSessionVerified]);
+  }, [homeReady, householdKey, isSessionVerified, startupDisplayReady]);
   const [timedOutHousehold, setTimedOutHousehold] = useState<string | null>(null);
   useEffect(() => {
     setTimedOutHousehold(null);

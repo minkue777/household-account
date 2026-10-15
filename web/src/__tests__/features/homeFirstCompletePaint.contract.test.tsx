@@ -118,6 +118,7 @@ jest.mock('@/components/search/SearchModal', () => ({
 
 import LedgerPage from '@/components/home/LedgerPage';
 import HouseholdGuard from '@/components/HouseholdGuard';
+import { StartupDisplayProvider } from '@/contexts/StartupDisplayContext';
 
 describe('first home complete paint contract', () => {
   let frameCallbacks: FrameRequestCallback[];
@@ -255,6 +256,56 @@ describe('first home complete paint contract', () => {
     preferencesRead.ready = true;
     yearRead.total = 0;
   }
+
+  function startupHome() {
+    return <StartupDisplayProvider><HouseholdGuard><LedgerPage transactionType="expense" /></HouseholdGuard></StartupDisplayProvider>;
+  }
+
+  it('[T-LED-001] 인증과 데이터가 빨리 끝나도 처음 1.2초는 같은 시작 화면을 유지한 뒤 홈을 계측한다', () => {
+    jest.useFakeTimers({ doNotFake: ['requestAnimationFrame', 'cancelAnimationFrame'] });
+    householdLoading = true;
+    const view = render(startupHome());
+    act(() => jest.advanceTimersByTime(500));
+    householdLoading = false;
+    view.rerender(startupHome());
+    act(() => jest.advanceTimersByTime(300));
+    prepareHome();
+    view.rerender(startupHome());
+    flushFrame(); flushFrame();
+    expect(screen.getByRole('status')).toHaveTextContent('로딩중...');
+    expect(screen.queryByTestId('home-calendar')).not.toBeInTheDocument();
+    expect(markWebFirstHomeCompletePaint).not.toHaveBeenCalled();
+    act(() => jest.advanceTimersByTime(399));
+    expect(screen.queryByTestId('home-calendar')).not.toBeInTheDocument();
+    act(() => jest.advanceTimersByTime(1));
+    expect(screen.getByTestId('home-calendar')).toBeVisible();
+    flushFrame(); flushFrame();
+    expect(markWebFirstHomeCompletePaint).toHaveBeenCalledTimes(1);
+    view.rerender(startupHome());
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  it('[T-LED-001] 최소시간보다 느린 데이터는 도착 즉시 표시하고 대기를 다시 시작하지 않는다', () => {
+    jest.useFakeTimers({ doNotFake: ['requestAnimationFrame', 'cancelAnimationFrame'] });
+    const view = render(startupHome());
+    act(() => jest.advanceTimersByTime(2_000));
+    expect(screen.getByRole('status')).toHaveTextContent('로딩중...');
+    prepareHome();
+    view.rerender(startupHome());
+    expect(screen.getByTestId('home-calendar')).toBeVisible();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  it('[T-LED-001] 최소 표시시간이 남아도 조회 실패와 재시도는 즉시 표시한다', () => {
+    jest.useFakeTimers({ doNotFake: ['requestAnimationFrame', 'cancelAnimationFrame'] });
+    ledgerRead.readError = new Error('offline');
+    render(startupHome());
+    expect(screen.getByRole('alert')).toHaveTextContent('가계부를 불러오지 못했습니다.');
+    expect(screen.getByRole('button', { name: '다시 시도' })).toBeVisible();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    flushFrame(); flushFrame();
+    expect(markWebFirstHomeCompletePaint).not.toHaveBeenCalled();
+  });
 
   it.each(['ledger', 'categories', 'currency', 'preferences', 'year'])(
     '[LED-001][HOME-003] %s가 마지막으로 도착할 때까지 첫 카드와 달력을 함께 숨긴다', source => {

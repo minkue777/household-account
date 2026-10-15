@@ -44,7 +44,7 @@ AND-014의 구간별 계측은 [Android 시작 상세 계측 설계](../../../..
 
 [DEC-004](../../../governance/decisions.md#dec-004)에 따라 Host Gate는 최초 진입과 resume 시 알림 접근·overlay capability를 모두 요구한다. 두 권한이 준비된 뒤 Web Shell을 표시한다. API 33+ 알림 표시 권한은 편의 capability일 뿐 이 gate에 포함하지 않는다. `OpenQuickEdit`은 이 OS capability와 별도로 사용자 QuickEdit 설정을 확인하며, 설정이 꺼져 있으면 `Suppressed(UserDisabled)`를 반환한다.
 
-첫 Web Shell 준비 중에는 [승인한 시작 이미지](../../../../operations/startup-brand-2026-10-15.md)를 원본 비율로 표시한다. `onPageFinished` 뒤 `postVisualStateCallback`이 첫 문서의 이미지까지 표시 가능한 상태를 확인하면 네이티브 이미지를 내리고 Web의 동일 로딩 화면에 연결한다. 인증·전체 홈 데이터 준비는 기존 Web 계약이 소유하며 최소 표시 시간이나 새 home-ready Bridge는 만들지 않는다. 필수 권한 안내와 메인 문서 HTTP·네트워크 오류에서는 이미지를 내려 해당 화면을 가리지 않는다.
+첫 Web Shell 준비 중에는 [승인한 시작 이미지](../../../../operations/startup-brand-2026-10-15.md)를 원본 비율로 표시한다. `onPageFinished` 뒤 `postVisualStateCallback`이 첫 문서의 이미지까지 표시 가능한 상태를 확인하면 네이티브 이미지를 내리고 Web의 동일 로딩 화면에 연결한다. 인증·전체 홈 데이터 준비와 문서당 1.2초 최소 표시는 Web 계약이 소유하며 Native에 중복 타이머나 새 home-ready Bridge를 만들지 않는다. ImageView는 표시 영역 비율이 3:8~9:16일 때 centerCrop으로 좌우 배경만 잘라 상하 여백을 없애며 다른 비율은 fitCenter로 전체 이미지를 보존한다. 필수 권한 안내와 메인 문서 HTTP·네트워크 오류에서는 이미지를 내려 해당 화면을 가리지 않는다.
 
 ### 3.2 JavaScript Bridge v1
 

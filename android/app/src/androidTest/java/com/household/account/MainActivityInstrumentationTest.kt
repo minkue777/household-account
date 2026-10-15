@@ -4,6 +4,10 @@ import android.content.ComponentName
 import android.content.Context
 import android.Manifest
 import android.content.pm.PackageManager
+import android.content.pm.ActivityInfo
+import android.graphics.Bitmap
+import android.graphics.Rect
+import android.graphics.RectF
 import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.provider.Settings
@@ -19,6 +23,7 @@ import android.webkit.WebResourceError
 import android.webkit.WebResourceResponse
 import android.webkit.RenderProcessGoneDetail
 import android.widget.Button
+import android.widget.ImageView
 import android.widget.LinearLayout
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
@@ -36,6 +41,7 @@ import com.household.account.webhost.TrustedWebOrigin
 import com.household.account.webhost.NotificationListenerAccess
 import com.household.account.util.HouseholdPreferences
 import java.io.FileInputStream
+import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -173,10 +179,56 @@ class MainActivityInstrumentationTest {
         try {
             withObservedWebViewLifecycle(document) { scenario ->
                 assertTrue("실제 WebView 시작 이미지 요청", requested.await(5, TimeUnit.SECONDS))
+                waitUntil("이미지 요청에 대응하는 HTML 요소 준비") {
+                    evaluateWebView(scenario, "document.images.length === 1") == "true"
+                }
                 assertEquals("false", evaluateWebView(scenario, "document.images[0].complete"))
                 scenario.onActivity { activity ->
-                    assertEquals(View.VISIBLE, activity.findViewById<View>(R.id.startupImage).visibility)
+                    val artwork = activity.findViewById<ImageView>(R.id.startupImage)
+                    assertEquals(View.VISIBLE, artwork.visibility)
                     assertEquals(View.GONE, activity.findViewById<View>(R.id.permissionLayout).visibility)
+                    assertEquals(ImageView.ScaleType.CENTER_CROP, artwork.scaleType)
+                    val displayedImage = RectF(artwork.drawable.bounds)
+                    artwork.imageMatrix.mapRect(displayedImage)
+                    assertEquals("휴대폰 상단에 단색 여백이 없음", 0f, displayedImage.top, 1f)
+                    assertEquals("휴대폰 하단에 단색 여백이 없음", artwork.height.toFloat(), displayedImage.bottom, 1f)
+                    val brandContent = RectF(145f, 355f, 575f, 1125f)
+                    artwork.imageMatrix.mapRect(brandContent)
+                    assertTrue("로고·제목·하단 점 보존", brandContent.left >= 0 && brandContent.top >= 0 &&
+                        brandContent.right <= artwork.width && brandContent.bottom <= artwork.height)
+                    val visibleBounds = Rect()
+                    assertTrue(artwork.getGlobalVisibleRect(visibleBounds))
+                    assertEquals("시스템 UI 또는 부모에 의해 잘리지 않음", artwork.height, visibleBounds.height())
+                }
+                InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()?.let { screenshot ->
+                    File(context.getExternalFilesDir(null), "startup-native.png").outputStream().use {
+                        screenshot.compress(Bitmap.CompressFormat.PNG, 100, it)
+                    }
+                    screenshot.recycle()
+                }
+                scenario.onActivity { it.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
+                waitUntil("가로 화면에서도 시작 이미지의 전체 문구 보존") {
+                    var landscape = false
+                    scenario.onActivity { activity ->
+                        val artwork = activity.findViewById<ImageView>(R.id.startupImage)
+                        landscape = artwork.width > artwork.height
+                        if (landscape) {
+                            assertEquals(View.VISIBLE, artwork.visibility)
+                            assertEquals(ImageView.ScaleType.FIT_CENTER, artwork.scaleType)
+                            val displayedImage = RectF(artwork.drawable.bounds)
+                            artwork.imageMatrix.mapRect(displayedImage)
+                            assertTrue(displayedImage.top >= 0 && displayedImage.bottom <= artwork.height &&
+                                displayedImage.left >= 0 && displayedImage.right <= artwork.width)
+                        }
+                    }
+                    landscape
+                }
+                InstrumentationRegistry.getInstrumentation().uiAutomation.waitForIdle(500, 5_000)
+                InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()?.let { screenshot ->
+                    File(context.getExternalFilesDir(null), "startup-native-landscape.png").outputStream().use {
+                        screenshot.compress(Bitmap.CompressFormat.PNG, 100, it)
+                    }
+                    screenshot.recycle()
                 }
                 responseReady.countDown()
                 waitUntil("Web 이미지가 표시될 준비가 되면 네이티브 시작 화면 종료") {

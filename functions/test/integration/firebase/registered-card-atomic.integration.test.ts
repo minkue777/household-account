@@ -1,6 +1,6 @@
 import { deleteApp, initializeApp } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { getFirestore, setLogFunction } from "firebase-admin/firestore";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { FirebasePaymentConfigurationAtomicStore } from "../../../src/adapters/firebase/payment-configuration/firebasePaymentConfigurationAtomicStore";
 import { createPaymentConfigurationRuntimeApplication } from "../../../src/contexts/payment-capture/configuration/application/paymentConfigurationRuntimeApplication";
 
@@ -23,9 +23,46 @@ describeWithEmulator("[CARD-005][T-CARD-005] 실제 등록 카드 저장", () =>
     if (result.kind !== "success") throw new Error("Card creation failed");
     return result.value.cardId as string;
   }
-  it("동일 카드 등록 경합·재전송에서 카드와 claim을 한 개씩만 보존한다", async () => {
+  it("동일 카드 등록 경합·재전송에서 카드와 claim을 한 개씩만 보존한다", async ({ onTestFailed, onTestFinished }) => {
     const inputs = ["first", "second"].map(id => ({ ...command("race", id, "create"), card: { cardLabel: "삼성카드", cardLastFour: "1234" } }));
-    const results = await Promise.all(inputs.map(input => application.registerCard(input)));
+    const runTransaction = db.runTransaction.bind(db);
+    const attempts: number[] = [];
+    const firstResults: unknown[] = [];
+    const sdkLog: string[] = [];
+    let release!: () => void;
+    const bothPrepared = new Promise<void>(resolve => { release = resolve; });
+    setLogFunction(message => sdkLog.push(message));
+    const observed = vi.spyOn(db, "runTransaction").mockImplementation(operation => {
+      const index = attempts.push(0) - 1;
+      return runTransaction(async transaction => {
+        const firstAttempt = ++attempts[index] === 1;
+        const result = await operation(transaction);
+        if (firstAttempt) {
+          // 동일한 초기 상태의 두 등록을 준비한 뒤 실제 SDK의 commit 충돌·재시도를 검증합니다.
+          firstResults.push(result);
+          if (firstResults.length === inputs.length) release();
+          await bothPrepared;
+        }
+        return result;
+      });
+    });
+    onTestFailed(() => console.error({ attempts, firstResults, sdkLog }));
+    onTestFinished(() => {
+      release();
+      observed.mockRestore();
+      setLogFunction(null);
+    });
+    const settled = await Promise.allSettled(inputs.map(input => application.registerCard(input).finally(release)));
+    const results = settled.map(result => {
+      if (result.status === "rejected") throw result.reason;
+      return result.value;
+    });
+    expect(firstResults).toEqual(inputs.map(() => expect.objectContaining({
+      kind: "committed", value: expect.objectContaining({ kind: "Created" }),
+    })));
+    expect(attempts).toHaveLength(2);
+    expect(attempts.some(count => count > 1)).toBe(true);
+    observed.mockRestore();
     expect(results.filter(result => result.kind === "success")).toHaveLength(1);
     expect(results.filter(result => result.kind !== "success")).toEqual([{ kind: "rejected", code: "DUPLICATE_CARD" }]);
     for (let index = 0; index < inputs.length; index++) expect(await application.registerCard(inputs[index])).toEqual(results[index]);

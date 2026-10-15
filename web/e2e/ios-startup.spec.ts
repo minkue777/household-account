@@ -360,16 +360,53 @@ test.describe('첫 홈 별도 서버 조회', () => {
       await expect.poll(() => artwork.evaluate((image: HTMLImageElement) =>
         image.complete && image.naturalWidth === 720 && image.naturalHeight === 1280)).toBe(true);
       const viewport = restarted.viewportSize()!;
-      const artworkLayout = await artwork.evaluate(image => {
-        const box = image.getBoundingClientRect();
-        return { x: box.x, y: box.y, width: box.width, height: box.height, fit: getComputedStyle(image).objectFit };
-      });
-      expect(artworkLayout).toEqual({ x: 0, y: 0, ...viewport, fit: 'contain' });
-      await restarted.screenshot({ path: testInfo.outputPath('startup-brand-mobile.png') });
-      await restarted.setViewportSize({ width: 1280, height: 800 });
-      await expect(artwork).toBeVisible();
-      await expect(restarted.getByRole('status')).toHaveCSS('position', 'fixed');
-      await restarted.screenshot({ path: testInfo.outputPath('startup-brand-desktop.png') });
+      const artworkLayouts = [];
+      for (const size of [
+        { name: 'mobile', width: 390, height: 844, fit: 'cover' },
+        { name: 'narrow-mobile', width: 360, height: 960, fit: 'cover' },
+        { name: 'landscape', width: 844, height: 390, fit: 'contain' },
+        { name: 'desktop', width: 1280, height: 800, fit: 'contain' },
+      ]) {
+        await restarted.setViewportSize({ width: size.width, height: size.height });
+        await expect(artwork).toHaveCSS('object-fit', size.fit);
+        await expect(restarted.getByRole('status')).toHaveCSS('position', 'fixed');
+        const layout = await artwork.evaluate((image: HTMLImageElement) => {
+          const box = image.getBoundingClientRect();
+          const screen = image.parentElement!.getBoundingClientRect();
+          const screenStyle = getComputedStyle(image.parentElement!);
+          const style = getComputedStyle(image);
+          const ratios = [box.width / image.naturalWidth, box.height / image.naturalHeight];
+          const scale = style.objectFit === 'cover' ? Math.max(...ratios) : Math.min(...ratios);
+          return { x: box.x, y: box.y, width: box.width, height: box.height,
+            left: (box.width - image.naturalWidth * scale) / 2,
+            top: (box.height - image.naturalHeight * scale) / 2,
+            scale, position: style.objectPosition, screenWidth: screen.width, screenHeight: screen.height,
+            edges: [screenStyle.left, screenStyle.right, screenStyle.top, screenStyle.bottom].map(parseFloat) };
+        });
+        // 브라우저 스크롤바를 제외한 실제 fixed 화면을 채우며 1/64 CSS px 반올림만 허용합니다.
+        expect(layout.position).toBe('50% 50%');
+        for (const offset of [layout.x, layout.y, ...layout.edges]) expect(offset).toBeCloseTo(0, 1);
+        expect(layout.width).toBeCloseTo(layout.screenWidth, 1);
+        expect(layout.height).toBeCloseTo(layout.screenHeight, 1);
+        if (size.fit === 'cover') {
+          expect(layout.left).toBeLessThanOrEqual(0.05);
+          expect(layout.top).toBeCloseTo(0, 1);
+          // 원본 JPG의 제목·부제 및 하단 점은 좌우 장식이 잘려도 전부 보여야 합니다.
+          for (const content of [{ x: 150, y: 710, width: 425, height: 145 }, { x: 320, y: 1100, width: 80, height: 25 }]) {
+            expect(layout.left + content.x * layout.scale).toBeGreaterThanOrEqual(-0.05);
+            expect(layout.left + (content.x + content.width) * layout.scale).toBeLessThanOrEqual(layout.width + 0.05);
+            expect(layout.top + content.y * layout.scale).toBeGreaterThanOrEqual(-0.05);
+            expect(layout.top + (content.y + content.height) * layout.scale).toBeLessThanOrEqual(layout.height + 0.05);
+          }
+        } else {
+          expect(layout.left).toBeGreaterThanOrEqual(-0.05);
+          expect(layout.top).toBeGreaterThanOrEqual(-0.05);
+          expect(layout.left + 720 * layout.scale).toBeLessThanOrEqual(layout.width + 0.05);
+          expect(layout.top + 1280 * layout.scale).toBeLessThanOrEqual(layout.height + 0.05);
+        }
+        artworkLayouts.push({ ...size, ...layout });
+        await restarted.screenshot({ path: testInfo.outputPath(`startup-brand-${size.name}.png`) });
+      }
       await restarted.setViewportSize(viewport);
       await expect(restarted.locator('.calendar-glass')).toHaveCount(0);
       await expect(restarted.locator('.balance-card-glass')).toHaveCount(0);
@@ -398,7 +435,7 @@ test.describe('첫 홈 별도 서버 조회', () => {
         .filter(entry => entry.name.startsWith('household-account:startup:')).map(entry => [entry.name, entry.startTime])));
       expect(marks['household-account:startup:ledger:first-paint']).toBeGreaterThanOrEqual(marks['household-account:startup:local-currency:ready']);
       await testInfo.attach('home-initial-complete-display', { contentType: 'application/json',
-        body: Buffer.from(JSON.stringify({ heldBalanceResponses, marks, frames }, null, 2)) });
+        body: Buffer.from(JSON.stringify({ heldBalanceResponses, marks, frames, artworkLayouts }, null, 2)) });
     } finally {
       release();
       await restarted.unrouteAll({ behavior: 'wait' });
@@ -421,6 +458,22 @@ test.describe('첫 홈 별도 서버 조회', () => {
     const restarted = await context.newPage();
     await observeIndexedDbOpens(restarted, true);
     const visits = observeAppVisits(restarted);
+    await restarted.addInitScript(paintMark => {
+      const observation = { frames: [] as { phase: string; atMs: number }[], paintWhileLoading: false };
+      Object.assign(window, { startupDisplayObservation: observation });
+      const observeFrame = () => {
+        const loading = document.querySelector('[role="status"][aria-busy="true"]');
+        const home = document.querySelector('.calendar-glass');
+        const painted = performance.getEntriesByName(paintMark).length > 0;
+        const phase = home ? 'home' : loading ? 'loading' : 'gap';
+        if ((observation.frames.length > 0 || phase === 'loading') && observation.frames.at(-1)?.phase !== phase) {
+          observation.frames.push({ phase, atMs: performance.now() });
+        }
+        if (loading && painted) observation.paintWhileLoading = true;
+        if (!painted) requestAnimationFrame(observeFrame);
+      };
+      requestAnimationFrame(observeFrame);
+    }, COMPLETE_PAINT);
     let release!: () => void;
     const held = new Promise<void>(resolve => { release = resolve; });
     let heldRequests = 0;
@@ -448,6 +501,22 @@ test.describe('첫 홈 별도 서버 조회', () => {
       const visit = await acceptedAppVisit(visits);
       const timings = visit.clientStartupDiagnostics!.timingsMs;
       expectServerReadinessOrder(timings);
+      const display = await restarted.evaluate(paintMark => ({
+        ...(window as typeof window & { startupDisplayObservation: {
+          frames: { phase: string; atMs: number }[]; paintWhileLoading: boolean;
+        } }).startupDisplayObservation,
+        homeReadyAt: performance.getEntriesByName('household-account:startup:home:ready')[0].startTime,
+        paintedAt: performance.getEntriesByName(paintMark)[0].startTime,
+      }), COMPLETE_PAINT);
+      expect(display.frames.map(frame => frame.phase)).toEqual(['loading', 'home']);
+      const homeAt = display.frames.find(frame => frame.phase === 'home')!.atMs;
+      expect(homeAt).toBeGreaterThanOrEqual(1200);
+      expect(display.paintWhileLoading).toBe(false);
+      expect(display.paintedAt).toBeGreaterThanOrEqual(homeAt);
+      expect(display.paintedAt).toBeGreaterThanOrEqual(display.homeReadyAt);
+      expect(timings.firstHomeCompletePaint).toBe(Math.round(display.paintedAt * 1000) / 1000);
+      // 실제 서버가 1.2초보다 느릴 수 있으므로 빠른 경로는 가짜 타이머 unit에서 별도 검증합니다.
+      // 여기서는 실서버 준비 시점과 실제 화면 전환·접속 계측을 함께 남깁니다.
       for (const source of ['ledger', 'categories', 'currencyPreferences', 'currencyBalances']) {
         expect(timings).toHaveProperty(source + 'InitialReadReceived');
         expect(timings).toHaveProperty(source + 'InitialReadCompleted');
@@ -472,7 +541,7 @@ test.describe('첫 홈 별도 서버 조회', () => {
       });
       await expect(expense).toHaveCount(0);
       await testInfo.attach('initial-read-live-handoff', { contentType: 'application/json',
-        body: Buffer.from(JSON.stringify({ timings, heldRequests, restResponses }, null, 2)) });
+        body: Buffer.from(JSON.stringify({ timings, heldRequests, restResponses, display }, null, 2)) });
     } finally {
       release();
       await restarted.unrouteAll({ behavior: 'wait' });

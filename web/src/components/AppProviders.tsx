@@ -25,6 +25,7 @@ import { AppDialogProvider } from '@/contexts/AppDialogContext';
 import { REMOTE_SESSION_RECOVERY_REQUESTED_EVENT } from '@/platform/functions-api/firebaseCallableRecovery';
 import { clearRetiredHomeReadSnapshots } from '@/platform/read-model/retiredHomeReadSnapshotCleanup';
 import { startAndroidQuickEditUpdates } from '@/composition/androidQuickEditUpdates';
+import { StartupDisplayProvider } from '@/contexts/StartupDisplayContext';
 
 const MUTATION_PRELOAD_DELAY_AFTER_LEDGER_MS = 3_000;
 const MUTATION_PRELOAD_IDLE_TIMEOUT_MS = 15_000;
@@ -282,9 +283,11 @@ export default function AppProviders({ children }: { children: React.ReactNode }
         <ThemeProvider>
           <CategoryProvider>
             <LedgerReadModelProvider>
-              <HouseholdGuard>
-                {children}
-              </HouseholdGuard>
+              <StartupDisplayProvider>
+                <HouseholdGuard>
+                  {children}
+                </HouseholdGuard>
+              </StartupDisplayProvider>
             </LedgerReadModelProvider>
           </CategoryProvider>
         </ThemeProvider>
