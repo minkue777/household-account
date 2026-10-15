@@ -112,6 +112,8 @@
 
 Google 로그인 진입은 모바일/PWA에서도 사용자가 누르기 전에 SDK 인증 창을 준비하고, 창이 응답하지 않는 경우 오류와 재시도를 제공해야 합니다. 이미 확인된 인증을 늦은 실패로 되돌리지 않습니다. HH-001·003·008의 이 경계와 실제 SDK 검사 범위는 [PWA Google 로그인 작업 기록](../../../../../operations/ios-pwa-google-popup-2026-10-16.md)에 추적합니다.
 
+ADM-005·006의 관리자 iPhone 첫 화면 통계는 유효한 시작 진단에서 초기 숨김 또는 백그라운드 전환이 확인된 표본을 제외합니다. 느린 전경 실행과 진단 없는 구버전은 유지하며 원본 로그·접속 횟수는 변경하지 않습니다. [제외 계약·검증](../../../../../operations/ios-startup-foreground-statistics-2026-10-16.md).
+
 | ID | 상태 | 사전조건 / 행동 / 결과 | 경계·예외 | 근거 | 테스트 |
 |---|---|---|---|---|---|
 | HH-001 | 목표 명세 | 앱은 Google 로그인 전에 기존 localStorage의 `householdKey`, `currentMemberId`, `currentMemberName`을 `LegacySessionCandidate`로 읽는다. householdKey와 currentMemberId가 모두 있고 첫 로그인한 UID에 Membership이 없을 때만 기존 가계부 연결 확인을 제공한다. | migration client는 기존 Web origin에서 먼저 배포한다. legacy 값은 장기 인증 자격이 아니다. 이미 유일한 Membership이 있으면 서버 값을 바로 복원하고 다른 legacy 후보를 덮어쓰거나 추가 연결하지 않는다. localStorage가 없거나 후보가 불완전·무효하면 신규 사용자의 새 가계부·초대 코드 첫 방문 화면으로 보낸다. Android Native 값으로 사용자를 추정하지 않는다. | [HouseholdContext](../../../../../../web/src/contexts/HouseholdContext.tsx), [memberStorage](../../../../../../web/src/lib/storage/memberStorage.ts), [DEC-021](../../../../governance/decisions.md#dec-021), [DEC-034](../../../../governance/decisions.md#dec-034) | U, I, E2E |

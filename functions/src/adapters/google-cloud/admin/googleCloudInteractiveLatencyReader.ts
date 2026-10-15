@@ -1,4 +1,5 @@
 import { applicationDefault } from "firebase-admin/app";
+import { normalizeClientStartupDiagnostics } from "../../../observability/clientStartupDiagnostics";
 
 import type {
   AdminDashboardFunctionLatency,
@@ -126,6 +127,11 @@ function observation(entry: LoggingEntry): InteractiveLatencyObservation | undef
       ? MAX_NOTIFICATION_DELIVERY_ELAPSED_MS
       : MAX_INTERACTIVE_ELAPSED_MS;
   if (elapsedMs > maxElapsedMs) return undefined;
+  if (endpoint === "clientStartup" && operation === "client.ios-pwa-first-home-complete-paint.v1") {
+    const diagnostics = normalizeClientStartupDiagnostics(payload?.clientStartupDiagnostics, elapsedMs);
+    if (diagnostics && (diagnostics.initialVisibility === "hidden" ||
+      diagnostics.hiddenMs > 0 || diagnostics.hiddenCount > 0)) return undefined;
+  }
   return {
     ...(parsedCorrelationId === undefined
       ? {}

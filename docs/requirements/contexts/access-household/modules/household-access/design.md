@@ -606,3 +606,7 @@ partner 선택 정책은 [DEC-022](../../../../governance/decisions.md#dec-022),
 
 ### 초기 조회 완료 관측 (2026-10-12)
 네 원본의 `InitialReadCompleted`/`InitialReadFailed`는 현재 세션에서 Promise가 끝난 시각이다. `InitialReadReceived`는 mapper에 전달할 결과이며 mapper 실패는 Completed와 Fallback으로 구분한다. 2026-10-14부터 원본별 시간 제한 없이 정상 응답을 채택하며, 이전 빌드의 시간 초과 후 성공은 Completed만 기록하고 표시하지 않았다. 첫 홈 paint 시 진단을 동결하므로 그 이후 완료는 관측할 수 없다. 서버 선택 필드 허용을 Web보다 선행 배포한다. [작업 및 검증](../../../../../operations/ios-notification-startup-2026-10-12.md).
+
+### iPhone 첫 화면 관리자 통계의 전경 표본 (2026-10-16)
+
+Cloud Logging reader는 iPhone `clientStartup` total의 유효한 v1 진단에 초기 숨김·양수 hiddenMs·양수 hiddenCount가 있으면 집계 입력에서 제외한다. 호출/결과 수·평균·P95·최대·최근 시각 모두 같은 표본 집합을 쓴다. raw logger·접속 Command와 횟수는 유지하며 느린 전경·진단 없는 구버전·손상 부가 진단과 Android에는 새 제외를 적용하지 않는다. 조회 실패/partial 및 기존 correlation 중복 처리는 유지한다. 제외 목록이나 백필 없이 기존 로그에도 적용하며 전부 제외되면 0초 정상 행을 생성하지 않는다. [계약·회귀·운영 관측](../../../../../operations/ios-startup-foreground-statistics-2026-10-16.md).

@@ -8,6 +8,80 @@ import {
 
 describe("Google Cloud interactive latency reader", () => {
   it.each([
+    { initialVisibility: "visible", hiddenMs: 4_131, hiddenCount: 1 },
+    { initialVisibility: "hidden", hiddenMs: 0, hiddenCount: 0 },
+    { initialVisibility: "visible", hiddenMs: 0, hiddenCount: 1 },
+  ])("[T-ADM-005] 백그라운드가 섞인 iPhone 시작은 통계에서 제외한다: $initialVisibility/$hiddenMs/$hiddenCount", async background => {
+    const entries = [3_030, 3_142, 3_294, 2_543, 16_774].map((elapsedMs, index) => ({
+      timestamp: `2026-10-15T15:48:0${index}.000Z`,
+      jsonPayload: {
+        endpoint: "clientStartup",
+        operation: "client.ios-pwa-first-home-complete-paint.v1",
+        status: "succeeded", elapsedMs,
+        clientStartupDiagnostics: {
+          version: 1, visibilityTrackingStartedAtMs: 0, timingsMs: {},
+          ...(index === 4 ? background : { initialVisibility: "visible", hiddenMs: 0, hiddenCount: 0 }),
+        },
+      },
+    }));
+    const reader = new GoogleCloudInteractiveLatencyReader("test-project", {
+      async getAccessToken() { return { access_token: "test-token" }; },
+    }, async () => ({ ok: true, status: 200, async json() { return { entries }; } }));
+
+    const result = await reader.read({ generatedAt: "2026-10-16T00:00:00Z", windowHours: 24 });
+    expect(result.operations).toEqual([expect.objectContaining({
+      sampleCount: 4, succeededCount: 4, rejectedCount: 0, failedCount: 0,
+      averageMs: 3_002.3, p95Ms: 3_294, maxMs: 3_294,
+      latestAt: "2026-10-15T15:48:03.000Z",
+    })]);
+  });
+
+  it("[T-ADM-005] 느린 전경 실행과 진단 없는 구버전·손상 진단·Android 표본은 임의로 제거하지 않는다", async () => {
+    const ios = {
+      endpoint: "clientStartup", operation: "client.ios-pwa-first-home-complete-paint.v1",
+      status: "succeeded", elapsedMs: 9_995,
+    };
+    const diagnostics = {
+      version: 1, initialVisibility: "visible", hiddenMs: 0, hiddenCount: 0,
+      visibilityTrackingStartedAtMs: 0, timingsMs: {},
+    };
+    const payloads = [
+      { ...ios, clientStartupDiagnostics: diagnostics },
+      ios,
+      { ...ios, clientStartupDiagnostics: { ...diagnostics, hiddenMs: -1 } },
+      { ...ios, operation: "client.android-app-first-home-complete-paint.v1", clientStartupDiagnostics: {
+        ...diagnostics, hiddenMs: 1_000, hiddenCount: 1,
+        android: { webDurationMs: 9_000, bridgeRoundTripMs: 1 },
+      } },
+    ];
+    const reader = new GoogleCloudInteractiveLatencyReader("test-project", {
+      async getAccessToken() { return { access_token: "test-token" }; },
+    }, async () => ({ ok: true, status: 200, async json() {
+      return { entries: payloads.map(jsonPayload => ({ timestamp: "2026-10-15T15:48:00Z", jsonPayload })) };
+    } }));
+
+    const result = await reader.read({ generatedAt: "2026-10-16T00:00:00Z", windowHours: 24 });
+    expect(result.operations).toEqual([
+      expect.objectContaining({ operation: ios.operation, sampleCount: 3, averageMs: 9_995, maxMs: 9_995 }),
+      expect.objectContaining({ operation: "client.android-app-first-home-complete-paint.v1", sampleCount: 1, averageMs: 9_995 }),
+    ]);
+  });
+
+  it("[T-ADM-005] 전부 백그라운드 표본이면 0초 정상 실행 행을 만들지 않는다", async () => {
+    const reader = new GoogleCloudInteractiveLatencyReader("test-project", {
+      async getAccessToken() { return { access_token: "test-token" }; },
+    }, async () => ({ ok: true, status: 200, async json() { return { entries: [{
+      timestamp: "2026-10-15T15:48:00Z",
+      jsonPayload: { endpoint: "clientStartup", operation: "client.ios-pwa-first-home-complete-paint.v1",
+        status: "succeeded", elapsedMs: 1_000, clientStartupDiagnostics: {
+          version: 1, initialVisibility: "hidden", hiddenMs: 500, hiddenCount: 1,
+          visibilityTrackingStartedAtMs: 0, timingsMs: {},
+        } },
+    }] }; } }));
+    expect((await reader.read({ generatedAt: "2026-10-16T00:00:00Z", windowHours: 24 })).operations).toEqual([]);
+  });
+
+  it.each([
     { statuses: ["rejected"], succeeded: 0, rejected: 1, failed: 0 },
     { statuses: ["succeeded", "rejected", "failed"], succeeded: 1, rejected: 1, failed: 1 },
   ])("[T-ADM-004] iPhone 정책 거절은 실패와 분리한다: $statuses", async ({ statuses, succeeded, rejected, failed }) => {
