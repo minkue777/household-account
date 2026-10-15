@@ -105,6 +105,15 @@ class WebStartupFirebaseE2ETest {
                 if (Build.VERSION.SDK_INT >= 33) shell("pm grant ${context.packageName} ${Manifest.permission.POST_NOTIFICATIONS}")
                 eventually("Required permissions applied") { Settings.canDrawOverlays(context) }
                 active.onActivity { it.findViewById<android.view.View>(R.id.btnCheckPermission).performClick() }
+                if (!preparing) {
+                    eventually("Real initial reads are held behind the native startup screen") {
+                        evaluate("Boolean(window.__HOUSEHOLD_NATIVE_STARTUP__ && window.nativeE2e?.liteResponses > 0 && document.querySelector('[data-startup-screen]'))") == true
+                    }
+                    active.onActivity { activity ->
+                        assertEquals("The document finishing must not replace native branding with Web branding",
+                            android.view.View.VISIBLE, activity.findViewById<android.view.View>(R.id.startupImage).visibility)
+                    }
+                }
                 eventually("Actual application login button or authenticated calendar") {
                     evaluate("Boolean(document.querySelector('.calendar-glass') || [...document.querySelectorAll('button')].some(b=>b.textContent.includes('테스트 계정으로 로그인')))") == true
                 }
@@ -119,6 +128,11 @@ class WebStartupFirebaseE2ETest {
                     throw error
                 }
                 val first = JSONObject(evaluate("JSON.stringify(window.nativeE2e)").toString())
+                eventually("Prepared content replaces native startup directly") {
+                    var hidden = false
+                    active.onActivity { hidden = it.findViewById<android.view.View>(R.id.startupImage).visibility == android.view.View.GONE }
+                    hidden && evaluate("document.querySelector('[data-startup-screen]') === null") == true
+                }
                 if (preparing) {
                     File(context.filesDir, "native-startup-cold-e2e-result.json").writeText(first.toString())
                     active.close()

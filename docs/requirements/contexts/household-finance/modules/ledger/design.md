@@ -419,6 +419,8 @@ Event payload는 projection 조정에 필요한 최소 금액·날짜·category 
 
 ### 8.2 조회와 Projection
 
+Android 첫 표시는 [Native 시작 화면 인계](../../../../../operations/startup-native-handoff-2026-10-15.md)를 사용한다. 지원 flag가 있는 최상위 문서에서만 공통 로딩 종료 뒤 `startup.content-ready`를 보낸다. Root와 공통 로딩의 수명에서 다음 frame에 실제 시작 화면 부재를 확인하므로 인증→원장 로딩 교체나 로그인 청크 대기를 완료로 오인하지 않는다. 단순 문서 다운로드 완료를 전체 콘텐츠 준비로 사용하지 않으며 기존 데이터 준비·최소 표시시간·오류 처리를 변경하지 않는다.
+
 - 브라우저 Web·PWA·Android WebView의 월·연 원장 목록은 Ledger가 소유한 같은 공개 Firestore Read Contract를 실시간 구독합니다. 검증된 SessionScope의 `householdId`와 시작일·종료일을 `householdId + date` 복합 index에 전달하고, 거래 유형과 lifecycle 가시성은 같은 Read Adapter가 적용합니다.
 - 월 원장의 물리 구독과 낙관적 Projection scope는 app shell이 소유한 `{sessionGeneration, householdId, year, month}` 하나입니다. 이 원본은 지출과 수입을 함께 보관하고 각 화면은 `transactionType`으로 메모리 파생합니다. 같은 월에서 지출과 수입을 전환하거나 홈·자산·통계·설정 등 내부 route를 이동할 때 listener를 해제하거나 원본을 비우거나 서버 snapshot을 다시 기다리지 않습니다. 연도·월·가구·SessionScope가 바뀌거나 로그아웃할 때 기존 구독을 종료합니다. `permission-denied`로 listener가 종료되면 원본은 유지하고 Session 권위 해석이 같은 scope를 반환할 때 read epoch로 다시 열며, first visit·다른 scope가 확정될 때만 원본과 Projection을 폐기합니다.
 - 앱 첫 가계부 화면은 월 원장 localStorage snapshot을 읽거나 쓰지 않습니다. Firestore listener는 metadata 변경을 포함해 구독하고 최초 `fromCache=true` 결과를 건너뛴 뒤 서버 snapshot부터 `accountingDate DESC, localTime DESC, transactionId DESC` 정렬 Policy로 표시합니다.

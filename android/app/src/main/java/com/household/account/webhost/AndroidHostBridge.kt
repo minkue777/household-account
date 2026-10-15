@@ -20,7 +20,8 @@ class AndroidHostBridge(
     private val context: Activity,
     createAuthCoordinator: () -> NativeAuthCoordinator = { NativeAuthCoordinator(context) },
     private val consumeAppLaunchDurationMillis: () -> Long?,
-    private val readAppLaunchTimings: () -> Map<String, Long> = { emptyMap() }
+    private val readAppLaunchTimings: () -> Map<String, Long> = { emptyMap() },
+    private val onStartupContentReady: () -> Unit = {}
 ) {
     // A restored Web Auth session does not need Native authentication at startup.
     private val authCoordinator by lazy(createAuthCoordinator)
@@ -44,6 +45,11 @@ class AndroidHostBridge(
             ?: return rejected(requestId, "PAYLOAD_REQUIRED")
 
         return when (request.optString("operation")) {
+            "startup.content-ready" -> {
+                if (payload.length() != 0) return rejected(requestId, "INVALID_PAYLOAD")
+                onStartupContentReady()
+                succeeded(requestId, JSONObject())
+            }
             QuickEditUpdateFeedbackBridge.GET_OPERATION, QuickEditUpdateFeedbackBridge.ACK_OPERATION -> try {
                 succeeded(requestId, updateFeedbackBridge.handle(request.getString("operation"), payload))
             } catch (error: CancellationException) {

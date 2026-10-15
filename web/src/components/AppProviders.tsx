@@ -26,6 +26,7 @@ import { REMOTE_SESSION_RECOVERY_REQUESTED_EVENT } from '@/platform/functions-ap
 import { clearRetiredHomeReadSnapshots } from '@/platform/read-model/retiredHomeReadSnapshotCleanup';
 import { startAndroidQuickEditUpdates } from '@/composition/androidQuickEditUpdates';
 import { StartupDisplayProvider } from '@/contexts/StartupDisplayContext';
+import { NativeStartupHandoff } from '@/platform/android-host/NativeStartupHandoff';
 
 const MUTATION_PRELOAD_DELAY_AFTER_LEDGER_MS = 3_000;
 const MUTATION_PRELOAD_IDLE_TIMEOUT_MS = 15_000;
@@ -284,9 +285,11 @@ export default function AppProviders({ children }: { children: React.ReactNode }
           <CategoryProvider>
             <LedgerReadModelProvider>
               <StartupDisplayProvider>
-                <HouseholdGuard>
-                  {children}
-                </HouseholdGuard>
+                <NativeStartupHandoff>
+                  <HouseholdGuard>
+                    {children}
+                  </HouseholdGuard>
+                </NativeStartupHandoff>
               </StartupDisplayProvider>
             </LedgerReadModelProvider>
           </CategoryProvider>

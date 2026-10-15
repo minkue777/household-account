@@ -381,11 +381,87 @@ class MainActivityInstrumentationTest {
     }
 
     @Test
+    fun nativeStartupWaitsForActualWebContentAndIgnoresThePreviousViewCompletion() {
+        assumeTrue(WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT))
+        grantMandatoryPermissions()
+        val document = LocalWebViewDocument(TrustedWebOrigin.APP_URL, """<!doctype html><html><head>
+            <meta name="household-native-startup" content="content-ready-v1">
+            <script>window.supportAtDocumentStart = window.__HOUSEHOLD_NATIVE_STARTUP__ === true;</script>
+            </head><body><main id="content">홈 조회 대기</main><script>
+            window.replies = {};
+            HouseholdNativeBridge.onmessage = event => {
+              const reply = JSON.parse(event.data); window.replies[reply.requestId] = reply.result;
+            };
+            window.sendReady = (id, payload = {}) => HouseholdNativeBridge.postMessage(JSON.stringify({
+              contractVersion:'android-bridge.v1', requestId:id, operation:'startup.content-ready', payload
+            }));
+            </script></body></html>""".trimIndent())
+        withObservedWebViewLifecycle(document) { scenario ->
+            fun waitForLoadedDocument() {
+                waitUntil("metadata 문서와 실제 onPageFinished 완료") {
+                    var finished = false
+                    scenario.onActivity { activity ->
+                        finished = activity.findViewById<LifecycleObservedWebView>(R.id.webView).pageFinishedCalls > 0
+                    }
+                    finished && evaluateWebView(scenario, "document.readyState === 'complete' && window.supportAtDocumentStart") == "true"
+                }
+                InstrumentationRegistry.getInstrumentation().uiAutomation.waitForIdle(100, 5_000)
+                scenario.onActivity { activity ->
+                    assertEquals("문서가 완전히 로드되어도 실제 내용 준비 전에는 Native 유지",
+                        View.VISIBLE, activity.findViewById<View>(R.id.startupImage).visibility)
+                }
+            }
+            waitForLoadedDocument()
+            evaluateWebView(scenario, "sendReady('invalid', {unexpected:true})")
+            waitUntil("잘못된 준비 payload 거부") {
+                evaluateWebViewText(scenario, "window.replies.invalid?.error?.code") == "INVALID_PAYLOAD"
+            }
+            scenario.onActivity { activity ->
+                assertEquals(View.VISIBLE, activity.findViewById<View>(R.id.startupImage).visibility)
+            }
+
+            // 실제 bridge 신호로 예약된 화면 완료가 이전 WebView보다 늦게 도착하는 경계입니다.
+            lateinit var previous: LifecycleObservedWebView
+            scenario.onActivity { activity ->
+                previous = activity.findViewById(R.id.webView)
+                previous.deferVisualCompletion = true
+            }
+            evaluateWebView(scenario, "document.getElementById('content').textContent = '준비된 홈'; sendReady('previous')")
+            waitUntil("실제 준비 신호의 visual callback 예약") {
+                var pending = false
+                scenario.onActivity { pending = previous.visualCompletions.isNotEmpty() }
+                pending && evaluateWebViewText(scenario, "window.replies.previous?.kind") == "succeeded"
+            }
+            scenario.recreate()
+            waitForLoadedDocument()
+            scenario.onActivity { activity ->
+                assertEquals(1, previous.destroyCalls)
+                previous.visualCompletions.forEach { (id, callback) -> callback.onComplete(id) }
+                previous.visualCompletions.clear()
+                assertEquals("이전 WebView의 늦은 완료는 새 시작 화면을 숨기지 않음",
+                    View.VISIBLE, activity.findViewById<View>(R.id.startupImage).visibility)
+            }
+            evaluateWebView(scenario, "document.getElementById('content').textContent = '준비된 홈'; sendReady('current')")
+            waitUntil("현재 Web의 실제 내용 준비 후 Native 종료") {
+                var hidden = false
+                scenario.onActivity { hidden = it.findViewById<View>(R.id.startupImage).visibility == View.GONE }
+                hidden && evaluateWebViewText(scenario, "document.getElementById('content').textContent") == "준비된 홈" &&
+                    evaluateWebViewText(scenario, "window.replies.current?.kind") == "succeeded"
+            }
+            evaluateWebView(scenario, "sendReady('repeat')")
+            waitUntil("이미 종료된 시작 화면의 중복 준비 신호 허용") {
+                evaluateWebViewText(scenario, "window.replies.repeat?.kind") == "succeeded"
+            }
+            scenario.onActivity { assertEquals(View.GONE, it.findViewById<View>(R.id.startupImage).visibility) }
+        }
+    }
+
+    @Test
     fun startupArtworkDoesNotCoverTheRealMainDocumentHttpError() {
         grantMandatoryPermissions()
         val document = LocalWebViewDocument(
             TrustedWebOrigin.APP_URL,
-            "<!doctype html><html><body>서버 연결 오류</body></html>",
+            "<!doctype html><html><head><meta name='household-native-startup' content='content-ready-v1'></head><body>서버 연결 오류</body></html>",
             statusCode = 503
         )
         withObservedWebViewLifecycle(document) { scenario ->
@@ -873,6 +949,15 @@ class MainActivityInstrumentationTest {
             private set
         var wasDetachedAtDestroy = false
             private set
+        var pageFinishedCalls = 0
+            private set
+        var deferVisualCompletion = false
+        val visualCompletions = mutableListOf<Pair<Long, VisualStateCallback>>()
+
+        override fun postVisualStateCallback(requestId: Long, callback: VisualStateCallback) {
+            if (deferVisualCompletion) visualCompletions += requestId to callback
+            else super.postVisualStateCallback(requestId, callback)
+        }
 
         override fun setWebViewClient(client: WebViewClient) {
             val document = localDocument
@@ -892,8 +977,10 @@ class MainActivityInstrumentationTest {
                 override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean =
                     client.onRenderProcessGone(view, detail)
 
-                override fun onPageFinished(view: WebView, url: String?) =
+                override fun onPageFinished(view: WebView, url: String?) {
                     client.onPageFinished(view, url)
+                    pageFinishedCalls++
+                }
 
                 override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) =
                     client.onReceivedError(view, request, error)
@@ -1145,6 +1232,7 @@ class MainActivityInstrumentationTest {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             scenario.onActivity { activity ->
                 var authInitializations = 0
+                var contentReadyCalls = 0
                 val stopBeforeAuthentication = IllegalStateException("test-auth-initialization")
                 val bridge = AndroidHostBridge(
                     context = activity,
@@ -1152,7 +1240,8 @@ class MainActivityInstrumentationTest {
                         authInitializations += 1
                         throw stopBeforeAuthentication
                     },
-                    consumeAppLaunchDurationMillis = { 42L }
+                    consumeAppLaunchDurationMillis = { 42L },
+                    onStartupContentReady = { contentReadyCalls++ }
                 )
                 fun request(operation: String) = JSONObject()
                     .put("contractVersion", AndroidHostBridge.REQUEST_VERSION)
@@ -1167,6 +1256,9 @@ class MainActivityInstrumentationTest {
                         .getJSONObject("result").getString("kind"))
                     assertEquals(42L, JSONObject(bridge.handle(request("performance.get-app-launch-duration")))
                         .getJSONObject("result").getJSONObject("value").getLong("durationMs"))
+                    assertEquals("succeeded", JSONObject(bridge.handle(request("startup.content-ready")))
+                        .getJSONObject("result").getString("kind"))
+                    assertEquals(1, contentReadyCalls)
                     assertEquals(0, authInitializations)
                     // Stop at construction so this check never opens login UI or calls Firebase.
                     listOf("auth.sign-in", "auth.sign-out", "session.refresh").forEachIndexed { index, operation ->

@@ -6,15 +6,17 @@ import brandIcon from '@/assets/startup-illustration.webp';
 import { useHousehold } from '@/contexts/HouseholdContext';
 import { subscribeSignedInMembershipCache } from '@/features/access-household/application/signedInMembershipCache';
 import { readStartupHouseholdName, STARTUP_HOUSEHOLD_NAME_SCRIPT } from '@/features/access-household/application/startupHouseholdName';
+import { useNativeStartupLoading } from '@/platform/android-host/NativeStartupHandoff';
 
 export default function AppLoadingScreen() {
+  useNativeStartupLoading();
   const { household, sessionState } = useHousehold();
   const lastHouseholdName = useSyncExternalStore(subscribeSignedInMembershipCache, readStartupHouseholdName, readStartupHouseholdName);
   const householdName = household?.name ?? (sessionState === 'resolving' ? lastHouseholdName : '');
   const title = householdName || '모두의 가계부';
 
   return (
-    <div role="status" aria-busy="true" className="fixed inset-x-0 top-0 flex h-[100dvh] items-center justify-center bg-[#f5f2fd] p-6">
+    <div role="status" aria-busy="true" data-startup-screen className="fixed inset-x-0 top-0 flex h-[100dvh] items-center justify-center bg-[#f5f2fd] p-6">
       <div className="flex max-w-full flex-col items-center text-center">
         <h1 className="startup-title order-2 max-w-full break-words text-[#36578b]">
           <span suppressHydrationWarning>{title.endsWith('네') ? title.slice(0, -1) : title}</span>

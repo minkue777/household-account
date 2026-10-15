@@ -64,7 +64,6 @@ class MainActivity : AppCompatActivity() {
     private var webMessageScope: CoroutineScope? = null
     private lateinit var permissionLayout: LinearLayout
     private lateinit var startupImage: View
-    private lateinit var hostBridge: AndroidHostBridge
     private val resumeRefreshGate = FirstResumeRefreshGate()
     private val webStartupGate = OneShotExecutionGate()
     private var webNavigationStarted = false
@@ -87,11 +86,6 @@ class MainActivity : AppCompatActivity() {
         if (BuildConfig.DEBUG) {
             WebView.setWebContentsDebuggingEnabled(true)
         }
-        hostBridge = AndroidHostBridge(
-            context = this,
-            consumeAppLaunchDurationMillis = appLaunchDurationClock::consumeElapsedMillis,
-            readAppLaunchTimings = appLaunchDurationClock::snapshotTimings
-        )
         setupWebView(requireNotNull(webView))
         appLaunchDurationClock.markWebViewReady()
         if (savedInstanceState?.getString("webEnvironmentVersion") == TrustedWebOrigin.ENVIRONMENT_VERSION) {
@@ -210,16 +204,26 @@ class MainActivity : AppCompatActivity() {
             lifecycleScope.coroutineContext + SupervisorJob(lifecycleScope.coroutineContext[Job])
         )
         webMessageScope = messageScope
+        val contentReadySupported = WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER) &&
+            WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)
+        val hostBridge = AndroidHostBridge(
+            context = this,
+            consumeAppLaunchDurationMillis = appLaunchDurationClock::consumeElapsedMillis,
+            readAppLaunchTimings = appLaunchDurationClock::snapshotTimings,
+            onStartupContentReady = { finishStartup(view) }
+        )
         view.apply {
             webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView, url: String?) {
-                    // 첫 문서의 이미지까지 표시할 수 있을 때 Web의 준비 화면으로 넘깁니다.
                     if (webView !== view) return
-                    view.postVisualStateCallback(0, object : WebView.VisualStateCallback() {
-                        override fun onComplete(requestId: Long) {
-                            if (webView === view) startupImage.visibility = View.GONE
-                        }
-                    })
+                    if (contentReadySupported && TrustedWebOrigin.contains(url)) {
+                        // 새 Web은 실제 내용이 준비됐다는 신호까지 Native 브랜드를 유지합니다.
+                        view.evaluateJavascript(
+                            "document.querySelector('meta[name=\"household-native-startup\"]')?.content === 'content-ready-v1'"
+                        ) { supported -> if (supported != "true") finishStartup(view) }
+                    } else {
+                        finishStartup(view)
+                    }
                 }
 
                 override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
@@ -266,14 +270,22 @@ class MainActivity : AppCompatActivity() {
                 setSupportMultipleWindows(false)
             }
         }
+        if (contentReadySupported) {
+            WebViewCompat.addDocumentStartJavaScript(
+                view,
+                "if (window.top === window) window.__HOUSEHOLD_NATIVE_STARTUP__ = true;",
+                setOf(TrustedWebOrigin.APP_ORIGIN)
+            )
+        }
         if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
             WebViewCompat.addWebMessageListener(
                 view,
                 AndroidHostBridge.OBJECT_NAME,
                 setOf(TrustedWebOrigin.APP_ORIGIN)
             ) { _, message, sourceOrigin, isMainFrame, replyProxy ->
-                if (!isMainFrame || sourceOrigin.toString() != TrustedWebOrigin.APP_ORIGIN) return@addWebMessageListener
+                if (webView !== view || !isMainFrame || sourceOrigin.toString() != TrustedWebOrigin.APP_ORIGIN) return@addWebMessageListener
                 messageScope.launch {
+                    if (webView !== view) return@launch
                     val response = hostBridge.handle(message.data.orEmpty())
                     ensureActive()
                     if (webView === view) {
@@ -283,6 +295,15 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    private fun finishStartup(view: WebView) {
+        if (webView !== view || startupImage.visibility != View.VISIBLE) return
+        view.postVisualStateCallback(0, object : WebView.VisualStateCallback() {
+            override fun onComplete(requestId: Long) {
+                if (webView === view) startupImage.visibility = View.GONE
+            }
+        })
     }
 
     private fun setupPermissionButtons() {

@@ -1,21 +1,23 @@
 'use client';
 
+import { Suspense } from 'react';
 import { useHousehold } from '@/contexts/HouseholdContext';
 import { usePathname } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import AppLoadingScreen from './AppLoadingScreen';
 import { useStartupDisplayReady } from '@/contexts/StartupDisplayContext';
 
-const HouseholdLogin = dynamic(() => import('./HouseholdLogin'));
+const HouseholdLogin = dynamic(() => import('./HouseholdLogin'), { loading: AppLoadingScreen });
 
 export default function HouseholdGuard({ children }: { children: React.ReactNode }) {
   const { isLoading, isAuthenticated, sessionError } = useHousehold();
   const startupDisplayReady = useStartupDisplayReady();
   const pathname = usePathname();
+  const content = <Suspense fallback={<AppLoadingScreen />}>{children}</Suspense>;
 
   // 관리자 페이지와 게스트 페이지는 로그인 없이 접근 가능
   if (pathname === '/admin' || pathname.startsWith('/admin/')) {
-    return <>{children}</>;
+    return content;
   }
 
   // 홈은 조회를 병렬로 시작하고 LedgerPage가 최소 표시시간을 적용합니다.
@@ -29,5 +31,5 @@ export default function HouseholdGuard({ children }: { children: React.ReactNode
     return <HouseholdLogin />;
   }
 
-  return <>{children}</>;
+  return content;
 }

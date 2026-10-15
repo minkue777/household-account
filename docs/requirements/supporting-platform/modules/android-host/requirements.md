@@ -62,6 +62,8 @@ QuickEdit의 입력은 저장 완료된 거래 ID와 표시용 snapshot입니다
 
 ### 5.1 권한과 WebView
 
+AND-003·AND-006의 시작 화면 인계는 [Native 시작 화면 계약](../../../../operations/startup-native-handoff-2026-10-15.md)을 따른다. 지원되는 APK와 Web에서는 Native 시작 화면을 준비된 콘텐츠까지 유지하고 Web 로딩으로 중간 교체하지 않는다. 현재 최상위 문서의 준비 신호만 처리하며 로그인·가입·오류 화면과 구 Web 호환 경로도 가리지 않는다. 최소 2초·전체 홈 준비는 기존 Web 계약이 소유한다.
+
 | ID | 상태 | 요구사항 | 경계·예외 | 근거 | 테스트 |
 |---|---|---|---|---|---|
 | AND-001 | 현재 명세 | 앱 생성·resume 시 알림 접근과 다른 앱 위 표시 권한을 검사하고 둘 다 있을 때 WebView를 표시한다. | 최초 권한 화면에서 두 권한을 필수로 받는 것은 의도한 정책이다. 진입 후 QuickEdit 표시 여부는 별도 설정으로 끌 수 있다. | [MainActivity](../../../../../android/app/src/main/java/com/household/account/MainActivity.kt), [DEC-004](../../../governance/decisions.md#dec-004) | UI, E2E |

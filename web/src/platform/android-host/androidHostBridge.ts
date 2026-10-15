@@ -8,6 +8,7 @@ interface AndroidBridgeRequestMap {
   'auth.sign-out': Record<string, never>;
   'session.refresh': Record<string, never>;
   'app.get-version': Record<string, never>;
+  'startup.content-ready': Record<string, never>;
   'performance.get-app-launch-duration': Record<string, never>;
   'quick-edit.get-update-feedback': QuickEditFeedbackScope;
   'quick-edit.ack-update-feedback': QuickEditFeedbackScope & {
@@ -60,6 +61,7 @@ interface AndroidBridgeResultMap {
   'auth.sign-out': Record<string, never>;
   'session.refresh': { householdId: string; memberId: string; sessionGeneration: number };
   'app.get-version': { version: string | null };
+  'startup.content-ready': Record<string, never>;
   'performance.get-app-launch-duration': {
     durationMs: number | null;
     startupTimingsMs?: { webViewReady?: number; navigationRequested?: number };
@@ -84,6 +86,7 @@ interface HouseholdNativeBridgeObject {
 declare global {
   interface Window {
     HouseholdNativeBridge?: HouseholdNativeBridgeObject;
+    __HOUSEHOLD_NATIVE_STARTUP__?: boolean;
   }
 }
 

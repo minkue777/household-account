@@ -23,6 +23,9 @@ export const metadata: Metadata = {
   formatDetection: {
     telephone: false,
   },
+  other: {
+    'household-native-startup': 'content-ready-v1',
+  },
 }
 
 export const viewport: Viewport = {
