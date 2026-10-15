@@ -144,13 +144,13 @@ describe('[T-LED-001] 문서 최초 시작 화면의 경로·인증 경계', () 
   it('현재 가구명을 실제 글자로 표시하고 가구 전환·해제 시 이전 이름을 남기지 않는다', () => {
     const view = render(guardedPage());
     expect(screen.getByRole('heading').textContent).toBe('모두의 가계부');
-    expect(screen.getByText('가계부 · 자산')).toBeVisible();
+    expect(screen.getByText('가계부 · 자산관리')).toBeVisible();
 
     for (const name of ['또니망고네', '익태송희네', '함께 쓰는 가계부']) {
       mockSession.household = { name };
       view.rerender(guardedPage());
       expect(screen.getByRole('heading')).toHaveTextContent(name);
-      expect(screen.getByRole('status')).toHaveTextContent('가계부 · 자산');
+      expect(screen.getByRole('status')).toHaveTextContent('가계부 · 자산관리');
     }
 
     mockSession.household = null;

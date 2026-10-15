@@ -296,7 +296,7 @@ test.describe('첫 홈 별도 서버 조회', () => {
       await expect(loading).toHaveAttribute('aria-busy', 'true');
       await expect(loading.locator('.sr-only')).toHaveText('로딩중...');
       await expect(loading.getByRole('heading', { name: '재무 E2E 가구네', exact: true })).toBeVisible();
-      await expect(loading.getByText('가계부 · 자산', { exact: true })).toBeVisible();
+      await expect(loading.getByText('가계부 · 자산관리', { exact: true })).toBeVisible();
       await expect(restarted.locator('.calendar-glass')).toHaveCount(0);
       const loadError = restarted.getByRole('main').getByRole('alert');
       await expect(loadError).toHaveText('가계부를 불러오지 못했습니다.다시 시도');
@@ -455,7 +455,7 @@ test.describe('첫 홈 별도 서버 조회', () => {
         await expect(restarted.getByRole('status')).toHaveAttribute('aria-busy', 'true');
         await expect(restarted.getByRole('status')).toContainText('로딩중...');
         await expect(restarted.getByRole('heading', { name: householdName })).toBeVisible();
-        await expect(restarted.getByRole('status').getByText('가계부 · 자산')).toBeVisible();
+        await expect(restarted.getByRole('status').getByText('가계부 · 자산관리')).toBeVisible();
         await restarted.evaluate(() => document.fonts.ready);
         const artwork = restarted.getByRole('status').locator('img');
         await expect(artwork).toBeVisible();

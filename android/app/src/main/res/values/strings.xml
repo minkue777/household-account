@@ -2,5 +2,5 @@
 <resources>
     <string name="app_name">모두의 가계부</string>
     <string name="startup_loading">가계부 로딩 중</string>
-    <string name="startup_subtitle">가계부 · 자산</string>
+    <string name="startup_subtitle">가계부 · 자산관리</string>
 </resources>

@@ -215,7 +215,7 @@ class MainActivityInstrumentationTest {
                 activity.resources.getDimensionPixelSize(R.dimen.startup_title_margin_top), householdName.top - artwork.bottom)
             assertEquals("제목과 부제 간격",
                 activity.resources.getDimensionPixelSize(R.dimen.startup_subtitle_margin_top), subtitle.top - householdName.bottom)
-            assertEquals("부제는 이미지 대신 실제 글자", "가계부 · 자산", subtitle.text.toString())
+            assertEquals("부제는 이미지 대신 실제 글자", "가계부 · 자산관리", subtitle.text.toString())
             assertEquals("부제의 글자 크기",
                 activity.resources.getDimensionPixelSize(R.dimen.startup_subtitle_text_size).toFloat(), subtitle.textSize, 0f)
             assertEquals("부제의 줄 높이",

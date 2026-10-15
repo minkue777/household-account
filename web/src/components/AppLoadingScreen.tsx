@@ -35,7 +35,7 @@ export default function AppLoadingScreen() {
           unoptimized
           className="startup-illustration order-1 h-auto max-w-full object-contain"
         />
-        <p className="startup-subtitle order-3 text-[#52698f]">가계부 · 자산</p>
+        <p className="startup-subtitle order-3 text-[#52698f]">가계부 · 자산관리</p>
       </div>
       <div aria-hidden="true" className="startup-dots absolute flex gap-2">
         <span className="h-[7px] w-[7px] rounded-full bg-[#9755e9]" />
