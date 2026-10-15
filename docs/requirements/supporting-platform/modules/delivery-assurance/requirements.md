@@ -59,7 +59,7 @@
 | REL-001 | 확정 명세 | 로컬 전체 테스트를 push 전 필수 조건으로 두지 않고 push 후 자동 CI에서 검증한다. 필요한 빠른 검증·실패 재현은 로컬에서 수행한다. main push 후 Vercel Git 자동배포와 원격 CI는 병행하며 원격 CI 완료를 배포의 선행 조건으로 두지 않는다. production build·Android 서명·대상·산출물·권한·호환성·smoke는 유지한다. main push와 PR의 CI는 Functions·Web·Web E2E·Android·해당되는 instrumentation을 검증한다. 필요한 실제 배포까지 끝나면 개발 작업을 마무리하고 실행 중인 E2E/CI는 정확한 SHA와 실행 링크로 후속 확인한다. 실패 로그를 분석·수정·재push하며 다섯 검사와 workflow가 실제 성공한 뒤 CI 검증 완료를 보고한다. 실패·취소·skip·누락을 성공으로 바꾸지 않는다. | wrapper는 전체 테스트 실행·CI 대기·보고서 다운로드를 반복하지 않고 원격 CI 상태를 `not-evaluated`로 기록한다. `quality-summary`는 다섯 job 결과와 SHA·실행 링크를 summary에 기록하고 비성공이면 실패 check를 남긴다. GitHub 기본 알림은 사용자 Actions 알림 설정을 따른다. 배포 완료와 CI 성공은 별도 상태이며 production build lifecycle 검사는 유지한다. | T-REL-001, [DEC-074](../../../governance/decisions.md#dec-074) |
 | REL-002 | 목표 명세 | Cloud Firebase는 기존 `household-account-6f300` 단일 프로젝트를 유지하되 배포는 production project ID를 명시적으로 선택하고 URL, Rules, index, Secret, Monitoring notification channel을 검증해야 한다. | 별도 dev·staging project는 만들지 않고 로컬 자동 검증은 Emulator에서 수행한다. `.firebaserc`의 암묵적 default나 하드코딩된 운영 스크립트만으로 대상을 승인하지 않는다. | T-REL-002, [DEC-050](../../../governance/decisions.md#dec-050) |
 | REL-003 | 목표 명세 | Web·Android·Functions·Rules 중 둘 이상이 공유하는 계약 변경은 expand → 호환 client/server 배포 → migration·관측 → contract 순으로 배포하고, 구·신 버전 호환 창과 rollback 조건을 release manifest에 명시해야 한다. | Google Auth/legacy claim/Rules 전환과 FCM token→FID 전환을 부분 배포하면 기존 사용자 또는 전체 알림이 중단될 수 있다. | T-REL-003 |
-| REL-004 | 목표 명세 | 운영 artifact와 배포 기록은 commit·dependency lock·contract·Rules·index hash를 추적할 수 있어야 하며, Secret 원문을 소스·artifact·로그에 포함하지 않고 배포 후 핵심 smoke와 경보 channel 연결을 검증해야 한다. | Firebase client config처럼 공개 식별자인 값과 server Secret을 구분한다. 실패한 smoke는 자동 성공으로 축약하지 않는다. release manifest와 배포 provenance에는 자동 TTL을 두지 않고 장기 보존한다. | T-REL-004, [DEC-046](../../../governance/decisions.md#dec-046) |
+| REL-004 | 목표 명세 | 운영 artifact와 배포 기록은 commit·dependency lock·contract·Rules·index hash를 추적할 수 있어야 하며, Secret 원문을 소스·artifact·로그에 포함하지 않고 배포 후 핵심 smoke와 경보 channel 연결을 검증해야 한다. 기본 Firebase smoke는 사용자 로그인 없이 실행 중인 서버의 정확한 release·commit·artifact marker와 비로그인 가구 Query의 `AUTH_REQUIRED` 거부를 확인한다. `--smoke-token-file`을 명시한 경우에만 실제 사용자 해석·가구 조회 성공 검사를 추가한다. | 기본 smoke는 실제 사용자 로그인·Membership·가구 조회 성공을 검증하지 않으며 그 권한 계약은 CI/Emulator/E2E로 별도 확인한다. 명시한 token의 누락·만료·권한 실패를 기본 검사로 대체하지 않는다. 운영자 GitHub·ADC 인증과 앱 사용자 권한은 유지하고, 사용자 세션 위조·진단용 운영 가구·금융 데이터 쓰기를 하지 않는다. Firebase client config처럼 공개 식별자인 값과 server Secret을 구분한다. 실패한 smoke는 자동 성공으로 축약하지 않는다. release manifest와 배포 provenance에는 자동 TTL을 두지 않고 장기 보존한다. | T-REL-004, [DEC-046](../../../governance/decisions.md#dec-046) |
 
 ## 6. 정상 요구사항으로 고정하지 않을 결함
 
@@ -85,7 +85,7 @@
 | T-REL-001 | 구현 | CI 증거가 없는 정상 배포 후보 / 실제 wrapper 검증 / CI를 통과로 꾸미지 않고 후보 검증 성공. 다섯 job 중 실패·취소·누락·skip / 실제 CI 요약 CLI / 실패 exit code·annotation·commit별 summary가 기록되고 배포 상태는 변경하지 않음 |
 | T-REL-002 | 목표 | project 미지정·다른 project ID·Emulator URL이 섞인 production 후보와 정상 단일 project 후보 / target resolve / 잘못된 후보는 운영 write 0건, 정상 후보만 `household-account-6f300`에 배포 |
 | T-REL-003 | 목표 | FID sender만 먼저 배포하거나 public Rules를 claim client보다 먼저 차단하는 manifest / 호환 검사 / 순서 위반으로 거부 |
-| T-REL-004 | 목표 | immutable artifact와 잘못된 Secret·smoke·email channel fixture / 배포 검증 / hash 추적, Secret redaction, 실패 결과 보존 |
+| T-REL-004 | 목표 | immutable artifact와 잘못된 Secret·smoke·email channel fixture / 배포 검증 / hash 추적, Secret redaction, 실패 결과 보존. 기본 smoke는 token 없이 정확한 runtime marker와 비로그인 Query 거부를 확인하며 marker 누락·불일치 또는 비로그인 성공 응답은 실패한다. token을 명시하면 실제 인증 성공 경로도 검사하고 파일 누락·인증 실패를 성공으로 대체하지 않는다. |
 
 ## 9. 코드 근거
 

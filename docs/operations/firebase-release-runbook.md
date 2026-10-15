@@ -18,13 +18,13 @@ push 이후 CI를 확인하고 실패하면 로그를 읽어 수정한 뒤 다�
 
 ## 2. manifest 고정
 
-먼저 clean commit에서 읽기 전용 배포 계획을 확인합니다. 이 명령은 build·로그인 smoke·운영 쓰기를 수행하지 않습니다.
+먼저 clean commit에서 읽기 전용 배포 계획을 확인합니다. 이 명령은 build·smoke·운영 쓰기를 수행하지 않습니다.
 
 ```powershell
 npm --prefix functions run deploy -- --plan --project household-account-6f300
 ```
 
-wrapper는 가장 최근 성공 provenance의 commit부터 현재 HEAD까지 누적 변경을 비교합니다. `targets`가 비어 있으면 Firebase 배포·manifest·smoke token 준비를 생략합니다. Rules, index, Storage와 세 Functions codebase는 각각 선택합니다. 공용 `functions/src`, 계약, build 도구 변경은 세 codebase 모두에 적용됩니다. 테스트·배포 도구·문서만 변경된 경우 운영 runtime을 재배포하지 않습니다. Git 이력이 없어 비교할 수 없으면 오류로 중단합니다.
+wrapper는 가장 최근 성공 provenance의 commit부터 현재 HEAD까지 누적 변경을 비교합니다. `targets`가 비어 있으면 Firebase 배포·manifest·smoke 준비를 생략합니다. Rules, index, Storage와 세 Functions codebase는 각각 선택합니다. 공용 `functions/src`, 계약, build 도구 변경은 세 codebase 모두에 적용됩니다. 테스트·배포 도구·문서만 변경된 경우 운영 runtime을 재배포하지 않습니다. Git 이력이 없어 비교할 수 없으면 오류로 중단합니다.
 
 실제 배포에서는 같은 계획을 다시 계산하고 lease 획득 뒤 기준이 바뀌지 않았는지 재확인합니다. 승인 evidence의 `scope`에 기준 release·commit, 실제 targets와 Query 서버의 예상 marker를 보존하며 guard가 재검증합니다. 첫 배포는 전체 범위입니다. 이전 실패 배포를 복구하거나 Git 변경 없이 전체 재배포가 필요한 명시적 운영 작업은 manifest에 `deployAll: true`를 지정합니다. `--plan --all`로 그 범위를 미리 볼 수 있습니다. 실패한 배포의 lease 검토·해제 절차는 그대로 적용됩니다.
 
@@ -47,7 +47,7 @@ build 출력 다음에 표시되는 마지막 JSON의 `commitSha`, `artifact`, `
 
 호환 plan에는 서로 다른 `oldContractVersion`·`newContractVersion`, 시작/종료 시각, `minimumSupportedClients`, `expand` → `migrate` → `contract` 순서의 `steps`와 각 단계의 `rollbackCheckpoint`가 필요합니다. FID 변경(`fid-token-to-fid`)과 Membership claim 변경(`legacy-membership-to-claims`)은 [상세 설계](../requirements/supporting-platform/modules/delivery-assurance/design.md#53-호환-전환-예)의 capability 순서도 지켜야 합니다. 일반 계약 변화는 `generic-shared-contract` plan으로 기술합니다. 실제 client 배포와 migration·관측 증거를 검토한 뒤 해당 단계의 서버 후보를 실행합니다.
 
-artifact hash에는 세 Functions codebase의 실제 배포 JS와 package·lock이 포함됩니다. 전체 계약, Rules, index는 각각 별도 hash로 고정합니다. 인증된 Query 성공 응답에 실리는 deployment marker는 이 hash를 참조하므로 marker JSON 자체만 hash에서 제외합니다. 코드나 설정을 바꾸면 build·commit·manifest를 다시 준비하고 새 commit의 CI를 별도로 실행합니다.
+artifact hash에는 세 Functions codebase의 실제 배포 JS와 package·lock이 포함됩니다. 전체 계약, Rules, index는 각각 별도 hash로 고정합니다. 서버가 제공하는 deployment marker는 이 hash를 참조하므로 marker JSON 자체만 hash에서 제외합니다. 코드나 설정을 바꾸면 build·commit·manifest를 다시 준비하고 새 commit의 CI를 별도로 실행합니다.
 
 ## 3. 배포 없는 검증
 
@@ -62,30 +62,39 @@ npm --prefix functions run deploy -- `
 
 ## 4. 승인된 운영 배포
 
-smoke에 사용할 활성 가구 구성원의 최신 Firebase ID token을 저장소 밖의 접근 제한된 파일에 준비합니다. token을 명령 인자·manifest·로그·버전 관리에 넣지 않습니다. 실행 직전에 갱신합니다.
+기본 배포는 가계부 사용자 로그인과 smoke token 없이 실행합니다. 승인된 운영자의 GitHub·ADC 인증은 그대로 필요하며, 앱 사용자의 인증·Membership 권한은 변경하지 않습니다.
+
+```powershell
+npm --prefix functions run deploy -- `
+  --project household-account-6f300 `
+  --manifest "$env:TEMP\household-release.json"
+```
+
+wrapper는 배포 검증을 수행하고 승인과 독립 CI 참조를 `approvedReleases/{releaseId}`에 저장합니다. `deploymentLeases/{projectId}`를 transaction으로 획득한 한 실행만 Firebase CLI를 시작합니다. wrapper는 architecture 검사와 production build를 한 번 수행하고 세 codebase 결과물을 준비합니다. Functions predeploy는 **동일 artifact를 재검증하는 guard만** 실행하며 hash·clean HEAD·actor·현재 배포 잠금 소유자를 다시 확인합니다. guard는 전체 테스트나 build를 다시 실행하지 않습니다. 변경되거나 오래된 결과물은 manifest hash 검증에서 거절됩니다. Rules와 Storage predeploy에도 같은 guard가 연결됩니다. 직접 `firebase deploy`를 실행하거나 `--guard`용 환경 변수를 수동으로 구성하지 않습니다.
+
+배포 후 기본 smoke는 실제 서버의 release ID·commit SHA·artifact SHA가 예상 marker와 정확히 일치하는지 확인하고, 비로그인 가구 Query가 `AUTH_REQUIRED`로 거부되는지 확인합니다. 거부 대신 성공하거나 marker가 누락·불일치하면 실패입니다. `functions:default`를 배포했다면 새 후보 marker만 허용합니다. Rules·index 또는 child codebase만 배포했다면 Query 서버는 바꾸지 않았으므로 이전 성공 배포의 정확한 marker를 유지·검증합니다. 부분 배포가 이어져도 승인 evidence에서 그 marker를 계승합니다.
+
+기존 `executeHouseholdQuery`에 token 없이 `access.list-asset-owner-profiles.v1`을 호출하고 가구 ID는 실제 가구 대신 `deployment-smoke-no-household`를 사용합니다. 응답 계약·query ID·거부 결과·`AUTH_REQUIRED`·`retryable=false`와 `deployment`의 세 marker 필드를 함께 확인합니다. 새 진단 endpoint는 추가하지 않으며 비인증 거부 응답에 공개하는 값은 release·commit·artifact 식별자뿐입니다. 가구 조회 권한이나 데이터를 공개하지 않습니다.
+
+기본 smoke 성공은 실제 사용자 로그인·Membership 해석·가구 조회의 성공을 뜻하지 않습니다. 이들 권한 계약과 Android App Check·결제 수집·WebView bridge의 업무 경로는 CI/Emulator/E2E에서 별도로 검증합니다. 운영 사용자 경로 확인이 필요하면 아래 선택적 smoke를 추가합니다. 배포 검사를 위해 사용자 세션을 위조하거나 운영 가구·금융 데이터를 만들거나 수정하지 않습니다.
+
+결과는 `deploymentProvenance/{releaseId}`에 기록하고 성공한 경우에만 프로젝트 잠금을 해제합니다. `adapterDiagnostics`의 `DEPLOYMENT_AUTH_BOUNDARY_SMOKE`와 `USER_ACCESS_NOT_CHECKED` 또는 `USER_ACCESS_CHECKED`로 검사 범위를 구분합니다. 승인 manifest와 provenance는 자동 TTL 없이 보존하며 Secret/token 원문을 기록하지 않습니다.
+
+### 선택적 실제 사용자 인증 smoke
+
+`--smoke-token-file`을 명시한 경우에만 기본 smoke에 인증된 사용자 해석·실제 가구 Query 성공 검사를 추가합니다. 명시한 파일의 누락·만료·권한 실패는 배포 smoke 실패이며 기본 검사로 조용히 대체하지 않습니다.
 
 ```powershell
 node functions/scripts/prepare-smoke-session.cjs --token-file "$env:TEMP\household-smoke.id-token"
-```
-
-Firebase 배포마다 이 도구를 실행하며, 유효기간이 충분한 기존 token은 그대로 재사용합니다. 로그인 URL이 출력되면 에이전트가 연결된 내장 브라우저에서 `http://localhost:55318/`을 열어 저장된 로그인 복원을 먼저 시도합니다. 최초 한 번만 기존 가계부 Google 계정으로 로그인하고, 이후에는 Firebase SDK의 `browserLocalPersistence`로 복원한 로그인에서 새 ID token을 자동 발급받습니다. Google 계정은 ADC 운영자와 동일한 기존 계정인지 검증합니다. 완료 직후 로그아웃하거나 매번 임시 브라우저 프로필을 만들지 않습니다. 로그아웃이 필요하면 확인 페이지의 해당 버튼을 사용합니다.
-
-Firebase ID token의 약 1시간 유효기간과 브라우저 로그인 유지기간은 다릅니다. 브라우저 데이터 삭제·직접 로그아웃·세션 취소 등으로 복원 또는 갱신이 실패할 때만 다시 로그인합니다. 장기 갱신 자격은 Firebase SDK가 브라우저에 관리하고, CLI에는 이번 배포용 ID token만 전달합니다. 서버 배포용 ADC 인증과 이 사용자 접근 검증용 인증도 구분합니다.
-
-도구가 출력한 URL만으로 브라우저가 자동으로 열리는 것은 아닙니다. 브라우저 도구로 실제 페이지를 열고 완료 표시 및 `smokeSession: ready` 출력 또는 token 파일 생성을 확인합니다. token 원문은 읽어 출력하지 않습니다. 사용자가 휴대폰에서 원격 작업 중이어도 localhost는 에이전트가 PC에서 열며 휴대폰 브라우저에 입력하도록 안내하지 않습니다. 내장 브라우저 연결이 없다면 현재 연결 상태를 확인하고, 이전에 로그인한 일반 Chrome·Edge 프로필을 사용할 수 있는지 확인합니다. 최초 로그인이나 실제 복원·갱신 실패 때만 사용자 조작을 요청하며, 브라우저 연결 부재를 계정 만료로 단정하지 않습니다. Cloud CLI의 Google 인증을 가계부 로그인 대신 사용하는 것은 이 절차가 아닙니다.
-
-```powershell
 npm --prefix functions run deploy -- `
   --project household-account-6f300 `
   --manifest "$env:TEMP\household-release.json" `
   --smoke-token-file "$env:TEMP\household-smoke.id-token"
 ```
 
-wrapper는 배포 검증을 수행하고 승인과 독립 CI 참조를 `approvedReleases/{releaseId}`에 저장합니다. `deploymentLeases/{projectId}`를 transaction으로 획득한 한 실행만 Firebase CLI를 시작합니다. wrapper는 architecture 검사와 production build를 한 번 수행하고 세 codebase 결과물을 준비합니다. Functions predeploy는 **동일 artifact를 재검증하는 guard만** 실행하며 hash·clean HEAD·actor·현재 배포 잠금 소유자를 다시 확인합니다. guard는 전체 테스트나 build를 다시 실행하지 않습니다. 변경되거나 오래된 결과물은 manifest hash 검증에서 거절됩니다. Rules와 Storage predeploy에도 같은 guard가 연결됩니다. 직접 `firebase deploy`를 실행하거나 `--guard`용 환경 변수를 수동으로 구성하지 않습니다.
+유효한 기존 token은 재사용합니다. 로그인 URL이 나오면 에이전트가 연결된 PC 브라우저에서 `http://localhost:55318/`을 열어 기존 로그인을 복원하고 완료 표시 및 `smokeSession: ready` 또는 파일 생성을 확인합니다. 휴대폰 원격 사용자에게 localhost 접속을 요구하지 않습니다. 최초 로그인이나 실제 복원·갱신 실패 때만 사용자 조작을 요청합니다. 동일 브라우저 프로필의 Firebase 로그인 유지를 보존하고 완료 직후 자동 로그아웃하지 않습니다. 이 도구는 기존 Google 계정이 ADC 운영자와 일치하는지도 확인합니다.
 
-배포 후 smoke는 인증된 사용자 해석과 실제 가구 Query를 호출하고 release ID·commit SHA·artifact SHA를 확인합니다. `functions:default`를 배포했다면 새 후보 marker만 허용합니다. Rules·index 또는 child codebase만 배포했다면 Query 서버는 바꾸지 않았으므로 이전 성공 배포의 정확한 marker를 유지·검증합니다. 부분 배포가 이어져도 승인 evidence에서 그 marker를 계승합니다. 이 smoke는 공용 인증·Query 경로를 확인하며 Android App Check·결제 수집·WebView bridge의 전체 업무 흐름을 대신하지 않습니다. 해당 경로는 필수 CI/Emulator/E2E와 외부 설정 점검에서 별도로 검증합니다.
-
-결과는 `deploymentProvenance/{releaseId}`에 기록하고 성공한 경우에만 프로젝트 잠금을 해제합니다. 승인 manifest와 provenance는 자동 TTL 없이 보존하며 Secret/token 원문을 기록하지 않습니다.
+token 파일은 저장소 밖에 두며 원문을 명령 인자·manifest·로그에 넣지 않습니다. Firebase ID token의 유효기간과 브라우저 로그인 유지기간은 다릅니다. 장기 갱신 자격은 Firebase SDK가 브라우저에 관리하고 CLI에는 이번 검사용 ID token만 전달합니다. Cloud CLI 인증은 이 사용자 권한 검사 결과를 대신하지 않습니다.
 
 ## 5. 실패·재시도·rollback
 
@@ -94,4 +103,4 @@ wrapper는 배포 검증을 수행하고 승인과 독립 CI 참조를 `approved
 - 실패 후 운영자는 기존 배포 프로세스가 종료됐고 Firebase/Cloud의 배포 작업도 더 이상 진행 중이지 않은지 확인합니다. 실제 배포 상태와 실패 provenance를 검토한 후 해당 잠금 문서의 release ID·소유자를 재확인하여 명시적으로 제거합니다. 진행 여부를 알 수 없는 잠금은 제거하지 않습니다.
 - CLI 실패·smoke 실패·marker 불일치를 정상 완료로 보고하지 않습니다. 실패 provenance가 저장되기 전에 프로세스가 종료됐다면 승인·CI·CLI/Cloud 작업 기록과 남은 잠금으로 조사합니다. 네트워크 장애로 기록이 실패한 경우에도 배포 성공으로 추정하지 않습니다.
 - 수정 재배포나 rollback은 새 `releaseId`, 검증된 commit/artifact, 동일한 배포 검증과 호환 계획으로 새 후보를 만듭니다. 기존 실패 기록을 성공으로 덮어쓰지 않습니다. rollback의 `rollback` 필드는 provenance 계약에 맞는 `{strategy: 'rollback' | 'forward-fix', checkpointId, outcome: 'succeeded' | 'failed', evidenceLink}`를 기록합니다.
-- 작업이 끝나면 로컬 smoke token 파일을 삭제하고 조직의 release 증거 보존 위치에 manifest와 CI 실행 링크를 보관합니다. 데이터 migration·TTL 백필은 [별도 runbook](runtime-migration-runbook.md)의 범위와 승인을 따릅니다.
+- 선택적 검사에서 사용한 로컬 smoke token 파일은 작업 뒤 삭제하고 조직의 release 증거 보존 위치에 manifest와 CI 실행 링크를 보관합니다. 데이터 migration·TTL 백필은 [별도 runbook](runtime-migration-runbook.md)의 범위와 승인을 따릅니다.

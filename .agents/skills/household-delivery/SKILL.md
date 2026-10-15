@@ -49,12 +49,11 @@ CI에서 실제 제품 결함이 이미 확인되었다면 그 원인을 먼저 
 
 - 이 대상이 필요할 때만 [Firebase runbook](../../../docs/operations/firebase-release-runbook.md)을 읽는다. Functions는 `default`, `payment-capture`, `access-session` 세 codebase이며 운영 project는 `household-account-6f300`이다.
 - clean commit에서 먼저 `npm --prefix functions run deploy -- --plan --project household-account-6f300`을 실행한다. 마지막 성공 provenance부터 누적 변경으로 codebase별 Functions, `firestore:rules`, `firestore:indexes`, `storage`를 선택한다. 공용 Functions 소스는 세 codebase에 포함되므로 함께 배포한다.
-- `targets`가 비어 있으면 Firebase 배포·manifest·로그인 준비를 생략한다. wrapper·테스트·문서만 바뀌었다고 서버를 재배포하지 않는다.
-- runbook의 `npm --prefix functions run deploy -- ...` wrapper를 사용한다. build·clean HEAD/hash·호환성·actor·Secret binding·lease·실제 로그인 smoke를 유지하고 직접 `firebase deploy`로 우회하지 않는다.
-- 운영 데이터나 Secret 값을 로그로 가져오지 않는다. 유효한 인증·smoke 자격이 있으면 재사용하고, 실제 사용자 로그인이 필요한 때만 그 조작을 요청한다. 대기 중 독립적인 push·Web·CI 작업은 진행한다.
-- Firebase 배포 때마다 `functions/scripts/prepare-smoke-session.cjs --token-file <저장소 밖 경로>`를 실행한다. 유효한 기존 token이 있으면 재사용하고, 로그인 URL이 나오면 **연결된 내장 브라우저에서 `http://localhost:55318/`을 열어 저장된 로그인을 자동 복원하는 방법을 우선한다.** 완료 화면과 도구의 `smokeSession: ready` 또는 token 파일 생성을 확인한 뒤 배포한다.
-- 사용자가 휴대폰에서 원격 작업 중이어도 주소는 에이전트가 PC의 브라우저에서 연다. 휴대폰 브라우저에 localhost 접속을 요구하지 않는다. 내장 브라우저 연결이 없으면 현재 연결 상태를 확인하고, 이전에 로그인한 일반 Chrome·Edge 프로필을 사용할 수 있는지 살핀다. 최초 로그인이나 실제 복원·갱신 실패가 확인된 경우에만 사용자 조작을 요청한다.
-- 같은 브라우저 프로필의 Firebase 로그인 유지를 보존한다. 일회용 메모리 인증·완료 후 자동 로그아웃 도구를 새로 만들지 않으며, Cloud CLI 인증을 가계부 로그인으로 대신하거나 로그인 검증을 생략하지 않는다. 세부 실행·token 정리는 Firebase runbook을 따른다.
+- `targets`가 비어 있으면 Firebase 배포·manifest·smoke 준비를 생략한다. wrapper·테스트·문서만 바뀌었다고 서버를 재배포하지 않는다.
+- runbook의 `npm --prefix functions run deploy -- ...` wrapper를 사용한다. build·clean HEAD/hash·호환성·actor·Secret binding·lease·서버 smoke를 유지하고 직접 `firebase deploy`로 우회하지 않는다.
+- 기본 smoke는 실제 서버의 release·commit·artifact marker와 비로그인 가구 Query의 `AUTH_REQUIRED` 거부를 확인한다. 배포마다 가계부 Google 로그인이나 smoke token을 준비하지 않는다. 운영자 GitHub·ADC 인증은 별도로 유지한다.
+- 기본 smoke는 실제 사용자 로그인·Membership·가구 조회 성공을 검증하지 않는다. 그 운영 경로를 추가로 확인해야 할 때만 `--smoke-token-file`을 명시하여 기존 인증 smoke를 함께 실행한다. 명시한 token이 없거나 만료되어 실패하면 기본 smoke로 조용히 되돌리지 않는다.
+- 선택한 인증 smoke에 사용자 세션이 필요하면 runbook의 준비 도구와 기존 브라우저 로그인을 재사용한다. 원격 사용자의 휴대폰에 localhost 접속을 요구하지 않고 에이전트가 PC에서 연다. 사용자 세션을 위조하거나 운영 가구를 만들어 smoke를 대신하지 않는다. token·Secret·운영 데이터 원문은 로그에 남기지 않는다.
 
 ### Android APK
 

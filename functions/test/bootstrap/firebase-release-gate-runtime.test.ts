@@ -11,6 +11,79 @@ describe('[REL-001][REL-002][REL-003] 실제 배포 wrapper의 실패 차단', (
   afterEach(() => vi.restoreAllMocks());
   const scripts = () => Promise.all([import('../../scripts/deploy-firebase.mjs')]);
   const sha = 'a'.repeat(40);
+  const smokeInput = { projectId: 'household-account-6f300', releaseId: 'release-1',
+    queryDeployment: { releaseId: 'release-1', commitSha: sha, artifactSha256: 'b'.repeat(64) } };
+  const boundaryBody = () => ({ result: {
+    contractVersion: 'household-query-response.v1', queryId: 'smoke-release-1', deployment: smokeInput.queryDeployment,
+    result: { kind: 'rejected', error: { code: 'AUTH_REQUIRED', retryable: false } },
+  } });
+
+  it('기본 smoke는 자격 없이 실제 Query의 인증 거부와 marker만 검증하고 개인 접근을 미검증으로 남긴다', async () => {
+    const [script] = await scripts();
+    const request = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify(boundaryBody())));
+    await expect(script.verifyFirebaseSmoke(smokeInput)).resolves.toEqual({ userAccessChecked: false });
+    expect(request).toHaveBeenCalledTimes(1);
+    const [url, options] = request.mock.calls[0]!;
+    expect(url).toBe('https://asia-northeast3-household-account-6f300.cloudfunctions.net/executeHouseholdQuery');
+    expect(options?.headers).toEqual({ 'content-type': 'application/json' });
+    expect(JSON.parse(options?.body as string)).toEqual({ data: {
+      contractVersion: 'household-query.v1', query: 'access.list-asset-owner-profiles.v1', queryId: 'smoke-release-1',
+      householdId: 'deployment-smoke-no-household', payload: {},
+    } });
+  });
+
+  it.each([
+    { name: '무인증 성공', change: { result: { kind: 'succeeded', value: {} } } },
+    { name: '잘못된 거부', change: { result: { kind: 'rejected', error: { code: 'FORBIDDEN', retryable: false } } } },
+    { name: '재시도 가능한 거부', change: { result: { kind: 'rejected', error: { code: 'AUTH_REQUIRED', retryable: true } } } },
+    { name: '다른 계약', change: { contractVersion: 'household-query-response.v2' } },
+    { name: '다른 요청 응답', change: { queryId: 'other-query' } },
+  ])('기본 smoke는 $name 응답을 통과시키지 않는다', async ({ change }) => {
+    const [script] = await scripts();
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ result: { ...boundaryBody().result, ...change } })));
+    await expect(script.verifyFirebaseSmoke(smokeInput)).rejects.toThrow('SMOKE_AUTH_BOUNDARY_FAILED');
+  });
+
+  it.each([undefined, { ...smokeInput.queryDeployment, commitSha: 'c'.repeat(40) }])(
+    '인증 거부가 정상이어도 누락되거나 다른 배포 marker는 거부한다', async deployment => {
+      const [script] = await scripts();
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ result: { ...boundaryBody().result, deployment } })));
+      await expect(script.verifyFirebaseSmoke(smokeInput)).rejects.toThrow('SMOKE_DEPLOYMENT_MARKER_MISMATCH');
+    },
+  );
+
+  it('HTTP 실패와 연결 오류는 올바른 모양의 응답이 있어도 배포 성공이 아니다', async () => {
+    const [script] = await scripts();
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(JSON.stringify(boundaryBody()), { status: 503 }))
+      .mockRejectedValueOnce(new Error('test-connection-failed'));
+    await expect(script.verifyFirebaseSmoke(smokeInput)).rejects.toThrow('SMOKE_AUTH_BOUNDARY_FAILED');
+    await expect(script.verifyFirebaseSmoke(smokeInput)).rejects.toThrow('test-connection-failed');
+  });
+
+  it('선택한 사용자 토큰이 있을 때만 기존 로그인 해석과 실제 가구 Query를 추가 검증한다', async () => {
+    const [script] = await scripts();
+    const request = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify(boundaryBody())))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ result: { result: { kind: 'succeeded', value: {
+        kind: 'membership-found', membership: { householdId: 'resolved-household' },
+      } } } })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ result: { deployment: smokeInput.queryDeployment, result: { kind: 'succeeded', value: { profiles: [] } } } })));
+    await expect(script.verifyFirebaseSmoke({ ...smokeInput, token: 'test-token' })).resolves.toEqual({ userAccessChecked: true });
+    expect(request).toHaveBeenCalledTimes(3);
+    expect(request.mock.calls[0]![1]?.headers).toEqual({ 'content-type': 'application/json' });
+    expect(request.mock.calls[1]![0]).toContain('/executeHouseholdCommand');
+    expect(request.mock.calls[1]![1]?.headers).toEqual({ authorization: 'Bearer test-token', 'content-type': 'application/json' });
+    expect(request.mock.calls[2]![1]?.headers).toEqual({ authorization: 'Bearer test-token', 'content-type': 'application/json' });
+    expect(JSON.parse(request.mock.calls[2]![1]?.body as string).data.householdId).toBe('resolved-household');
+  });
+
+  it('선택한 사용자 검증이 실패하면 기본 경계 검사만으로 통과 처리하지 않는다', async () => {
+    const [script] = await scripts();
+    const request = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(JSON.stringify(boundaryBody())))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ result: { result: { kind: 'succeeded', value: { kind: 'membership-missing' } } } })));
+    await expect(script.verifyFirebaseSmoke({ ...smokeInput, token: 'test-token' })).rejects.toThrow('SMOKE_ACTIVE_MEMBERSHIP_REQUIRED');
+    expect(request).toHaveBeenCalledTimes(2);
+  });
   it.each([
     { verificationStatus: 'VERIFIED', enabled: true, expected: true },
     { verificationStatus: 'VERIFICATION_STATUS_UNSPECIFIED', enabled: true, expected: true },

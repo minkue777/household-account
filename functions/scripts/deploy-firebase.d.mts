@@ -7,4 +7,10 @@ export function currentHashes(workspaceRoot?: string): { artifact: { name: strin
 export function writeDeploymentMarker(manifest: unknown, artifact: unknown, workspaceRoot?: string): void;
 export function requireAuthorizedActor(manifest: unknown, actorId: string): void;
 export function requireSmokeMarker(response: unknown, manifest: unknown, artifact: unknown): void;
+export function verifyFirebaseSmoke(input: {
+  projectId: string;
+  releaseId: string;
+  queryDeployment: { releaseId: string; commitSha: string; artifactSha256: string };
+  token?: string;
+}): Promise<{ userAccessChecked: boolean }>;
 export function verifyCloudResource(credential: { getAccessToken(): Promise<{ access_token: string }> }, resource: string, api: string): Promise<boolean>;

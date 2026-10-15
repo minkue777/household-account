@@ -11,7 +11,7 @@
 ## 2. 모듈 경계와 책임
 
 - 배포 wrapper는 immutable manifest의 HEAD·artifact·대상·호환성·actor·Secret·Monitoring을 검증합니다.
-- production build·Android release 서명과 배포 후 실제 smoke가 각 배포 경로에 포함됩니다. Firebase smoke는 인증·가구 Query를 확인합니다.
+- production build·Android release 서명과 배포 후 실제 smoke가 각 배포 경로에 포함됩니다. Firebase의 기본 smoke는 실제 runtime marker와 비로그인 가구 Query 거부를 확인하며 사용자 token을 요구하지 않습니다. token 파일을 명시하면 기존 실제 사용자 인증·가구 Query 성공 검사를 추가합니다.
 - 전체 unit·contract·Rules·E2E·Android 검증은 `quality-gates.yml`에서 별도로 실행됩니다.
 - CI 결과는 commit별 GitHub run/check/summary로 남기며 배포 기록을 성공 또는 실패로 덮어쓰지 않습니다.
 
@@ -52,8 +52,10 @@
 1. 마지막 성공 provenance 이후의 누적 변경으로 Functions codebase·Rules·index·Storage 범위를 계산합니다. 변경이 없으면 배포를 생략합니다.
 2. project의 deployment lease를 획득한 뒤 기준을 재확인하고 manifest hash·actor·CI 참조·호환 계획·배포 scope를 승인 기록에 저장합니다. 해당 범위만 명시적 project에 Firebase CLI로 배포합니다.
 3. 각 Functions predeploy는 build 후 guard를 실행합니다. guard는 전체 테스트나 build를 중복 실행하지 않고 현재 hash·actor·lease 소유자를 다시 확인합니다. Rules·Storage도 guard를 사용합니다.
-4. 배포 후 authenticated 사용자 해석·가구 Query를 호출하고 반환된 releaseId·commit·artifact marker를 검사합니다. default codebase를 배포했으면 새 marker, 그렇지 않으면 이전 승인 evidence에서 계승한 Query marker를 검증합니다.
+4. 배포 후 사용자 token 없이 실제 runtime의 releaseId·commit·artifact marker를 검사하고, 비로그인 가구 Query가 `AUTH_REQUIRED`로 거부되는지 확인합니다. default codebase를 배포했으면 새 marker, 그렇지 않으면 이전 승인 evidence에서 계승한 Query marker를 검증합니다. 비로그인 성공·잘못된 거부 응답·marker 누락·불일치는 실패입니다. `--smoke-token-file`을 명시한 경우에만 기존 authenticated 사용자 해석·가구 Query 성공 검사도 수행하며, 명시한 token의 누락·만료·권한 실패를 기본 모드로 대체하지 않습니다.
 5. smoke·실패·rollback 근거를 기록합니다. 실제 배포와 smoke가 성공한 경우에만 lease를 해제합니다. CI 결과는 배포 기록을 변경하거나 자동 rollback을 시작하지 않습니다.
+
+기본 검사는 기존 `executeHouseholdQuery`에 `access.list-asset-owner-profiles.v1`과 실제 가구가 아닌 `deployment-smoke-no-household`를 보냅니다. `household-query-response.v1`·요청 queryId·`rejected`·`AUTH_REQUIRED`·`retryable=false`를 확인하며 가구 저장소의 성공 조회를 필요로 하지 않습니다. 공개 marker를 위해 별도 endpoint를 만들지 않습니다. provenance의 `adapterDiagnostics`에는 `DEPLOYMENT_AUTH_BOUNDARY_SMOKE`와 `USER_ACCESS_NOT_CHECKED` 또는 `USER_ACCESS_CHECKED`를 기록해 실제 사용자 검사 범위를 구분합니다.
 
 ### 5.3 호환 전환 예
 
@@ -105,10 +107,12 @@ CI, Firebase CLI/Admin, Emulator, GitHub, Cloud Monitoring은 외부 경계입�
 
 CI job 실행과 실제 운영 Firebase 배포는 서로 다른 외부 실행입니다. fake gh/npm 결과로 운영 배포 E2E 통과를 주장하지 않습니다.
 
+기본 smoke는 실제 서버 도달·artifact 일치·비인증 접근 거부를 확인하지만 사용자 로그인·Membership 해석·허용된 가구 조회 성공까지 검증하지 않습니다. 이 한계를 배포 결과와 기록에서 구분하며, 필요한 실제 사용자 검사는 token 파일을 명시하여 추가합니다. 사용자 세션을 위조하거나 운영 가구·금융 데이터를 쓰는 방식으로 검사 조건을 만들지 않습니다. 권한의 정상·실패 경계는 기존 CI/Emulator/E2E에서도 유지합니다.
+
 ## 12. 확정 정책과 구현 순서
 
 [운영 실행 절차](../../../../operations/firebase-release-runbook.md)와 [manifest 예시](../../../../operations/firebase-release-manifest.example.json)를 따릅니다. [DEC-074](../../../governance/decisions.md#dec-074)가 DEC-064의 전체 CI 선행 배포 차단을 대체합니다. 실패 결과를 성공으로 위장하지 않는 원칙은 유지합니다.
 
-인증된 Query 성공 응답의 선택적 `deployment` metadata는 releaseId·commitSha·artifactSha256를 담습니다. 이 marker JSON 자체만 artifact hash에서 제외하여 자기 참조를 피하고 실행 코드는 hash에 포함합니다. smoke는 인증·가구 Query를 확인하며 Native App Check·수집·bridge 전체 경로는 독립 CI/Emulator/E2E와 외부 설정 확인이 담당합니다.
+서버의 `deployment` metadata는 releaseId·commitSha·artifactSha256를 담으며 기존 Query의 거부 응답에도 이 공개 식별자만 포함합니다. 인증 없이 가구 데이터나 권한을 제공하지 않습니다. marker JSON 자체만 artifact hash에서 제외하여 자기 참조를 피하고 실행 코드는 hash에 포함합니다. 기본 smoke는 runtime marker와 비로그인 Query 거부를 확인하고, token을 명시한 선택적 smoke는 실제 인증·가구 Query 성공까지 확인합니다. Native App Check·수집·bridge 전체 경로는 독립 CI/Emulator/E2E와 외부 설정 확인이 담당합니다.
 
 [DEC-046](../../../governance/decisions.md#dec-046)에 따라 manifest와 provenance는 자동 TTL 없이 보존하며 Secret 원문은 제외합니다. [DEC-050](../../../governance/decisions.md#dec-050)에 따라 Cloud binding은 `household-account-6f300`만 허용하고 자동 업무 검증은 Emulator에서 수행합니다.

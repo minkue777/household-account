@@ -81,7 +81,9 @@ export const executeHouseholdQuery = functions
         latency.complete(
           result.kind === "success" ? "succeeded" : "rejected",
         );
-        const deployment = context.auth?.uid !== undefined && result.kind === "success" ? readDeploymentMarker() : undefined;
+        // Public build identifiers let deployment checks verify the live server
+        // without a personal session. The router still rejects unauthenticated reads.
+        const deployment = readDeploymentMarker();
         return deployment === undefined ? response : { ...response, deployment };
       } catch (error) {
         latency.complete("failed");

@@ -66,6 +66,43 @@ export function requireSmokeMarker(response, manifest, artifact) {
   if (marker?.releaseId !== manifest.releaseId || marker?.commitSha !== manifest.commitSha || marker?.artifactSha256 !== artifact.sha256) throw new Error('SMOKE_DEPLOYMENT_MARKER_MISMATCH');
 }
 
+export async function verifyFirebaseSmoke({ projectId, releaseId, queryDeployment, token }) {
+  const endpoint = `https://asia-northeast3-${projectId}.cloudfunctions.net`;
+  const queryId = `smoke-${releaseId}`;
+  const query = householdId => ({ data: { contractVersion: 'household-query.v1', query: 'access.list-asset-owner-profiles.v1', queryId, householdId, payload: {} } });
+  const boundaryResponse = await fetch(`${endpoint}/executeHouseholdQuery`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, signal: AbortSignal.timeout(30000),
+    body: JSON.stringify(query('deployment-smoke-no-household')),
+  });
+  const boundary = await boundaryResponse.json();
+  if (!boundaryResponse.ok || boundary.result?.contractVersion !== 'household-query-response.v1'
+    || boundary.result?.queryId !== queryId || boundary.result?.result?.kind !== 'rejected'
+    || boundary.result.result.error?.code !== 'AUTH_REQUIRED' || boundary.result.result.error?.retryable !== false) {
+    throw new Error('SMOKE_AUTH_BOUNDARY_FAILED');
+  }
+  requireSmokeMarker(boundary, queryDeployment, { sha256: queryDeployment.artifactSha256 });
+  if (token === undefined) return { userAccessChecked: false };
+  if (typeof token !== 'string' || token.trim() === '') throw new Error('SMOKE_TOKEN_REQUIRED');
+
+  const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json' };
+  const response = await fetch(`${endpoint}/executeHouseholdCommand`, {
+    method: 'POST', headers, signal: AbortSignal.timeout(30000),
+    body: JSON.stringify({ data: { contractVersion: 'household-command.v1', command: 'access.resolve-signed-in-user.v1', commandId: queryId, idempotencyKey: queryId, payload: {} } }),
+  });
+  const body = await response.json();
+  if (!response.ok || body.result?.result?.kind !== 'succeeded') throw new Error('SMOKE_FAILED');
+  const resolved = body.result.result.value;
+  if (resolved?.kind !== 'membership-found' || !resolved.membership?.householdId) throw new Error('SMOKE_ACTIVE_MEMBERSHIP_REQUIRED');
+  const readResponse = await fetch(`${endpoint}/executeHouseholdQuery`, {
+    method: 'POST', headers, signal: AbortSignal.timeout(30000),
+    body: JSON.stringify(query(resolved.membership.householdId)),
+  });
+  const readBody = await readResponse.json();
+  if (!readResponse.ok || readBody.result?.result?.kind !== 'succeeded') throw new Error('SMOKE_HOUSEHOLD_READ_FAILED');
+  requireSmokeMarker(readBody, queryDeployment, { sha256: queryDeployment.artifactSha256 });
+  return { userAccessChecked: true };
+}
+
 export async function verifyCandidate(manifest, projectId, dependencies) {
   if (projectId !== 'household-account-6f300' || manifest.firebaseProjectId !== projectId) throw new Error('EXPLICIT_PRODUCTION_PROJECT_REQUIRED');
   if (manifest.environment !== 'production') throw new Error('PRODUCTION_ENVIRONMENT_REQUIRED');
@@ -167,8 +204,10 @@ async function main() {
     console.log(JSON.stringify({ kind: 'approved', commitSha: head, ci: evaluation.ci }));
     return;
   }
-  const smokeToken = arg('smoke-token-file');
-  if (!smokeToken || !existsSync(smokeToken)) throw new Error('SMOKE_TOKEN_FILE_REQUIRED');
+  const smokeTokenFile = arg('smoke-token-file');
+  if (process.argv.includes('--smoke-token-file') && (!smokeTokenFile || !existsSync(smokeTokenFile))) throw new Error('SMOKE_TOKEN_FILE_REQUIRED');
+  const smokeToken = smokeTokenFile === undefined ? undefined : readFileSync(smokeTokenFile, 'utf8').trim();
+  if (smokeToken === '') throw new Error('SMOKE_TOKEN_REQUIRED');
   const release = { releaseId: manifest.releaseId, manifestHash: evaluation.deployAuthorization.manifestHash,
     commitSha: head, ...hashes, projectId, authorizedActorIds: manifest.authorizedActorIds };
   const require = createRequire(join(root, 'web/package.json'));
@@ -185,40 +224,30 @@ async function main() {
   }
   await store.approve(release, { ci: evaluation.ci, compatibility: manifest.compatibility, scope });
   let failure;
+  let userAccessChecked = false;
   try {
     console.log(JSON.stringify({ kind: 'deploying', scope }));
     run(process.execPath, [firebase, 'deploy', '--project', projectId, '--config', join(root, 'firebase.json'), '--only', scope.targets.join(',')], false,
       { ...process.env, HOUSEHOLD_DEPLOY_PROJECT: projectId, HOUSEHOLD_DEPLOY_MANIFEST: resolve(manifestPath), HOUSEHOLD_DEPLOY_LEASE: leaseOwner, HOUSEHOLD_DEPLOY_TARGETS: scope.targets.join(',') });
     if (JSON.stringify(currentHashes()) !== JSON.stringify(hashes)) throw new Error('DEPLOYED_ARTIFACT_CHANGED');
-    const token = readFileSync(smokeToken, 'utf8').trim();
-    const response = await fetch(`https://asia-northeast3-${projectId}.cloudfunctions.net/executeHouseholdCommand`, {
-      method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, signal: AbortSignal.timeout(30000),
-      body: JSON.stringify({ data: { contractVersion: 'household-command.v1', command: 'access.resolve-signed-in-user.v1', commandId: `smoke-${manifest.releaseId}`, idempotencyKey: `smoke-${manifest.releaseId}`, payload: {} } }),
-    });
-    const body = await response.json();
-    if (!response.ok || body.result?.result?.kind !== 'succeeded') throw new Error('SMOKE_FAILED');
-    const resolved = body.result.result.value;
-    if (resolved?.kind !== 'membership-found' || !resolved.membership?.householdId) throw new Error('SMOKE_ACTIVE_MEMBERSHIP_REQUIRED');
-    const readResponse = await fetch(`https://asia-northeast3-${projectId}.cloudfunctions.net/executeHouseholdQuery`, {
-      method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, signal: AbortSignal.timeout(30000),
-      body: JSON.stringify({ data: { contractVersion: 'household-query.v1', query: 'access.list-asset-owner-profiles.v1', queryId: `smoke-${manifest.releaseId}`, householdId: resolved.membership.householdId, payload: {} } }),
-    });
-    const readBody = await readResponse.json();
-    if (!readResponse.ok || readBody.result?.result?.kind !== 'succeeded') throw new Error('SMOKE_HOUSEHOLD_READ_FAILED');
-    // Rules/index-only and child-codebase releases preserve the deployed Query server.
-    requireSmokeMarker(readBody, scope.queryDeployment, { sha256: scope.queryDeployment.artifactSha256 });
+    // Rules/index-only and child-codebase releases retain the prior Query marker.
+    ({ userAccessChecked } = await verifyFirebaseSmoke({ projectId, releaseId: manifest.releaseId, queryDeployment: scope.queryDeployment, token: smokeToken }));
   } catch (error) { failure = error; }
   const provenance = createDeploymentProvenanceApplication({ releases: store, records: store.records,
     channels: { isVerified: reference => verifyCloudResource(credential, reference, 'monitoring.googleapis.com') },
     identity: { deploymentId: id => sha256(id), fingerprint: value => sha256(JSON.stringify(value)) }, clock: { now: () => new Date().toISOString() } });
   const recorded = await provenance.recordDeploymentResult(manifest.releaseId, { manifestHash: release.manifestHash, projectId, actorId, artifact: hashes.artifact,
     smoke: failure ? { status: 'failed', artifactSha256: hashes.artifact.sha256, code: 'SMOKE_FAILED' } : { status: 'passed', artifactSha256: hashes.artifact.sha256 },
-    monitoringChannelReference: manifest.monitoringChannelReference, adapterDiagnostics: failure ? [{ code: 'DEPLOYMENT_OR_SMOKE_FAILED' }] : [],
+    monitoringChannelReference: manifest.monitoringChannelReference, adapterDiagnostics: [
+      { code: 'DEPLOYMENT_AUTH_BOUNDARY_SMOKE' },
+      { code: userAccessChecked ? 'USER_ACCESS_CHECKED' : 'USER_ACCESS_NOT_CHECKED' },
+      ...(failure ? [{ code: 'DEPLOYMENT_OR_SMOKE_FAILED' }] : []),
+    ],
     ...(manifest.rollback ? { rollback: manifest.rollback } : {}) });
   if (recorded.kind === 'rejected') throw new Error(`PROVENANCE_REJECTED:${recorded.code}`);
   if (failure) throw failure;
   await store.releaseDeploymentLease(projectId, leaseOwner);
-  console.log(JSON.stringify({ kind: recorded.kind, releaseId: manifest.releaseId, commitSha: head, scope, ci: evaluation.ci }));
+  console.log(JSON.stringify({ kind: recorded.kind, releaseId: manifest.releaseId, commitSha: head, scope, smoke: { userAccessChecked }, ci: evaluation.ci }));
 }
 
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) main().catch(error => { console.error(error.message); process.exitCode = 1; });
