@@ -596,6 +596,7 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       }
       appliedAuthUid = nextUid;
       appliedResolutionKey = nextResolutionKey;
+      if (!user || !readSignedInMembershipCache(user.uid)) clearSignedInMembershipCache();
       activeUserRef.current = user;
       if (!user) {
         resolutionGenerationRef.current += 1;

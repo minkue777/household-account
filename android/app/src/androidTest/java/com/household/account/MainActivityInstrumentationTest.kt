@@ -6,11 +6,15 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
+import android.graphics.Color
+import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
 import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.provider.Settings
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
 import android.util.AttributeSet
 import android.view.LayoutInflater
 import android.view.View
@@ -41,6 +45,9 @@ import com.household.account.webhost.AndroidHostBridge
 import com.household.account.webhost.TrustedWebOrigin
 import com.household.account.webhost.NotificationListenerAccess
 import com.household.account.util.HouseholdPreferences
+import com.household.account.session.NativeMembershipResolver
+import com.household.account.session.NativeMembershipResolution
+import com.household.account.session.AndroidSessionMirrorStore
 import java.io.FileInputStream
 import java.io.File
 import java.util.concurrent.CountDownLatch
@@ -162,6 +169,7 @@ class MainActivityInstrumentationTest {
 
     @Test
     fun startupArtworkRemainsUntilTheFirstDocumentImageIsReadyToDraw() {
+        runBlocking { HouseholdPreferences.clearHouseholdKey(context) }
         grantMandatoryPermissions()
         val requested = CountDownLatch(1)
         val responseReady = CountDownLatch(1)
@@ -277,6 +285,90 @@ class MainActivityInstrumentationTest {
             }
         } finally {
             responseReady.countDown()
+        }
+    }
+
+    @Test
+    fun startupHouseholdNameUsesTheStoredSessionBeforeWebAndFollowsSessionChanges() = runBlocking {
+        grantMandatoryPermissions()
+        val requested = CountDownLatch(1)
+        val responseReady = CountDownLatch(1)
+        suspend fun resolve(id: String, name: String?) {
+            val response = mapOf(
+                "kind" to "membership-found",
+                "membership" to mapOf("householdId" to id, "memberId" to "member", "displayName" to "가구원"),
+            ) + if (name == null) emptyMap() else mapOf("household" to mapOf("id" to id, "name" to name))
+            assertTrue(NativeMembershipResolver.acceptAuthoritative(context, response) is NativeMembershipResolution.Ready)
+        }
+        resolve("startup-house", "또니망고네")
+        assertEquals("또니망고네", AndroidSessionMirrorStore(context).load().snapshot?.householdName)
+        val document = LocalWebViewDocument(
+            TrustedWebOrigin.APP_URL,
+            "<!doctype html><html><body><img src='/native-test/held-startup.webp'></body></html>",
+            subresourceResponse = { request ->
+                if (request.url.path == "/native-test/held-startup.webp") {
+                    requested.countDown()
+                    check(responseReady.await(15, TimeUnit.SECONDS))
+                    WebResourceResponse("image/webp", null, context.resources.openRawResource(R.drawable.startup_illustration))
+                } else null
+            }
+        )
+        try {
+            withObservedWebViewLifecycle(document) { scenario ->
+                fun assertName(expected: String) = scenario.onActivity { activity ->
+                    assertEquals(View.VISIBLE, activity.findViewById<View>(R.id.startupImage).visibility)
+                    val title = activity.findViewById<TextView>(R.id.startupHouseholdName)
+                    assertEquals(expected, title.text.toString())
+                    val expectedPaint = Paint(title.paint).apply { typeface = activity.resources.getFont(R.font.jua_regular) }
+                    assertEquals("실제 Jua 글자 너비", expectedPaint.measureText("또니망고네 익태송희네"),
+                        title.paint.measureText("또니망고네 익태송희네"), 0f)
+                    assertEquals(Color.rgb(54, 87, 139), title.currentTextColor)
+                    val colored = title.text as Spanned
+                    val spans = colored.getSpans(0, colored.length, ForegroundColorSpan::class.java)
+                    assertEquals(if (expected.endsWith("네")) 1 else 0, spans.size)
+                    spans.singleOrNull()?.let {
+                        assertEquals(expected.length - 1, colored.getSpanStart(it))
+                        assertEquals(expected.length, colored.getSpanEnd(it))
+                        assertEquals(Color.rgb(151, 85, 233), it.foregroundColor)
+                    }
+                }
+                // 아직 문서 이미지가 도착하지 않았어도 Native 첫 화면에 이름이 있습니다.
+                assertName("또니망고네")
+                assertTrue(requested.await(5, TimeUnit.SECONDS))
+                InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()?.let { screenshot ->
+                    File(context.getExternalFilesDir(null), "startup-native-household-name.png").outputStream().use {
+                        screenshot.compress(Bitmap.CompressFormat.PNG, 100, it)
+                    }
+                    screenshot.recycle()
+                }
+                fun observeExistingBridgeReply() {
+                    evaluateWebView(scenario, """window.startupReply = false;
+                        HouseholdNativeBridge.onmessage = function() { window.startupReply = true; };
+                        HouseholdNativeBridge.postMessage(JSON.stringify({contractVersion:'android-bridge.v1',
+                            requestId:'startup-name',operation:'app.get-version',payload:{}}));""".trimIndent())
+                    waitUntil("기존 bridge 응답에서 Native 표시 갱신") {
+                        evaluateWebView(scenario, "window.startupReply") == "true"
+                    }
+                }
+                runBlocking { resolve("startup-house", "새로운집") }
+                observeExistingBridgeReply()
+                assertName("새로운집")
+                runBlocking { resolve("other-house", "익태송희네") }
+                observeExistingBridgeReply()
+                assertName("익태송희네")
+                runBlocking { resolve("other-house", null) }
+                observeExistingBridgeReply()
+                assertName("")
+                runBlocking { resolve("other-house", "익태송희네") }
+                runBlocking { HouseholdPreferences.clearHouseholdKey(context) }
+                observeExistingBridgeReply()
+                assertName("")
+                assertNull(AndroidSessionMirrorStore(context).load().snapshot)
+                responseReady.countDown()
+            }
+        } finally {
+            responseReady.countDown()
+            HouseholdPreferences.clearHouseholdKey(context)
         }
     }
 

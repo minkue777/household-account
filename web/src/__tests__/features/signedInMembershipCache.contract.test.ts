@@ -1,6 +1,8 @@
 import {
   clearSignedInMembershipCache,
   readSignedInMembershipCache,
+  readLastVerifiedHouseholdName,
+  subscribeSignedInMembershipCache,
   writeSignedInMembershipCache,
 } from '@/features/access-household/application/signedInMembershipCache';
 
@@ -95,5 +97,35 @@ describe('로그인 Membership cache 계약', () => {
     writeSignedInMembershipCache('uid-1', resolution);
     clearSignedInMembershipCache();
     expect(readSignedInMembershipCache('uid-1')).toBeUndefined();
+  });
+
+  it('표시용 이름만 읽으며 손상·가구 ID 불일치·구형 이름 누락은 빈 이름으로 처리한다', () => {
+    expect(readLastVerifiedHouseholdName()).toBe('');
+    writeSignedInMembershipCache('uid-1', resolutionWithHousehold);
+    expect(readLastVerifiedHouseholdName()).toBe('저장된 가계부');
+    expect(readSignedInMembershipCache('uid-2')).toBeUndefined();
+    writeSignedInMembershipCache('uid-1', { ...resolutionWithHousehold, household: { ...resolutionWithHousehold.household!, id: 'other-household' } });
+    expect(readLastVerifiedHouseholdName()).toBe('');
+    writeSignedInMembershipCache('uid-1', resolution);
+    expect(readLastVerifiedHouseholdName()).toBe('');
+    window.localStorage.setItem('household-account.signed-in-membership.v1', '{broken');
+    expect(readLastVerifiedHouseholdName()).toBe('');
+  });
+
+  it('같은 문서와 다른 창의 저장·제거를 알리고 구독 해제 후에는 알리지 않는다', () => {
+    const changed = jest.fn(() => readLastVerifiedHouseholdName());
+    const unsubscribe = subscribeSignedInMembershipCache(changed);
+    writeSignedInMembershipCache('uid-1', resolutionWithHousehold);
+    expect(changed).toHaveLastReturnedWith('저장된 가계부');
+    clearSignedInMembershipCache();
+    expect(changed).toHaveLastReturnedWith('');
+    window.dispatchEvent(new StorageEvent('storage', { key: 'unrelated' }));
+    expect(changed).toHaveBeenCalledTimes(2);
+    window.dispatchEvent(new StorageEvent('storage', { key: 'household-account.signed-in-membership.v1' }));
+    window.dispatchEvent(new StorageEvent('storage', { key: null }));
+    expect(changed).toHaveBeenCalledTimes(4);
+    unsubscribe();
+    writeSignedInMembershipCache('uid-1', resolutionWithHousehold);
+    expect(changed).toHaveBeenCalledTimes(4);
   });
 });

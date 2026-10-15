@@ -46,7 +46,11 @@ AND-014의 구간별 계측은 [Android 시작 상세 계측 설계](../../../..
 
 첫 Web Shell 준비 중에는 [시작 화면 분리 설계](../../../../operations/startup-brand-fit-2026-10-15.md)에 따라 지갑 그림·가구명 공간·부제·점 세 개를 각각 배치한다. `onPageFinished` 뒤 `postVisualStateCallback`이 첫 문서의 이미지까지 표시 가능한 상태를 확인하면 네이티브 시작 레이어를 내리고 Web의 동일 로딩 화면에 연결한다. 인증·전체 홈 데이터 준비와 문서당 2초 최소 표시는 Web 계약이 소유하며 Native에 중복 타이머나 새 home-ready Bridge를 만들지 않는다.
 
-기존 1254px 아이콘 투명 원본의 지갑 그림만 무손실 WebP로 재사용하고, 제목·부제를 이미지에 넣지 않는다. 시작 레이어는 24dp 바깥 여백과 단색 `#F5F2FD` 배경을 유지한다. 중앙 구성은 그림·가구명 공간·부제만 포함하고 7dp 점 세 개는 별도 하단 정렬한다. Native 가용 높이 400dp 미만은 120dp 그림·바닥 24dp, 높이 400dp 이상은 폭 380dp 기준으로 182/198dp 그림·바닥 64dp를 사용한다. Native 가구명 공간은 40/44dp이며 새 이름 cache·Bridge를 추가하지 않는다. 부제는 16/17sp 굵은 실제 TextView와 7/8dp 간격을 사용한다. Web은 기존 HouseholdContext의 가구명을 로컬 Jua로 표시하고 390px 폭 기준 그림 198px·제목 33px/44px·부제 17px/26px·700 굵기·부제 위 8px를 사용한다. 작은 폭에서는 비례 축소하고 낮은 화면에서는 그림만 120px로 줄인다. Web 점은 같은 바닥 64px 또는 24px에 safe-area 여백을 더한다. 미확정 이름 공간은 유지하고 이름 문자열·인증·조회 정책은 바꾸지 않는다. 필수 권한 안내와 메인 문서 HTTP·네트워크 오류에서는 시작 레이어를 내려 해당 화면을 가리지 않는다.
+기존 1254px 아이콘 투명 원본의 지갑 그림만 무손실 WebP로 재사용하고, 제목·부제를 이미지에 넣지 않는다. 시작 레이어는 24dp 바깥 여백과 단색 `#F5F2FD` 배경을 유지한다. 중앙 구성은 그림·가구명·부제만 포함하고 7dp 점 세 개는 별도 하단 정렬한다. Native 가용 높이 400dp 미만은 120dp 그림·바닥 24dp, 높이 400dp 이상은 폭 380dp 기준으로 182/198dp 그림·바닥 64dp를 사용한다. Native 제목은 기존 40/44dp 공간의 실제 TextView에 로컬 Jua 글꼴을 적용하고, 끝 글자가 ‘네’이면 그 글자만 보라색으로 표시한다. 부제는 16/17sp 굵은 실제 TextView와 7/8dp 간격을 사용한다. Web은 390px 폭 기준 그림 198px·제목 33px/44px·부제 17px/26px·700 굵기·부제 위 8px를 사용한다. 작은 폭에서는 비례 축소하고 낮은 화면에서는 그림만 120px로 줄인다. Web 점은 같은 바닥 64px 또는 24px에 safe-area 여백을 더한다. 필수 권한 안내와 메인 문서 HTTP·네트워크 오류에서는 시작 레이어를 내려 해당 화면을 가리지 않는다.
+
+v2.0.7의 Native 제목은 기존 `encryptedSessionMirror` snapshot에 추가한 선택적 `householdName`에서 읽는다. `NativeMembershipResolver`는 권위 응답의 `household.id === membership.householdId`를 확인한 경우에만 이름을 전달한다. 이름 없는 구형 snapshot도 그대로 읽고 첫 설치·구형 저장본은 다음 정상 복원으로 이름을 저장한 뒤 재실행부터 표시한다. 이름이 없으면 기존 제목 공간을 비워 두며, 새 이름 저장소·조회·Bridge를 만들지 않는다. 이름은 표시 metadata로만 사용하고 인증이나 업무 scope의 근거로 사용하지 않는다. 같은 가구·멤버의 metadata 갱신에서는 generation을 유지하며 다른 scope 전환·로그아웃의 Queue 정리와 mirror 원자 교체·삭제를 보존한다.
+
+Web 제목은 현재 `HouseholdContext.household.name`을 우선하며 인증 복원 중에만 기존 `signedInMembershipCache`의 마지막 이름으로 보완한다. 다른 UID·확정 signed-out은 cache를 지우고 관리자 조회 선택이 있으면 일반 cache 이름을 숨긴다. 저장소 거부·손상·누락에서는 이름 공간을 유지한다. 서버 HTML의 이름은 빈 문자열이며 hydration 뒤 인증 응답 전에 표시할 수 있다는 범위로 검증한다. 이름 표시가 인증·원장 조회·최소 표시시간을 변경하지 않는지는 LED-001의 실제 Auth 응답 보류 검사로 확인한다.
 
 ### 3.2 JavaScript Bridge v1
 
@@ -294,6 +298,7 @@ Web Shell 준비에서는 Native 인증 객체를 미리 만들지 않습니다.
 
 - Host 설정과 session mirror는 서로 다른 namespace로 저장한다. mirror에는 schema version과 updatedAt을 둔다.
 - session mirror 변경은 원자적 local-store edit으로 적용한다. Membership 갱신 도중 household/member가 서로 다른 세대가 되면 안 된다.
+- 선택적 `householdName`도 같은 암호화 snapshot에 포함한다. 구형 누락값은 호환하고 이름만 갱신할 때 generation과 현재 actor의 Queue를 유지한다. 새 scope의 이름을 이전 scope에서 이어받지 않으며 mirror 삭제 시 함께 제거한다.
 - actor 전환과 로그아웃은 `SessionTransitionPort`의 이전 actor Queue 삭제가 성공한 뒤 진행한다. 삭제 실패 시 이전 mirror를 유지하고 새 actor observation을 수집하지 않는다.
 - Payment Capture 전송 Queue와 QuickEdit FIFO는 책임과 schema가 다른 저장소로 분리한다. 같은 Keystore crypto 기반 구현은 재사용할 수 있지만 한 Queue의 완료·삭제가 다른 Queue 항목을 변경하면 안 된다.
 - QuickEdit FIFO의 enqueue, 중복 확인, sequence 발급과 head 완료는 각각 원자적으로 처리한다. active entry는 하나뿐이며 process 재시작 뒤에도 가장 낮은 미완료 sequence가 head다.

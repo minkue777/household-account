@@ -25,6 +25,7 @@ internal object SessionMirrorJson {
                 put("householdId", snapshot.householdId)
                 put("memberId", snapshot.memberId)
                 put("memberName", snapshot.memberName)
+                snapshot.householdName?.let { put("householdName", it) }
                 put("generation", snapshot.generation)
                 put("sourceVersion", snapshot.sourceVersion)
                 put("updatedAtEpochMillis", snapshot.updatedAtEpochMillis)
@@ -44,7 +45,8 @@ internal object SessionMirrorJson {
         require(generation >= 0)
         val snapshot = root.optJSONObject("snapshot")?.let {
             SessionMirrorSnapshot(it.getString("householdId"), it.getString("memberId"), it.getString("memberName"),
-                it.getLong("generation"), it.getInt("sourceVersion"), it.getLong("updatedAtEpochMillis")).also { snapshot ->
+                it.getLong("generation"), it.getInt("sourceVersion"), it.getLong("updatedAtEpochMillis"),
+                (it.opt("householdName") as? String)?.trim()?.takeIf(String::isNotEmpty)).also { snapshot ->
                 require(snapshot.householdId.isNotBlank() && snapshot.memberId.isNotBlank() && snapshot.memberName.isNotBlank())
                 require(snapshot.generation == generation && generation > 0 && snapshot.sourceVersion > 0)
             }

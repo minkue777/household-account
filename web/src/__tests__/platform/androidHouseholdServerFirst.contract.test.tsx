@@ -796,6 +796,24 @@ describe('Android 가계부 server-first 복원 계약', () => {
     )).toBeInTheDocument();
   });
 
+  it('다른 UID 또는 확정 로그아웃은 이전 표시 cache를 지우고 새 인증 결과를 기다린다', async () => {
+    let authListener!: (user: User | null) => void;
+    mockOnAuthChange.mockImplementation(listener => { authListener = listener; return jest.fn(); });
+    mockReadSignedInMembershipCache.mockReturnValue(undefined);
+    let finish!: (value: typeof cachedResolution) => void;
+    mockResolveSignedInUser.mockReturnValue(new Promise(resolve => { finish = resolve; }));
+    render(<HouseholdProvider><Probe /></HouseholdProvider>);
+    await waitFor(() => expect(mockOnAuthChange).toHaveBeenCalled());
+    expect(mockClearSignedInMembershipCache).not.toHaveBeenCalled();
+    await act(async () => { authListener({ uid: 'different-user' } as User); });
+    expect(mockClearSignedInMembershipCache).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('resolving:none:member:no-member:unverified')).toBeInTheDocument();
+    await act(async () => { authListener(null); });
+    expect(mockClearSignedInMembershipCache).toHaveBeenCalledTimes(2);
+    await act(async () => { finish(cachedResolution); });
+    expect(screen.getByText('signed-out:none:member:no-member:unverified')).toBeInTheDocument();
+  });
+
   it('iOS PWA FID 모듈은 첫 장부 페인트 뒤에만 로드한다', async () => {
     iosPwa = true;
     mockReadSignedInMembershipCache.mockReturnValue(resolution);

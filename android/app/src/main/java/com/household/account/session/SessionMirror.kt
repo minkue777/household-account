@@ -9,7 +9,8 @@ data class SessionMirrorSnapshot(
     val memberName: String,
     val generation: Long,
     val sourceVersion: Int = 1,
-    val updatedAtEpochMillis: Long
+    val updatedAtEpochMillis: Long,
+    val householdName: String? = null
 )
 data class SessionTransitionJournal(val fromGeneration: Long, val toGeneration: Long)
 data class SessionMirrorState(
@@ -33,15 +34,15 @@ class SessionMirror(private val store: SessionMirrorStore, private val now: () -
     fun snapshot(): SessionMirrorSnapshot? = state.let { if (it.transition == null) it.snapshot else null }
     fun generation(): Long = state.generation
 
-    suspend fun replace(householdId: String, memberId: String, memberName: String, purge: suspend (SessionMirrorSnapshot?) -> Unit): SessionMirrorSnapshot = transitionMutex.withLock {
+    suspend fun replace(householdId: String, memberId: String, memberName: String, householdName: String? = null, purge: suspend (SessionMirrorSnapshot?) -> Unit): SessionMirrorSnapshot = transitionMutex.withLock {
         require(householdId.isNotBlank() && memberId.isNotBlank() && memberName.isNotBlank())
         val current = state.snapshot
         if (state.transition == null && current?.householdId == householdId && current.memberId == memberId) {
-            val renamed = current.copy(memberName = memberName, updatedAtEpochMillis = now())
+            val renamed = current.copy(memberName = memberName, householdName = householdName, updatedAtEpochMillis = now())
             commit(state.copy(snapshot = renamed))
             return@withLock renamed
         }
-        val next = SessionMirrorSnapshot(householdId, memberId, memberName, nextGeneration(), updatedAtEpochMillis = now())
+        val next = SessionMirrorSnapshot(householdId, memberId, memberName, nextGeneration(), updatedAtEpochMillis = now(), householdName = householdName)
         transition(next, purge)
         next
     }

@@ -40,6 +40,12 @@
                 android:layout_width="match_parent"
                 android:layout_height="@dimen/startup_title_height"
                 android:layout_marginTop="@dimen/startup_title_margin_top"
+                android:fontFamily="@font/jua_regular"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:textColor="#36578B"
+                android:textSize="@dimen/startup_title_text_size"
+                android:textStyle="normal"
                 android:importantForAccessibility="no" />
 
             <TextView

@@ -2,6 +2,7 @@
 <resources>
     <dimen name="startup_artwork_size">198dp</dimen>
     <dimen name="startup_title_height">44dp</dimen>
+    <dimen name="startup_title_text_size">33sp</dimen>
     <dimen name="startup_title_margin_top">-6dp</dimen>
     <dimen name="startup_subtitle_text_size">17sp</dimen>
     <dimen name="startup_subtitle_height">26dp</dimen>

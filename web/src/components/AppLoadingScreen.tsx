@@ -1,12 +1,25 @@
 'use client';
 
 import Image from 'next/image';
+import { useSyncExternalStore } from 'react';
 import brandIcon from '@/assets/startup-illustration.webp';
 import { useHousehold } from '@/contexts/HouseholdContext';
+import { readLastVerifiedHouseholdName, subscribeSignedInMembershipCache } from '@/features/access-household/application/signedInMembershipCache';
+import { readAdminHouseholdViewSelection } from '@/features/access-household/application/adminHouseholdViewSelection';
+
+function readStartupHouseholdName(): string {
+  // 관리자 조회 대상에는 본인 가구의 저장된 이름을 사용하지 않습니다.
+  try {
+    return readAdminHouseholdViewSelection() ? '' : readLastVerifiedHouseholdName();
+  } catch {
+    return '';
+  }
+}
 
 export default function AppLoadingScreen() {
-  const { household } = useHousehold();
-  const householdName = household?.name ?? '';
+  const { household, sessionState } = useHousehold();
+  const lastHouseholdName = useSyncExternalStore(subscribeSignedInMembershipCache, readStartupHouseholdName, () => '');
+  const householdName = household?.name ?? (sessionState === 'resolving' ? lastHouseholdName : '');
 
   return (
     <div role="status" aria-busy="true" className="fixed inset-x-0 top-0 flex h-[100dvh] items-center justify-center bg-[#f5f2fd] p-6">

@@ -337,15 +337,29 @@ test.describe('첫 홈 별도 서버 조회', () => {
         };
         requestAnimationFrame(observeFrame);
       });
+      let releaseAuth!: () => void;
+      const authHeld = new Promise<void>(resolve => { releaseAuth = resolve; });
+      let heldAuthResponses = 0;
+      let firestoreReads = 0;
       let release!: () => void;
       const held = new Promise<void>(resolve => { release = resolve; });
       let heldBalanceResponses = 0;
+      // UI가 저장한 가구명은 실제 Auth 복원 응답보다 먼저 표시하고, 조회 권한으로 쓰지 않습니다.
+      await restarted.route('**/identitytoolkit.googleapis.com/v1/accounts:lookup?*', async route => {
+        const response = await route.fetch();
+        expect(response.ok()).toBe(true);
+        heldAuthResponses += 1;
+        await authHeld;
+        await route.fulfill({ response });
+      });
       // 실제 Lite 잔액 응답과 live 전달을 보류하여 일부 준비만으로 홈이 뜨지 않는지 확인합니다.
       await restarted.route('**/google.firestore.v1.Firestore/Listen/channel**', async route => {
+        firestoreReads += 1;
         await held;
         await route.continue();
       });
       await restarted.route(/\/documents(?::batchGet|(?:\/[^?]+)?:runQuery)/, async route => {
+        firestoreReads += 1;
         if (!route.request().postData()?.includes('localCurrencyBalances')) return route.continue();
         const response = await route.fetch();
         expect(response.ok()).toBe(true);
@@ -355,6 +369,17 @@ test.describe('첫 홈 별도 서버 조회', () => {
       });
       try {
         await restarted.goto('/');
+        await expect.poll(() => heldAuthResponses).toBeGreaterThan(0);
+        await expect(restarted.getByRole('heading', { name: householdName })).toBeVisible();
+        await expect(restarted.getByRole('status').locator('img')).toBeVisible();
+        const beforeAuthMarks = await restarted.evaluate(() => performance.getEntriesByType('mark').map(entry => entry.name));
+        expect(beforeAuthMarks).toContain('household-account:startup:auth:started');
+        for (const phase of ['auth:ready', 'membership:started', 'household:started', 'ledger:ready']) {
+          expect(beforeAuthMarks).not.toContain(`household-account:startup:${phase}`);
+        }
+        expect(firestoreReads, '표시용 가구명만으로 인증 전 원장 조회를 시작하면 안 됩니다.').toBe(0);
+        await expect(restarted.locator('.calendar-glass')).toHaveCount(0);
+        releaseAuth();
         await expect.poll(() => heldBalanceResponses).toBeGreaterThan(0);
         await expect.poll(() => restarted.evaluate(() => ['ledger:ready', 'categories:ready'].every(phase =>
           performance.getEntriesByName(`household-account:startup:${phase}`).length === 1))).toBe(true);
@@ -448,8 +473,9 @@ test.describe('첫 홈 별도 서버 조회', () => {
           .filter(entry => entry.name.startsWith('household-account:startup:')).map(entry => [entry.name, entry.startTime])));
         expect(marks['household-account:startup:ledger:first-paint']).toBeGreaterThanOrEqual(marks['household-account:startup:local-currency:ready']);
         await testInfo.attach('home-initial-complete-display', { contentType: 'application/json',
-          body: Buffer.from(JSON.stringify({ heldBalanceResponses, marks, frames, artworkLayouts }, null, 2)) });
+          body: Buffer.from(JSON.stringify({ heldAuthResponses, beforeAuthMarks, heldBalanceResponses, marks, frames, artworkLayouts }, null, 2)) });
       } finally {
+        releaseAuth();
         release();
         await restarted.unrouteAll({ behavior: 'wait' });
       }

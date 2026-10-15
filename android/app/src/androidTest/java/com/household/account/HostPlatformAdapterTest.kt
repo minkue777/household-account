@@ -152,12 +152,16 @@ class HostPlatformAdapterTest {
         val previous = preferences.getString("ciphertext", null)
         try {
             val expected = SessionMirrorState(generation = 3, snapshot = SessionMirrorSnapshot(
-                "private-household-sentinel", "member-stable", "private-name-sentinel", 3, updatedAtEpochMillis = 10))
+                "private-household-sentinel", "member-stable", "private-name-sentinel", 3,
+                updatedAtEpochMillis = 10, householdName = "private-household-name-sentinel"))
             AndroidSessionMirrorStore(context).replace(expected)
+            val readStarted = android.os.SystemClock.elapsedRealtimeNanos()
             assertEquals(expected, AndroidSessionMirrorStore(context).load())
+            android.util.Log.i("StartupSessionRead", "encryptedReloadMs=${(android.os.SystemClock.elapsedRealtimeNanos() - readStarted) / 1_000_000.0}")
             val persisted = preferences.all.toString()
             assertFalse(persisted.contains("private-household-sentinel"))
             assertFalse(persisted.contains("private-name-sentinel"))
+            assertFalse(persisted.contains("private-household-name-sentinel"))
             assertEquals(setOf("ciphertext"), preferences.all.keys)
         } finally {
             val editor = preferences.edit().clear()

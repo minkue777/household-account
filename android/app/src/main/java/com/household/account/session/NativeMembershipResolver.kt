@@ -72,7 +72,8 @@ object NativeMembershipResolver {
                     context.applicationContext,
                     householdId,
                     memberId,
-                    displayName
+                    displayName,
+                    householdName(value, householdId)
                 )
                 NativeMembershipResolution.Ready(
                     CaptureSessionScope(householdId, memberId, generation)
@@ -80,5 +81,12 @@ object NativeMembershipResolver {
             }
             else -> NativeMembershipResolution.Failed("MEMBERSHIP_RESPONSE_INVALID", false)
         }
+    }
+
+    /** 표시용 이름도 검증된 membership과 같은 가구에서만 가져옵니다. */
+    internal fun householdName(value: Map<*, *>, householdId: String): String? {
+        val household = value["household"] as? Map<*, *> ?: return null
+        if (household["id"] != householdId) return null
+        return (household["name"] as? String)?.trim()?.takeIf(String::isNotEmpty)
     }
 }

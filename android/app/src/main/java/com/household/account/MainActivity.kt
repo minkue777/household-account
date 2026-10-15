@@ -9,6 +9,10 @@ import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
 import android.provider.Settings
+import android.graphics.Color
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
 import android.util.Log
 import android.view.View
 import android.view.ViewGroup
@@ -21,6 +25,7 @@ import android.webkit.WebViewClient
 import android.webkit.RenderProcessGoneDetail
 import android.widget.Button
 import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -271,7 +276,10 @@ class MainActivity : AppCompatActivity() {
                 messageScope.launch {
                     val response = hostBridge.handle(message.data.orEmpty())
                     ensureActive()
-                    if (webView === view) replyProxy.postMessage(response)
+                    if (webView === view) {
+                        if (startupImage.visibility == View.VISIBLE) renderStartupHouseholdName()
+                        replyProxy.postMessage(response)
+                    }
                 }
             }
         }
@@ -334,6 +342,17 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun renderStartupHouseholdName() {
+        // 표시용 로컬 읽기 실패가 앱 시작이나 실제 인증 복원을 막지 않게 합니다.
+        val name = runCatching { HouseholdPreferences.snapshot(applicationContext)?.householdName }
+            .getOrNull().orEmpty()
+        findViewById<TextView>(R.id.startupHouseholdName).text = SpannableString(name).apply {
+            if (name.endsWith("네")) {
+                setSpan(ForegroundColorSpan(Color.rgb(151, 85, 233)), name.length - 1, name.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+        }
+    }
+
     private fun showWebView() {
         permissionLayout.visibility = View.GONE
         val view = webView ?: WebView(this).also {
@@ -348,6 +367,7 @@ class MainActivity : AppCompatActivity() {
         view.visibility = View.VISIBLE
 
         if (!webNavigationStarted) {
+            renderStartupHouseholdName()
             startupImage.visibility = View.VISIBLE
             webNavigationStarted = true
             appLaunchDurationClock.markNavigationRequested()

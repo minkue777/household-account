@@ -37,8 +37,8 @@ object HouseholdPreferences {
     fun getSessionGeneration(context: Context): Long = mirror(context).generation()
     fun hasHouseholdKey(context: Context): Boolean = snapshot(context) != null
 
-    suspend fun replaceAuthenticatedSession(context: Context, householdId: String, memberId: String, memberName: String): Long {
-        val next = mirror(context).replace(householdId, memberId, memberName) { previous ->
+    suspend fun replaceAuthenticatedSession(context: Context, householdId: String, memberId: String, memberName: String, householdName: String? = null): Long {
+        val next = mirror(context).replace(householdId, memberId, memberName, householdName) { previous ->
             AndroidCaptureDelivery.purgeForSessionTransition(context.applicationContext, previous?.toScope())
         }
         migrateOverlay(context, next)

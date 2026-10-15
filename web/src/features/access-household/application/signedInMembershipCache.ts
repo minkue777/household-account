@@ -8,6 +8,7 @@ export type MembershipFoundResolution = Extract<
 >;
 
 const STORAGE_KEY = 'household-account.signed-in-membership.v1';
+const CHANGED_EVENT = 'household-account:membership-cache-changed';
 
 interface StoredMembership {
   version: 1 | 2 | 3 | 4 | 5;
@@ -158,6 +159,23 @@ export function readSignedInMembershipCache(
   return stored?.principalUid === principalUid ? stored.resolution : undefined;
 }
 
+/** 시작 화면의 표시용 이름입니다. 인증이나 데이터 접근 scope로 사용하지 않습니다. */
+export function readLastVerifiedHouseholdName(): string {
+  return readStoredMembership()?.resolution.household?.name ?? '';
+}
+
+export function subscribeSignedInMembershipCache(onChange: () => void): () => void {
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === STORAGE_KEY || event.key === null) onChange();
+  };
+  window.addEventListener(CHANGED_EVENT, onChange);
+  window.addEventListener('storage', onStorage);
+  return () => {
+    window.removeEventListener(CHANGED_EVENT, onChange);
+    window.removeEventListener('storage', onStorage);
+  };
+}
+
 /** 금융 화면 데이터 없이 인증된 Membership scope와 가구 표시 설정만 보존합니다. */
 export function writeSignedInMembershipCache(
   principalUid: string,
@@ -170,9 +188,11 @@ export function writeSignedInMembershipCache(
     resolution,
   };
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
+  window.dispatchEvent(new Event(CHANGED_EVENT));
 }
 
 export function clearSignedInMembershipCache(): void {
   if (typeof window === 'undefined') return;
   window.localStorage.removeItem(STORAGE_KEY);
+  window.dispatchEvent(new Event(CHANGED_EVENT));
 }
