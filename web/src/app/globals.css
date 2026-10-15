@@ -2,6 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
+.startup-title {
+  font-family: var(--font-startup-title), 'Pretendard Variable', sans-serif;
+  font-weight: 400;
+}
+
+@media (max-height: 399px) {
+  .startup-illustration { width: 120px; }
+}
+
 :root {
   --background: #f8fafc;
   --foreground: #1e293b;

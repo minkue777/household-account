@@ -1,8 +1,15 @@
 import type { Metadata, Viewport } from 'next'
+import localFont from 'next/font/local'
 import 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css'
 import './globals.css'
 import AppProviders from '@/components/AppProviders'
 import { isFirebaseEmulatorSuiteConfigured } from '@/platform/firebase/firebaseEmulatorConfig'
+
+const startupFont = localFont({
+  src: '../assets/fonts/Jua-Regular.woff2',
+  variable: '--font-startup-title',
+  display: 'swap',
+})
 
 export const metadata: Metadata = {
   title: '가계부',
@@ -32,7 +39,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="ko">
+    <html lang="ko" className={startupFont.variable}>
       <head>
         <link rel="apple-touch-icon" href="/icons/household-v3-apple-touch.png" />
         <link rel="icon" type="image/png" href="/icons/household-v3-192.png" />

@@ -298,7 +298,7 @@ jobs:
             adb shell input keyevent KEYCODE_WAKEUP
             adb shell wm dismiss-keyguard
             node tools/ci/prepare-android-ui.mjs
-            bash -c 'cd android; status=0; ./gradlew connectedDebugAndroidTest --stacktrace || status=$?; mkdir -p app/build/ci-diagnostics; if [ -d app/build/outputs/androidTest-results ]; then cp -R app/build/outputs/androidTest-results app/build/ci-diagnostics/default-androidTest-results; fi; adb logcat -d > app/build/ci-diagnostics/logcat.txt || true; adb exec-out screencap -p > app/build/ci-diagnostics/screen.png || true; exit "$status"'
+            bash -c 'cd android; status=0; ./gradlew connectedDebugAndroidTest --stacktrace || status=$?; mkdir -p app/build/ci-diagnostics; if [ -d app/build/outputs/androidTest-results ]; then cp -R app/build/outputs/androidTest-results app/build/ci-diagnostics/default-androidTest-results; fi; adb logcat -d > app/build/ci-diagnostics/logcat.txt || true; adb shell dumpsys activity exit-info com.household.account > app/build/ci-diagnostics/app-exit-info.txt 2>&1 || true; adb shell dumpsys activity exit-info com.google.android.gms > app/build/ci-diagnostics/gms-exit-info.txt 2>&1 || true; adb exec-out screencap -p > app/build/ci-diagnostics/screen.png || true; exit "$status"'
             npm --prefix web run test:e2e:android
             npm --prefix web run test:performance:android
       - name: Android 성능 HTML 보고서 생성

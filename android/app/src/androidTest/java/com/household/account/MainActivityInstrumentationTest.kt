@@ -25,6 +25,7 @@ import android.webkit.RenderProcessGoneDetail
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -171,26 +172,41 @@ class MainActivityInstrumentationTest {
                 if (request.url.path == "/native-test/startup.webp") {
                     requested.countDown()
                     check(responseReady.await(15, TimeUnit.SECONDS))
-                    val image = context.resources.openRawResource(R.drawable.startup_brand)
+                    val image = context.resources.openRawResource(R.drawable.startup_illustration)
                     WebResourceResponse("image/webp", null, image)
                 } else null
             }
         )
         fun assertArtworkLayout(activity: MainActivity) {
             val screen = activity.findViewById<View>(R.id.startupImage)
+            val content = activity.findViewById<View>(R.id.startupContent)
             val artwork = activity.findViewById<ImageView>(R.id.startupArtwork)
+            val householdName = activity.findViewById<TextView>(R.id.startupHouseholdName)
+            val subtitle = activity.findViewById<TextView>(R.id.startupSubtitle)
+            val dots = activity.findViewById<View>(R.id.startupDots)
             val density = activity.resources.displayMetrics.density
             val padding = (24 * density).toInt()
             assertEquals(View.VISIBLE, screen.visibility)
             assertEquals(ImageView.ScaleType.FIT_CENTER, artwork.scaleType)
             assertEquals(padding, screen.paddingLeft)
             assertEquals(padding, screen.paddingTop)
-            assertTrue("화면이 커져도 최대 240dp", artwork.width <= 240 * density + 1)
-            assertEquals("가운데 배치", screen.width / 2f, artwork.left + artwork.width / 2f, 1f)
+            val expectedArtworkSize = activity.resources.getDimensionPixelSize(R.dimen.startup_artwork_size)
+            assertEquals(expectedArtworkSize, artwork.width)
+            assertEquals(expectedArtworkSize, artwork.height)
+            assertTrue("화면이 커져도 최대 180dp", artwork.width <= 180 * density + 1)
+            assertEquals("그림 가운데 배치", content.width / 2f, artwork.left + artwork.width / 2f, 1f)
+            assertEquals("구성 전체 세로 가운데 배치", screen.height / 2f, content.top + content.height / 2f, 1f)
+            assertEquals("인증 전에는 다른 가구 이름을 표시하지 않음", "", householdName.text.toString())
+            assertEquals("가구 이름의 높이를 미리 확보", 40 * density, householdName.height.toFloat(), 1f)
+            assertEquals("제목과 부제 간격", 20 * density, (subtitle.top - householdName.bottom).toFloat(), 1f)
+            assertEquals("부제는 이미지 대신 실제 글자", "가계부 · 자산", subtitle.text.toString())
+            assertEquals("부제와 점 간격", 40 * density, (dots.top - subtitle.bottom).toFloat(), 1f)
+            assertTrue("24dp 여백 안에 전체 구성 보존", content.top >= padding - 1 &&
+                content.bottom <= screen.height - padding + 1)
             val displayedImage = RectF(artwork.drawable.bounds)
             artwork.imageMatrix.mapRect(displayedImage)
             assertTrue("물리 픽셀도 원본을 확대하지 않음", displayedImage.width() <= artwork.drawable.intrinsicWidth)
-            displayedImage.offset(artwork.left.toFloat(), artwork.top.toFloat())
+            displayedImage.offset((content.left + artwork.left).toFloat(), (content.top + artwork.top).toFloat())
             assertTrue("24dp 여백 안에 전체 원본 보존", displayedImage.left >= padding - 1 &&
                 displayedImage.top >= padding - 1 && displayedImage.right <= screen.width - padding + 1 &&
                 displayedImage.bottom <= screen.height - padding + 1)
@@ -216,7 +232,7 @@ class MainActivityInstrumentationTest {
                     screenshot.recycle()
                 }
                 scenario.onActivity { it.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
-                waitUntil("가로 화면에서도 시작 이미지의 전체 문구 보존") {
+                waitUntil("가로 화면에서도 시작 그림과 실제 부제 전체 보존") {
                     var landscape = false
                     scenario.onActivity { activity ->
                         val screen = activity.findViewById<View>(R.id.startupImage)
@@ -239,7 +255,7 @@ class MainActivityInstrumentationTest {
                         artworkHidden = activity.findViewById<View>(R.id.startupImage).visibility == View.GONE
                     }
                     artworkHidden && evaluateWebView(scenario,
-                        "document.images[0].complete && document.images[0].naturalWidth === 941") == "true"
+                        "document.images[0].complete && document.images[0].naturalWidth === 1254") == "true"
                 }
                 scenario.moveToState(Lifecycle.State.CREATED)
                 scenario.moveToState(Lifecycle.State.RESUMED)

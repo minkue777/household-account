@@ -1,6 +1,6 @@
 # 시작 화면 맞춤·최소 표시와 아이콘 배경 수정
 
-> 현재 구현은 아래 v2.0.4 후속 절의 최대 240px/dp 표시입니다. 배경은 사용자 참조색 `#F5F2FD`이며 앞선 검증·배포 이력은 보존합니다.
+> 현재 변경은 아래 v2.0.5 후속 절의 그림·선택 가구명·부제 분리입니다. 배경은 사용자 참조색 `#F5F2FD`이며 앞선 검증·배포 이력은 보존합니다. v2.0.5 검증·배포 결과는 실제 확인 후 기록합니다.
 
 ## 원인과 계약
 
@@ -94,3 +94,34 @@ Android debug·test·release build가 통과했습니다(27초). APK는 10,961,5
 v2.0.1의 `38699457238`은 실제 Android를 포함한 다섯 검사·요약이 모두 성공했습니다. v2.0.2의 `38700717664`는 Android·Functions·Web 성공, Web E2E 112 passed/1 failed입니다. `ios-startup.spec.ts:102`의 검색 chunk 고의 실패 후 재시도에서 입력란을 30초 안에 찾지 못했습니다. trace에는 최초 abort 후 재요청·continue가 있고, 이후 검색/shared chunk·font·Listen에 `WebKit encountered an internal error`, Auth IndexedDB connection closing 오류가 함께 기록됐습니다. 재시도 요청에는 완료 HTTP 응답이 없으며 화면은 검색 로딩을 유지했습니다. 실패의 최초 원인은 미확정이며 크기 수정으로 해결됐다고 하지 않습니다.
 
 동일 검사를 실제 Emulator·production WebKit에서 변경 없이 한 차례 재현 시도한 결과 1 passed(36.0초, 테스트 11.5초)로 실패가 재현되지 않았습니다. 기존 30초 기준·chunk 재요청 횟수·검색·편집·서버 저장 검증을 유지했습니다. 로그 `%TEMP%/household-startup-retry-repro-20261015.log`, CI 로그 `household-startup-v202-ci-38700717664.log`, artifact `household-startup-v202-ci-artifacts-38700717664`, trace `household-startup-v202-trace-38700717664`에 관측을 보존하며 다음 전체 CI 결과를 후속 확인합니다.
+
+## v2.0.5 후속: 그림·선택 가구명·부제 분리
+
+사용자는 제목과 부제가 붙어 보이고 작은 글씨가 흐린 점을 지적했으며, 또니망고네뿐 아니라 익태송희네에서도 사용할 수 있도록 가구명 분리를 요청했습니다. 문자까지 포함한 이미지를 확대·축소하는 대신 기존 그림과 실제 텍스트를 각각 표시합니다. 중간에 거절된 imagegen 시안은 사용하지 않습니다.
+
+가구별 APK를 별도로 만들지 않고 기존 HouseholdContext의 선택 가구명을 사용합니다. `AppLoadingScreen`은 `household.name`을 그대로 읽어 제목으로 렌더링하며 새 가구 조회나 이름 저장소를 만들지 않습니다. 이름이 미확정인 인증 구간에는 40px 제목 공간만 남깁니다. 다른 가구의 이름이나 고정 기본 이름을 먼저 보여주지 않습니다. Native는 가구명 원본이 없으므로 40dp 공간을 비워 두고, 이름만을 위한 cache·Bridge를 추가하지 않습니다. 가구명이 준비된 Web으로 전환되면 현재 선택된 이름이 표시됩니다.
+
+그림은 기존 `brand-icon-foreground.png`의 1254px 투명 원본에서 지갑·사람 카드·동전만 무손실 WebP로 재사용합니다. Web `startup-illustration.webp`와 Native `startup_illustration.webp`에 제목·부제·점 이미지를 넣지 않습니다. 그림의 표시 크기는 180px/dp이고 Web 높이 또는 Native 가용 높이가 400px/dp 미만이면 120px/dp로 줄입니다. 바깥 여백은 24px/dp, 배경은 기존 `#F5F2FD`입니다.
+
+Web 제목에는 로컬 Jua WOFF2(368,804바이트)를 사용하고 OFL 라이선스를 함께 저장합니다. 제목은 30px 크기·40px 줄높이이며 끝 글자 ‘네’만 기존 보라색으로 표시하고 이름 문자열은 유지합니다. 부제 ‘가계부 · 자산’은 기존 Pretendard의 실제 15px 텍스트, 22px 줄높이, 제목 공간 아래 20px 간격을 사용합니다. Native도 15sp TextView와 20dp 간격으로 부제를 표시합니다. 하단 점 세 개는 각각 Web 요소와 Native drawable로 표시합니다. 문서당 1.2초, 인증·첫 홈 전체 데이터 준비·오류·첫 paint 계측과 Native `postVisualStateCallback` 전환 조건은 변경하지 않습니다.
+
+선택 가구명 두 종류·이름 미확정 구간·제목/부제 분리·간격·폰트·그림 크기와 작은 높이 대응을 검증하고 기존 실제 브라우저·Android의 이미지 보류·회전·첫 홈 준비 조건도 유지합니다. 배포 대상은 Web Git 자동배포와 Android v2.0.5/code43이며 Firebase 실행 코드는 변경하지 않습니다.
+
+### 앞선 CI 결과와 종료 원인 관측
+
+- v2.0.3 `c7b01cd7bafb00554fe8d7d2363a31c4dab7f5dc`의 CI `38701984715`는 실제 Android를 포함한 다섯 검사와 요약 모두 success입니다.
+- v2.0.4 `aa183e56fadd0861877e7d606b270a3538956892`의 CI `38703934405`는 Android instrumentation 48개 중 11개 실행 후 프로세스가 종료됐습니다. 첫 `realWebViewBridgeIsOriginBoundAndHistoryBackKeepsTheActivityOpen` 중 2026-10-15 08:17:15.098 UTC에 GMS Chimera가 RCS 모듈 변경 때문에 persistent 프로세스를 재시작했고, 08:17:15.212에 Android ActivityManager가 FontsProvider 의존성을 이유로 가계부 프로세스를 SIGKILL했습니다. 로그의 `depends on provider com.google.android.gms/.fonts.provider.FontsProvider in dying proc`가 직접 종료 이유입니다. 시작 이미지 크기 assertion 실패와 구분하며, 실행되지 않은 후속 검사를 성공으로 기록하지 않습니다.
+- 앱의 병합 manifest에는 AppCompat 전이 의존성인 `EmojiCompatInitializer`가 있습니다. 초기 이모지 글꼴 조회가 GMS 의존 경로로 추정되지만, 이모지 초기화를 끄거나 앱 동작을 바꾸어 검사를 우회하지 않습니다. 이번 직접 실패는 google_apis 에뮬레이터 부팅 직후 GMS 재시작과의 환경 경합이며 운영에서도 같은 상황이 발생했는지는 확인하지 않았습니다.
+- 기존 CI 결과 수집 블록에 앱과 GMS 각각의 `dumpsys activity exit-info`를 추가해 `app-exit-info.txt`·`gms-exit-info.txt`로 실패 artifact에 보관합니다. 기존 검사·대기·종료 코드·실패 판정은 유지하고 진단 명령 실패가 원래 검사 결과를 덮지 않게 합니다. YAML 파싱·Bash 문법·추가된 두 명령 외 기존 내용 일치·artifact 경로를 확인했습니다. 과거 실패를 성공으로 덮거나 같은 SHA를 재실행하지 않습니다.
+- 기존 로그는 `%TEMP%/household-startup-v204-ci-38703934405.log`, artifact는 `%TEMP%/household-startup-v204-ci-artifacts-38703934405`에 보존했습니다. Web E2E 등 남은 결과는 해당 실행의 실제 완료 결과로 후속 확인합니다.
+
+
+### v2.0.5 로컬 검증
+
+관련 Jest 2파일 32개와 Web 타입 검사가 통과했습니다. 실제 Firebase Emulator와 production build를 사용하는 WebKit에서 또니망고네·익태송희네 각각의 첫 홈/마지막 잔액 검사 2개가 통과했습니다(56.2초). 두 가구 모두 390×844·360×960·240×640·844×390·1280×800에서 실문자 가구명·부제, 20px 간격, 글꼴 준비, 180/120px 그림 크기와 전체 내용 보존을 확인했습니다. 기존 전체 데이터 준비 전 홈 미표시·준비 후 바로 전환·paint 계측 조건도 통과했습니다.
+
+실제 API 36.1 MainActivity 이미지 보류·회전·전환·복귀 검사 1개가 통과했습니다. Gradle 완료 후 기기에서 제거된 캡처를 다시 얻기 위해 동일 검사를 직접 instrumentation으로 실행했고 1개 통과(4.619초), 세로·가로 원본 캡처를 확인했습니다. Android debug·test·release 빌드도 통과했습니다(18초). 요구사항 248개·test case 235개·E2E 추적 누락 0개입니다.
+
+Jua 원본은 Google Fonts `ofl/jua/Jua-Regular.ttf`이며 글리프를 수정하거나 특정 가구 문자만 추출하지 않고 FontTools로 WOFF2 변환했습니다. 원본 라이선스 `OFL-Jua.txt`를 함께 보존하며 이름이 달라도 같은 글꼴을 사용할 수 있습니다. 서명 APK는 v2.0.5/code43, 11,267,440바이트, SHA-256 `37f07eadda45350f0a36b323493522e4bc9b45b4864fce863094f902b2d01d11`입니다. 기존 인증서 SHA-256 `09bd620a673ce537ab3bcd54fe2cf4d2c6d806e553d456beb7ebd80830397bfa`와 일치하고 apksigner 검증을 통과했습니다.
+
+로그: `%TEMP%/household-startup-text-{build,types,prepare,e2e,native,native-capture}-20261015.log`. Web Git 배포와 APK 공개는 이 검증 결과를 포함한 커밋으로 진행하며 원격 CI는 해당 SHA로 후속 확인합니다.

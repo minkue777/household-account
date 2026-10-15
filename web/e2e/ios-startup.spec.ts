@@ -1,7 +1,7 @@
 import { expect, test, type Page, type Request, type Response } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { observeIndexedDbOpens, readFirestoreCollection, readIndexedDbOpens, resetTestAccount, writeFirestoreFixture } from './emulator';
+import { createHouseholdThroughUi, observeIndexedDbOpens, readFirestoreCollection, readIndexedDbOpens, resetTestAccount, writeFirestoreFixture } from './emulator';
 import { createFinanceHousehold, addCategoryThroughUi, addExpenseThroughUi, seoulDate } from './finance-helpers';
 
 const COMPLETE_PAINT = 'household-account:startup:home:first-complete-paint';
@@ -304,138 +304,140 @@ test.describe('첫 홈 별도 서버 조회', () => {
     }
   });
 
-  test('[T-LED-001][T-HOME-003][T-WEBVIEW-004] 첫 홈은 마지막 잔액 응답까지 기다려 예산·잔액·날짜별 금액을 함께 표시한다', async ({ page, context, request }, testInfo) => {
-    await observeIndexedDbOpens(page, true);
-    const householdId = await createFinanceHousehold(page, request);
-    await addCategoryThroughUi(page, request, '첫 화면 예산', 100000);
-    await addExpenseThroughUi(page, request, { merchant: '전체 준비 검사', category: '첫 화면 예산', amount: 12300, date: seoulDate(0, 1) });
-    await page.close();
-    await writeFirestoreFixture(request, `households/${householdId}/homePreferences/home`, {
-      left: { stringValue: 'MONTHLY_REMAINING_BUDGET' }, right: { stringValue: 'LOCAL_CURRENCY_BALANCE' },
-      aggregateVersion: { integerValue: '1' }, selectedLocalCurrencyType: { stringValue: 'gyeonggi' },
-    });
-    const balancePath = `households/${householdId}/localCurrencyBalances/gyeonggi`;
-    await writeFirestoreFixture(request, balancePath, {
-      localCurrencyType: { stringValue: 'gyeonggi' }, balanceInWon: { integerValue: '36890' },
-    });
-    const restarted = await context.newPage();
-    await observeIndexedDbOpens(restarted, true);
-    await restarted.addInitScript(() => {
-      const phases: string[] = [];
-      Object.assign(window, { homeStartupFrames: phases });
-      const observeFrame = () => {
-        const loading = document.querySelector('[role="status"][aria-busy="true"]');
-        const complete = document.querySelector('.calendar-glass') && document.querySelectorAll('.balance-card-glass').length === 2;
-        const phase = complete ? 'home' : loading?.textContent === '로딩중...' ? 'loading' : 'gap';
-        if ((phases.length > 0 || phase === 'loading') && phases.at(-1) !== phase) phases.push(phase);
-        if (!complete) requestAnimationFrame(observeFrame);
-      };
-      requestAnimationFrame(observeFrame);
-    });
-    let release!: () => void;
-    const held = new Promise<void>(resolve => { release = resolve; });
-    let heldBalanceResponses = 0;
-    // 실제 Lite 잔액 응답과 live 전달을 보류하여 일부 준비만으로 홈이 뜨지 않는지 확인합니다.
-    await restarted.route('**/google.firestore.v1.Firestore/Listen/channel**', async route => {
-      await held;
-      await route.continue();
-    });
-    await restarted.route(/\/documents(?::batchGet|(?:\/[^?]+)?:runQuery)/, async route => {
-      if (!route.request().postData()?.includes('localCurrencyBalances')) return route.continue();
-      const response = await route.fetch();
-      expect(response.ok()).toBe(true);
-      heldBalanceResponses += 1;
-      await held;
-      await route.fulfill({ response });
-    });
-    try {
-      await restarted.goto('/');
-      await expect.poll(() => heldBalanceResponses).toBeGreaterThan(0);
-      await expect.poll(() => restarted.evaluate(() => ['ledger:ready', 'categories:ready'].every(phase =>
-        performance.getEntriesByName(`household-account:startup:${phase}`).length === 1))).toBe(true);
-      await expect(restarted.getByRole('status')).toHaveAttribute('aria-busy', 'true');
-      await expect(restarted.getByRole('status')).toHaveText('로딩중...');
-      const artwork = restarted.getByRole('status').locator('img');
-      await expect(artwork).toBeVisible();
-      await expect.poll(() => artwork.evaluate((image: HTMLImageElement) =>
-        image.complete && image.naturalWidth === 941 && image.naturalHeight === 1672)).toBe(true);
-      const viewport = restarted.viewportSize()!;
-      const artworkLayouts = [];
-      for (const size of [
-        { name: 'mobile', width: 390, height: 844, fit: 'contain' },
-        { name: 'narrow-mobile', width: 360, height: 960, fit: 'contain' },
-        { name: 'small-window', width: 240, height: 640, fit: 'contain' },
-        { name: 'landscape', width: 844, height: 390, fit: 'contain' },
-        { name: 'desktop', width: 1280, height: 800, fit: 'contain' },
-      ]) {
-        await restarted.setViewportSize({ width: size.width, height: size.height });
-        await expect(artwork).toHaveCSS('object-fit', size.fit);
-        await expect(restarted.getByRole('status')).toHaveCSS('position', 'fixed');
-        const layout = await artwork.evaluate((image: HTMLImageElement) => {
-          const box = image.getBoundingClientRect();
-          const screen = image.parentElement!.getBoundingClientRect();
-          const screenStyle = getComputedStyle(image.parentElement!);
-          const style = getComputedStyle(image);
-          const padding = parseFloat(screenStyle.paddingLeft);
-          const scale = Math.min(box.width / image.naturalWidth, box.height / image.naturalHeight);
-          return { x: box.x, y: box.y, width: box.width, height: box.height,
-            left: box.x + (box.width - image.naturalWidth * scale) / 2,
-            top: box.y + (box.height - image.naturalHeight * scale) / 2,
-            scale, padding, position: style.objectPosition, screenWidth: screen.width, screenHeight: screen.height,
-            physicalWidth: image.naturalWidth * scale * devicePixelRatio,
-            edges: [screenStyle.left, screenStyle.right, screenStyle.top, screenStyle.bottom].map(parseFloat) };
-        });
-        // 브라우저 스크롤바를 제외한 실제 fixed 화면을 채우며 1/64 CSS px 반올림만 허용합니다.
-        expect(layout.position).toBe('50% 50%');
-        for (const offset of layout.edges) expect(offset).toBeCloseTo(0, 1);
-        expect(layout.x + layout.width / 2).toBeCloseTo(layout.screenWidth / 2, 1);
-        expect(layout.y).toBeCloseTo(24, 1);
-        expect(layout.width).toBeCloseTo(Math.min(240, layout.screenWidth - 48), 1);
-        expect(layout.height).toBeCloseTo(layout.screenHeight - 48, 1);
-        expect(layout.padding).toBe(24);
-        // 고밀도 화면에서도 원본 픽셀을 늘리지 않고, 전체 그림을 중앙의 최대 240px 폭 안에 표시합니다.
-        expect(layout.physicalWidth).toBeLessThanOrEqual(941);
-        expect(layout.left).toBeGreaterThanOrEqual(24 - 0.05);
-        expect(layout.top).toBeGreaterThanOrEqual(24 - 0.05);
-        expect(layout.left + 941 * layout.scale).toBeLessThanOrEqual(layout.screenWidth - 24 + 0.05);
-        expect(layout.top + 1672 * layout.scale).toBeLessThanOrEqual(layout.screenHeight - 24 + 0.05);
-        artworkLayouts.push({ ...size, ...layout });
-        await restarted.screenshot({ path: testInfo.outputPath(`startup-brand-${size.name}.png`) });
-      }
-      await restarted.setViewportSize(viewport);
-      await expect(restarted.locator('.calendar-glass')).toHaveCount(0);
-      await expect(restarted.locator('.balance-card-glass')).toHaveCount(0);
-      expect(await restarted.evaluate(() => performance.getEntriesByName('household-account:startup:ledger:first-paint').length)).toBe(0);
-      expect(await restarted.evaluate(name => performance.getEntriesByName(name).length, COMPLETE_PAINT)).toBe(0);
-      release();
-      const calendar = restarted.locator('.calendar-glass');
-      const budget = restarted.locator('.balance-card-glass').filter({ hasText: '월 잔여 예산' });
-      const balance = restarted.locator('.balance-card-glass').filter({ hasText: '지역화폐 잔액' });
-      await expect(calendar).toHaveAttribute('aria-busy', 'false');
-      await expect(budget).toContainText('87,700');
-      await expect(balance).toContainText('36,890');
-      await expect(restarted.getByTestId(`calendar-day-${seoulDate(0, 1)}`)).toContainText('12,300');
-      await expect(restarted.getByText('가계부를 불러오는 중입니다.', { exact: true })).toHaveCount(0);
-      await expect.poll(() => restarted.evaluate(name => performance.getEntriesByName(name).length, COMPLETE_PAINT)).toBe(1);
-      const frames = await restarted.evaluate(() => (window as typeof window & { homeStartupFrames: string[] }).homeStartupFrames);
-      expect(frames, '인증 대기부터 첫 홈까지 빈 화면이나 다른 로딩 단계를 거치면 안 됩니다.').toEqual(['loading', 'home']);
-      await expect(restarted.getByText('로딩중...', { exact: true })).toHaveCount(0);
-      const originalCalendar = await calendar.elementHandle();
-      await writeFirestoreFixture(request, balancePath, {
-        localCurrencyType: { stringValue: 'gyeonggi' }, balanceInWon: { integerValue: '0' },
+  for (const householdName of ['또니망고네', '익태송희네']) {
+    test(`[T-LED-001][T-HOME-003][T-WEBVIEW-004] ${householdName} 첫 홈은 마지막 잔액 응답까지 기다려 예산·잔액·날짜별 금액을 함께 표시한다`, async ({ page, context, request }, testInfo) => {
+      await observeIndexedDbOpens(page, true);
+      const { householdId } = await createHouseholdThroughUi(page, householdName, '재무 테스터');
+      await addCategoryThroughUi(page, request, '첫 화면 예산', 100000);
+      await addExpenseThroughUi(page, request, { merchant: '전체 준비 검사', category: '첫 화면 예산', amount: 12300, date: seoulDate(0, 1) });
+      await page.close();
+      await writeFirestoreFixture(request, `households/${householdId}/homePreferences/home`, {
+        left: { stringValue: 'MONTHLY_REMAINING_BUDGET' }, right: { stringValue: 'LOCAL_CURRENCY_BALANCE' },
+        aggregateVersion: { integerValue: '1' }, selectedLocalCurrencyType: { stringValue: 'gyeonggi' },
       });
-      await expect(balance.getByText('0', { exact: true })).toBeVisible();
-      expect(await originalCalendar!.evaluate(node => node.isConnected)).toBe(true);
-      const marks = await restarted.evaluate(() => Object.fromEntries(performance.getEntriesByType('mark')
-        .filter(entry => entry.name.startsWith('household-account:startup:')).map(entry => [entry.name, entry.startTime])));
-      expect(marks['household-account:startup:ledger:first-paint']).toBeGreaterThanOrEqual(marks['household-account:startup:local-currency:ready']);
-      await testInfo.attach('home-initial-complete-display', { contentType: 'application/json',
-        body: Buffer.from(JSON.stringify({ heldBalanceResponses, marks, frames, artworkLayouts }, null, 2)) });
-    } finally {
-      release();
-      await restarted.unrouteAll({ behavior: 'wait' });
-    }
-  });
+      const balancePath = `households/${householdId}/localCurrencyBalances/gyeonggi`;
+      await writeFirestoreFixture(request, balancePath, {
+        localCurrencyType: { stringValue: 'gyeonggi' }, balanceInWon: { integerValue: '36890' },
+      });
+      const restarted = await context.newPage();
+      await observeIndexedDbOpens(restarted, true);
+      await restarted.addInitScript(() => {
+        const phases: string[] = [];
+        Object.assign(window, { homeStartupFrames: phases });
+        const observeFrame = () => {
+          const loading = document.querySelector('[role="status"][aria-busy="true"]');
+          const complete = document.querySelector('.calendar-glass') && document.querySelectorAll('.balance-card-glass').length === 2;
+          const phase = complete ? 'home' : loading?.querySelector('.sr-only')?.textContent === '로딩중...' ? 'loading' : 'gap';
+          if ((phases.length > 0 || phase === 'loading') && phases.at(-1) !== phase) phases.push(phase);
+          if (!complete) requestAnimationFrame(observeFrame);
+        };
+        requestAnimationFrame(observeFrame);
+      });
+      let release!: () => void;
+      const held = new Promise<void>(resolve => { release = resolve; });
+      let heldBalanceResponses = 0;
+      // 실제 Lite 잔액 응답과 live 전달을 보류하여 일부 준비만으로 홈이 뜨지 않는지 확인합니다.
+      await restarted.route('**/google.firestore.v1.Firestore/Listen/channel**', async route => {
+        await held;
+        await route.continue();
+      });
+      await restarted.route(/\/documents(?::batchGet|(?:\/[^?]+)?:runQuery)/, async route => {
+        if (!route.request().postData()?.includes('localCurrencyBalances')) return route.continue();
+        const response = await route.fetch();
+        expect(response.ok()).toBe(true);
+        heldBalanceResponses += 1;
+        await held;
+        await route.fulfill({ response });
+      });
+      try {
+        await restarted.goto('/');
+        await expect.poll(() => heldBalanceResponses).toBeGreaterThan(0);
+        await expect.poll(() => restarted.evaluate(() => ['ledger:ready', 'categories:ready'].every(phase =>
+          performance.getEntriesByName(`household-account:startup:${phase}`).length === 1))).toBe(true);
+        await expect(restarted.getByRole('status')).toHaveAttribute('aria-busy', 'true');
+        await expect(restarted.getByRole('status')).toContainText('로딩중...');
+        await expect(restarted.getByRole('heading', { name: householdName })).toBeVisible();
+        await expect(restarted.getByRole('status').getByText('가계부 · 자산')).toBeVisible();
+        await restarted.evaluate(() => document.fonts.ready);
+        const artwork = restarted.getByRole('status').locator('img');
+        await expect(artwork).toBeVisible();
+        await expect.poll(() => artwork.evaluate((image: HTMLImageElement) =>
+          image.complete && image.naturalWidth === 1254 && image.naturalHeight === 1254)).toBe(true);
+        const viewport = restarted.viewportSize()!;
+        const artworkLayouts = [];
+        for (const size of [
+          { name: 'mobile', width: 390, height: 844, fit: 'contain' },
+          { name: 'narrow-mobile', width: 360, height: 960, fit: 'contain' },
+          { name: 'small-window', width: 240, height: 640, fit: 'contain' },
+          { name: 'landscape', width: 844, height: 390, fit: 'contain' },
+          { name: 'desktop', width: 1280, height: 800, fit: 'contain' },
+        ]) {
+          await restarted.setViewportSize({ width: size.width, height: size.height });
+          await expect(artwork).toHaveCSS('object-fit', size.fit);
+          await expect(restarted.getByRole('status')).toHaveCSS('position', 'fixed');
+          const layout = await artwork.evaluate((image: HTMLImageElement) => {
+            const box = image.getBoundingClientRect();
+            const root = image.closest('[role="status"]')!;
+            const screen = root.getBoundingClientRect();
+            const title = root.querySelector('h1')!.getBoundingClientRect();
+            const subtitle = root.querySelector('p')!.getBoundingClientRect();
+            const group = image.parentElement!.getBoundingClientRect();
+            return { x: box.x, width: box.width, height: box.height,
+              padding: parseFloat(getComputedStyle(root).paddingLeft),
+              screenWidth: screen.width, screenHeight: screen.height,
+              groupTop: group.top, groupBottom: group.bottom,
+              subtitleGap: subtitle.top - title.bottom, titleHeight: title.height,
+              physicalWidth: box.width * devicePixelRatio,
+              fontLoaded: document.fonts.check(`30px ${getComputedStyle(root.querySelector('h1')!).fontFamily}`) };
+          });
+          expect(layout.padding).toBe(24);
+          expect(layout.x + layout.width / 2).toBeCloseTo(layout.screenWidth / 2, 1);
+          expect(layout.width).toBeCloseTo(layout.screenHeight < 400 ? 120 : 180, 1);
+          expect(layout.height).toBeCloseTo(layout.width, 1);
+          expect(layout.physicalWidth).toBeLessThanOrEqual(1254);
+          expect(layout.groupTop).toBeGreaterThanOrEqual(24 - 0.05);
+          expect(layout.groupBottom).toBeLessThanOrEqual(layout.screenHeight - 24 + 0.05);
+          expect(layout.titleHeight).toBeCloseTo(40, 1);
+          expect(layout.subtitleGap).toBeCloseTo(20, 1);
+          expect(layout.fontLoaded).toBe(true);
+          artworkLayouts.push({ ...size, ...layout });
+          await restarted.screenshot({ path: testInfo.outputPath(`startup-brand-${size.name}.png`) });
+        }
+        await restarted.setViewportSize(viewport);
+        await expect(restarted.locator('.calendar-glass')).toHaveCount(0);
+        await expect(restarted.locator('.balance-card-glass')).toHaveCount(0);
+        expect(await restarted.evaluate(() => performance.getEntriesByName('household-account:startup:ledger:first-paint').length)).toBe(0);
+        expect(await restarted.evaluate(name => performance.getEntriesByName(name).length, COMPLETE_PAINT)).toBe(0);
+        release();
+        const calendar = restarted.locator('.calendar-glass');
+        const budget = restarted.locator('.balance-card-glass').filter({ hasText: '월 잔여 예산' });
+        const balance = restarted.locator('.balance-card-glass').filter({ hasText: '지역화폐 잔액' });
+        await expect(calendar).toHaveAttribute('aria-busy', 'false');
+        await expect(budget).toContainText('87,700');
+        await expect(balance).toContainText('36,890');
+        await expect(restarted.getByTestId(`calendar-day-${seoulDate(0, 1)}`)).toContainText('12,300');
+        await expect(restarted.getByText('가계부를 불러오는 중입니다.', { exact: true })).toHaveCount(0);
+        await expect.poll(() => restarted.evaluate(name => performance.getEntriesByName(name).length, COMPLETE_PAINT)).toBe(1);
+        const frames = await restarted.evaluate(() => (window as typeof window & { homeStartupFrames: string[] }).homeStartupFrames);
+        expect(frames, '인증 대기부터 첫 홈까지 빈 화면이나 다른 로딩 단계를 거치면 안 됩니다.').toEqual(['loading', 'home']);
+        await expect(restarted.getByText('로딩중...', { exact: true })).toHaveCount(0);
+        const originalCalendar = await calendar.elementHandle();
+        await writeFirestoreFixture(request, balancePath, {
+          localCurrencyType: { stringValue: 'gyeonggi' }, balanceInWon: { integerValue: '0' },
+        });
+        await expect(balance.getByText('0', { exact: true })).toBeVisible();
+        expect(await originalCalendar!.evaluate(node => node.isConnected)).toBe(true);
+        const marks = await restarted.evaluate(() => Object.fromEntries(performance.getEntriesByType('mark')
+          .filter(entry => entry.name.startsWith('household-account:startup:')).map(entry => [entry.name, entry.startTime])));
+        expect(marks['household-account:startup:ledger:first-paint']).toBeGreaterThanOrEqual(marks['household-account:startup:local-currency:ready']);
+        await testInfo.attach('home-initial-complete-display', { contentType: 'application/json',
+          body: Buffer.from(JSON.stringify({ heldBalanceResponses, marks, frames, artworkLayouts }, null, 2)) });
+      } finally {
+        release();
+        await restarted.unrouteAll({ behavior: 'wait' });
+      }
+    });
+  }
 
   test('[T-WEBVIEW-004][T-SYS-008][T-ADM-005][AND-012] 실제 Listen 대기 중 Lite로 최신 홈을 표시하고 구독 전환 뒤 변경·삭제를 반영한다', async ({ page, context, request }, testInfo) => {
     await observeIndexedDbOpens(page, true);

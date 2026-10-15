@@ -44,7 +44,9 @@ AND-014의 구간별 계측은 [Android 시작 상세 계측 설계](../../../..
 
 [DEC-004](../../../governance/decisions.md#dec-004)에 따라 Host Gate는 최초 진입과 resume 시 알림 접근·overlay capability를 모두 요구한다. 두 권한이 준비된 뒤 Web Shell을 표시한다. API 33+ 알림 표시 권한은 편의 capability일 뿐 이 gate에 포함하지 않는다. `OpenQuickEdit`은 이 OS capability와 별도로 사용자 QuickEdit 설정을 확인하며, 설정이 꺼져 있으면 `Suppressed(UserDisabled)`를 반환한다.
 
-첫 Web Shell 준비 중에는 [승인한 시작 이미지](../../../../operations/startup-brand-2026-10-15.md)를 원본 비율로 표시한다. `onPageFinished` 뒤 `postVisualStateCallback`이 첫 문서의 이미지까지 표시 가능한 상태를 확인하면 네이티브 이미지를 내리고 Web의 동일 로딩 화면에 연결한다. 인증·전체 홈 데이터 준비와 문서당 1.2초 최소 표시는 Web 계약이 소유하며 Native에 중복 타이머나 새 home-ready Bridge를 만들지 않는다. 시작 레이어는 전체 단색 배경을 유지하고 내부 ImageView는 24dp 바깥 여백·최대 240dp 폭·fitCenter로 전체 이미지를 보존한다. Web도 24px 바깥 여백·최대 240px 폭·contain을 사용한다. 941×1672 무손실 WebP 원본을 사용하고 화면 높이에 맞춘 강제 확대를 하지 않는다. 필수 권한 안내와 메인 문서 HTTP·네트워크 오류에서는 이미지를 내려 해당 화면을 가리지 않는다.
+첫 Web Shell 준비 중에는 [시작 화면 분리 설계](../../../../operations/startup-brand-fit-2026-10-15.md)에 따라 지갑 그림·가구명 공간·부제·점 세 개를 각각 배치한다. `onPageFinished` 뒤 `postVisualStateCallback`이 첫 문서의 이미지까지 표시 가능한 상태를 확인하면 네이티브 시작 레이어를 내리고 Web의 동일 로딩 화면에 연결한다. 인증·전체 홈 데이터 준비와 문서당 1.2초 최소 표시는 Web 계약이 소유하며 Native에 중복 타이머나 새 home-ready Bridge를 만들지 않는다.
+
+기존 1254px 아이콘 투명 원본의 지갑 그림만 무손실 WebP로 재사용하고, 제목·부제를 이미지에 넣지 않는다. 시작 레이어는 24dp 바깥 여백과 단색 `#F5F2FD` 배경을 유지하며 기본 ImageView의 fitCenter로 180dp 그림을 표시한다. Native 가용 높이 400dp 미만에서는 dimension resource로 120dp를 선택한다. Web은 같은 24px 여백·180px 그림을 사용하고 화면 높이 400px 미만이면 120px로 줄인다. Native에는 가구명이 없으므로 40dp 제목 공간만 예약한다. Web의 기존 HouseholdContext가 선택 가구명을 얻으면 Jua 로컬 폰트의 실제 텍스트로 표시하며, 미확정 시에도 40px 공간을 유지한다. 가구별 APK·이름 상수·이름용 cache·Bridge를 만들지 않는다. Native 부제는 15sp TextView, Web 부제는 기존 Pretendard의 15px 텍스트이며 제목 공간과 20dp/px 간격을 둔다. 필수 권한 안내와 메인 문서 HTTP·네트워크 오류에서는 시작 레이어를 내려 해당 화면을 가리지 않는다.
 
 ### 3.2 JavaScript Bridge v1
 

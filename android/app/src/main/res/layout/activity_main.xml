@@ -19,16 +19,49 @@
         android:padding="24dp"
         android:visibility="gone">
 
-        <ImageView
-            android:id="@+id/startupArtwork"
-            android:layout_width="wrap_content"
-            android:layout_height="match_parent"
+        <LinearLayout
+            android:id="@+id/startupContent"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
             android:layout_gravity="center"
-            android:adjustViewBounds="true"
-            android:maxWidth="240dp"
-            android:importantForAccessibility="no"
-            android:scaleType="fitCenter"
-            android:src="@drawable/startup_brand" />
+            android:gravity="center_horizontal"
+            android:orientation="vertical">
+
+            <ImageView
+                android:id="@+id/startupArtwork"
+                android:layout_width="@dimen/startup_artwork_size"
+                android:layout_height="@dimen/startup_artwork_size"
+                android:importantForAccessibility="no"
+                android:scaleType="fitCenter"
+                android:src="@drawable/startup_illustration" />
+
+            <TextView
+                android:id="@+id/startupHouseholdName"
+                android:layout_width="match_parent"
+                android:layout_height="40dp"
+                android:importantForAccessibility="no" />
+
+            <TextView
+                android:id="@+id/startupSubtitle"
+                android:layout_width="wrap_content"
+                android:layout_height="22dp"
+                android:layout_marginTop="20dp"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:letterSpacing="0.18"
+                android:text="@string/startup_subtitle"
+                android:textColor="#52698F"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <View
+                android:id="@+id/startupDots"
+                android:layout_width="34dp"
+                android:layout_height="6dp"
+                android:layout_marginTop="40dp"
+                android:background="@drawable/startup_dots"
+                android:importantForAccessibility="no" />
+        </LinearLayout>
     </FrameLayout>
 
     <LinearLayout
