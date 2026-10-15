@@ -1,4 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <dimen name="startup_artwork_size">180dp</dimen>
+    <dimen name="startup_artwork_size">182dp</dimen>
+    <dimen name="startup_title_height">40dp</dimen>
+    <dimen name="startup_title_margin_top">-5dp</dimen>
+    <dimen name="startup_subtitle_text_size">16sp</dimen>
+    <dimen name="startup_subtitle_height">24dp</dimen>
+    <dimen name="startup_subtitle_margin_top">7dp</dimen>
+    <dimen name="startup_dots_bottom_margin">40dp</dimen>
 </resources>

@@ -43,8 +43,8 @@ android {
         applicationId = "com.household.account"
         minSdk = 26
         targetSdk = 34
-        versionCode = 43
-        versionName = "2.0.5"
+        versionCode = 44
+        versionName = "2.0.6"
 
         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"$googleWebClientId\"")
         buildConfigField("String", "WEB_ENVIRONMENT_VERSION", "\"$webEnvironmentVersion\"")

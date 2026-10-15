@@ -193,14 +193,26 @@ class MainActivityInstrumentationTest {
             val expectedArtworkSize = activity.resources.getDimensionPixelSize(R.dimen.startup_artwork_size)
             assertEquals(expectedArtworkSize, artwork.width)
             assertEquals(expectedArtworkSize, artwork.height)
-            assertTrue("화면이 커져도 최대 180dp", artwork.width <= 180 * density + 1)
+            assertTrue("화면이 커져도 최대 198dp", artwork.width <= 198 * density + 1)
             assertEquals("그림 가운데 배치", content.width / 2f, artwork.left + artwork.width / 2f, 1f)
             assertEquals("구성 전체 세로 가운데 배치", screen.height / 2f, content.top + content.height / 2f, 1f)
             assertEquals("인증 전에는 다른 가구 이름을 표시하지 않음", "", householdName.text.toString())
-            assertEquals("가구 이름의 높이를 미리 확보", 40 * density, householdName.height.toFloat(), 1f)
-            assertEquals("제목과 부제 간격", 20 * density, (subtitle.top - householdName.bottom).toFloat(), 1f)
+            assertEquals("가구 이름의 높이를 미리 확보",
+                activity.resources.getDimensionPixelSize(R.dimen.startup_title_height), householdName.height)
+            assertEquals("그림과 제목 간격",
+                activity.resources.getDimensionPixelSize(R.dimen.startup_title_margin_top), householdName.top - artwork.bottom)
+            assertEquals("제목과 부제 간격",
+                activity.resources.getDimensionPixelSize(R.dimen.startup_subtitle_margin_top), subtitle.top - householdName.bottom)
             assertEquals("부제는 이미지 대신 실제 글자", "가계부 · 자산", subtitle.text.toString())
-            assertEquals("부제와 점 간격", 40 * density, (dots.top - subtitle.bottom).toFloat(), 1f)
+            assertEquals("부제의 글자 크기",
+                activity.resources.getDimensionPixelSize(R.dimen.startup_subtitle_text_size).toFloat(), subtitle.textSize, 0f)
+            assertEquals("부제의 줄 높이",
+                activity.resources.getDimensionPixelSize(R.dimen.startup_subtitle_height), subtitle.height)
+            assertEquals("점은 화면 하단에 독립 배치",
+                padding + activity.resources.getDimensionPixelSize(R.dimen.startup_dots_bottom_margin), screen.height - dots.bottom)
+            assertEquals("점 가운데 배치", screen.width / 2f, dots.left + dots.width / 2f, 1f)
+            assertEquals("점 크기", 7 * density, dots.height.toFloat(), 1f)
+            assertTrue("중앙 브랜드와 하단 점이 겹치지 않음", content.bottom < dots.top)
             assertTrue("24dp 여백 안에 전체 구성 보존", content.top >= padding - 1 &&
                 content.bottom <= screen.height - padding + 1)
             val displayedImage = RectF(artwork.drawable.bounds)

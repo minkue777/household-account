@@ -14,23 +14,23 @@ export default function AppLoadingScreen() {
         <Image
           src={brandIcon}
           alt=""
-          width={180}
-          height={180}
+          width={198}
+          height={198}
           priority
           unoptimized
-          className="startup-illustration h-auto w-[180px] max-w-full object-contain"
+          className="startup-illustration h-auto max-w-full object-contain"
         />
-        <h1 aria-label={householdName || undefined} className="startup-title min-h-10 max-w-full break-words text-[30px] leading-[40px] text-[#36578b]">
+        <h1 aria-label={householdName || undefined} className="startup-title max-w-full break-words text-[#36578b]">
           {householdName.endsWith('네') ? <>
             {householdName.slice(0, -1)}<span className="text-[#9755e9]">네</span>
           </> : householdName}
         </h1>
-        <p className="mt-5 text-[15px] font-semibold leading-[22px] tracking-[.18em] text-[#52698f]">가계부 · 자산</p>
-        <div aria-hidden="true" className="mt-10 flex gap-2">
-          <span className="h-1.5 w-1.5 rounded-full bg-[#9755e9]" />
-          <span className="h-1.5 w-1.5 rounded-full bg-[#4c90ee]" />
-          <span className="h-1.5 w-1.5 rounded-full bg-[#d7c7f4]" />
-        </div>
+        <p className="startup-subtitle text-[#52698f]">가계부 · 자산</p>
+      </div>
+      <div aria-hidden="true" className="startup-dots absolute flex gap-2">
+        <span className="h-[7px] w-[7px] rounded-full bg-[#9755e9]" />
+        <span className="h-[7px] w-[7px] rounded-full bg-[#4c90ee]" />
+        <span className="h-[7px] w-[7px] rounded-full bg-[#d7c7f4]" />
       </div>
       <span className="sr-only">로딩중...</span>
     </div>

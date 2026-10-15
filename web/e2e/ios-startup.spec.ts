@@ -272,7 +272,11 @@ test.describe('첫 홈 별도 서버 조회', () => {
       await restarted.goto('/');
       const firstDocument = await restarted.evaluate(() => performance.timeOrigin);
       await expect.poll(() => heldResponses).toBe(1);
-      await expect(restarted.getByRole('status')).toHaveText('로딩중...');
+      const loading = restarted.getByRole('status');
+      await expect(loading).toHaveAttribute('aria-busy', 'true');
+      await expect(loading.locator('.sr-only')).toHaveText('로딩중...');
+      await expect(loading.getByRole('heading', { name: '재무 E2E 가구네', exact: true })).toBeVisible();
+      await expect(loading.getByText('가계부 · 자산', { exact: true })).toBeVisible();
       await expect(restarted.locator('.calendar-glass')).toHaveCount(0);
       const loadError = restarted.getByRole('main').getByRole('alert');
       await expect(loadError).toHaveText('가계부를 불러오지 못했습니다.다시 시도');
@@ -367,6 +371,7 @@ test.describe('첫 홈 별도 서버 조회', () => {
         const artworkLayouts = [];
         for (const size of [
           { name: 'mobile', width: 390, height: 844, fit: 'contain' },
+          { name: 'reference', width: 360, height: 640, fit: 'contain' },
           { name: 'narrow-mobile', width: 360, height: 960, fit: 'contain' },
           { name: 'small-window', width: 240, height: 640, fit: 'contain' },
           { name: 'landscape', width: 844, height: 390, fit: 'contain' },
@@ -382,23 +387,35 @@ test.describe('첫 홈 별도 서버 조회', () => {
             const title = root.querySelector('h1')!.getBoundingClientRect();
             const subtitle = root.querySelector('p')!.getBoundingClientRect();
             const group = image.parentElement!.getBoundingClientRect();
+            const titleStyle = getComputedStyle(root.querySelector('h1')!);
+            const subtitleStyle = getComputedStyle(root.querySelector('p')!);
+            const dots = root.querySelector('.startup-dots')!.getBoundingClientRect();
             return { x: box.x, width: box.width, height: box.height,
               padding: parseFloat(getComputedStyle(root).paddingLeft),
               screenWidth: screen.width, screenHeight: screen.height,
               groupTop: group.top, groupBottom: group.bottom,
               subtitleGap: subtitle.top - title.bottom, titleHeight: title.height,
+              titleFontSize: parseFloat(titleStyle.fontSize), subtitleFontSize: parseFloat(subtitleStyle.fontSize),
+              subtitleWeight: subtitleStyle.fontWeight, subtitleFamily: subtitleStyle.fontFamily,
+              dotsTop: dots.top, dotsBottomInset: screen.bottom - dots.bottom,
               physicalWidth: box.width * devicePixelRatio,
               fontLoaded: document.fonts.check(`30px ${getComputedStyle(root.querySelector('h1')!).fontFamily}`) };
           });
           expect(layout.padding).toBe(24);
           expect(layout.x + layout.width / 2).toBeCloseTo(layout.screenWidth / 2, 1);
-          expect(layout.width).toBeCloseTo(layout.screenHeight < 400 ? 120 : 180, 1);
+          expect(layout.width).toBeCloseTo(layout.screenHeight < 400 ? 120 : Math.min(size.width * .5077, 198), 1);
           expect(layout.height).toBeCloseTo(layout.width, 1);
           expect(layout.physicalWidth).toBeLessThanOrEqual(1254);
           expect(layout.groupTop).toBeGreaterThanOrEqual(24 - 0.05);
           expect(layout.groupBottom).toBeLessThanOrEqual(layout.screenHeight - 24 + 0.05);
-          expect(layout.titleHeight).toBeCloseTo(40, 1);
-          expect(layout.subtitleGap).toBeCloseTo(20, 1);
+          expect(layout.titleHeight).toBeCloseTo(layout.titleFontSize * 4 / 3, 1);
+          expect(layout.subtitleGap).toBeCloseTo(8, 1);
+          expect(layout.titleFontSize).toBeCloseTo(Math.max(24, Math.min(size.width * .0846, 33)), 1);
+          expect(layout.subtitleFontSize).toBeCloseTo(Math.max(14, Math.min(size.width * .0436, 17)), 1);
+          expect(layout.subtitleWeight).toBe('700');
+          expect(layout.subtitleFamily).toBe('sans-serif');
+          expect(layout.dotsTop).toBeGreaterThan(layout.groupBottom + 16);
+          expect(layout.dotsBottomInset).toBeCloseTo(size.height < 400 ? 24 : 64, 1);
           expect(layout.fontLoaded).toBe(true);
           artworkLayouts.push({ ...size, ...layout });
           await restarted.screenshot({ path: testInfo.outputPath(`startup-brand-${size.name}.png`) });
@@ -507,12 +524,12 @@ test.describe('첫 홈 별도 서버 조회', () => {
       }), COMPLETE_PAINT);
       expect(display.frames.map(frame => frame.phase)).toEqual(['loading', 'home']);
       const homeAt = display.frames.find(frame => frame.phase === 'home')!.atMs;
-      expect(homeAt).toBeGreaterThanOrEqual(1200);
+      expect(homeAt).toBeGreaterThanOrEqual(2000);
       expect(display.paintWhileLoading).toBe(false);
       expect(display.paintedAt).toBeGreaterThanOrEqual(homeAt);
       expect(display.paintedAt).toBeGreaterThanOrEqual(display.homeReadyAt);
       expect(timings.firstHomeCompletePaint).toBe(Math.round(display.paintedAt * 1000) / 1000);
-      // 실제 서버가 1.2초보다 느릴 수 있으므로 빠른 경로는 가짜 타이머 unit에서 별도 검증합니다.
+      // 실제 서버가 2초보다 느릴 수 있으므로 빠른 경로는 가짜 타이머 unit에서 별도 검증합니다.
       // 여기서는 실서버 준비 시점과 실제 화면 전환·접속 계측을 함께 남깁니다.
       for (const source of ['ledger', 'categories', 'currencyPreferences', 'currencyBalances']) {
         expect(timings).toHaveProperty(source + 'InitialReadReceived');

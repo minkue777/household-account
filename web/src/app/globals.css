@@ -2,13 +2,35 @@
 @tailwind components;
 @tailwind utilities;
 
+.startup-illustration {
+  width: min(50.77vw, 198px);
+}
+
 .startup-title {
   font-family: var(--font-startup-title), 'Pretendard Variable', sans-serif;
+  font-size: clamp(24px, 8.46vw, 33px);
   font-weight: 400;
+  line-height: 1.333333;
+  min-height: 1.333333em;
+  margin-top: -6px;
+}
+
+.startup-subtitle {
+  font-family: sans-serif;
+  margin-top: 8px;
+  font-size: clamp(14px, 4.36vw, 17px);
+  font-weight: 700;
+  line-height: 1.529412;
+  letter-spacing: .18em;
+}
+
+.startup-dots {
+  bottom: calc(64px + env(safe-area-inset-bottom, 0px));
 }
 
 @media (max-height: 399px) {
   .startup-illustration { width: 120px; }
+  .startup-dots { bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
 }
 
 :root {

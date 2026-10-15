@@ -125,3 +125,36 @@ Web 제목에는 로컬 Jua WOFF2(368,804바이트)를 사용하고 OFL 라이�
 Jua 원본은 Google Fonts `ofl/jua/Jua-Regular.ttf`이며 글리프를 수정하거나 특정 가구 문자만 추출하지 않고 FontTools로 WOFF2 변환했습니다. 원본 라이선스 `OFL-Jua.txt`를 함께 보존하며 이름이 달라도 같은 글꼴을 사용할 수 있습니다. 서명 APK는 v2.0.5/code43, 11,267,440바이트, SHA-256 `37f07eadda45350f0a36b323493522e4bc9b45b4864fce863094f902b2d01d11`입니다. 기존 인증서 SHA-256 `09bd620a673ce537ab3bcd54fe2cf4d2c6d806e553d456beb7ebd80830397bfa`와 일치하고 apksigner 검증을 통과했습니다.
 
 로그: `%TEMP%/household-startup-text-{build,types,prepare,e2e,native,native-capture}-20261015.log`. Web Git 배포와 APK 공개는 이 검증 결과를 포함한 커밋으로 진행하며 원격 CI는 해당 SHA로 후속 확인합니다.
+
+
+## v2.0.6 후속: 지정 시안 비율·하단 점·최소 2초
+
+사용자가 `1000017858.jpg`의 그림·제목·부제 크기와 굵기를 지정하고 점 세 개만 원래처럼 화면 하단으로 이동하도록 요청했습니다. 후속 요청으로 최소 표시 시간을 2초로 늘렸습니다. 720×1280 시안을 390px 폭으로 환산하면 그림의 색상 영역은 약 156.5×128.4px, 제목은 132.7×26.5px, 부제는 107.8×15.7px입니다. 기존 대비 그림·제목은 약 10%, 부제는 약 15% 확대하고 부제의 굵기를 600에서 700으로 바꿉니다. Jua는 원래 굵은 단일 서체이므로 합성 굵기를 추가하지 않습니다.
+
+중앙에는 그림·제목·부제만 배치합니다. Web 화면 폭 390px를 기준으로 그림은 198px, 제목은 글자 크기 33px와 줄높이 44px입니다. 제목의 위쪽 여백은 그림 요소 아래에서 -6px이며, 부제는 글자 크기 17px와 줄높이 26px, 제목 요소 아래 8px 간격을 사용합니다. 작은 화면 폭에서는 비례 축소하되 제목 24px·부제 14px를 하한으로 둡니다. 그림의 투명 여백과 글꼴에서 실제 색이 있는 영역을 기준으로 하면 시안의 그림→제목 약 26.5px, 제목→부제 약 21.7px 간격에 대응합니다. 7px 점 세 개는 화면 하단에서 64px와 safe-area를 더한 위치로 이동합니다. 화면 높이가 400px 미만이면 그림은 120px, 하단 간격은 24px로 줄여 가로 화면에서도 겹치지 않게 합니다.
+
+Native는 같은 원본과 대응하는 dimension resource를 사용해 그림을 182/198dp로 표시하고, 높이가 작은 화면에서는 120dp로 줄입니다. 하단 점은 FrameLayout의 bottom 정렬만 사용하므로 별도 런타임 배치 코드가 없습니다. 가구명이 미확정인 구간은 40/44dp 공간만 예약합니다. 기존 선택 가구명·한글 실제 텍스트·단색 배경·권한/오류 화면·첫 문서 visual callback 전환 계약을 유지합니다.
+
+`STARTUP_MINIMUM_DISPLAY_MS`는 2,000입니다. 기존 Provider에서 인증·조회와 함께 시작하고, 준비된 홈은 2초가 끝나면 바로 표시합니다. 2초보다 늦은 조회 뒤에는 추가 대기를 더하지 않으며 오류는 즉시 표시합니다. 관련 단위 계약은 1,999ms/2,000ms 경계와 2.5초 조회 완료, 재조회·경로 전환에서 타이머를 다시 시작하지 않는 동작을 검증합니다. Android에 별도 타이머는 추가하지 않습니다. Web Git 자동배포와 Android v2.0.6 / code 44 대상이며 Firebase는 변경하지 않습니다.
+
+### 이전 CI 실패 보존
+
+v2.0.4의 CI `38703934405`는 Web E2E도 112 passed / 1 failed로 끝났습니다. `notification-deeplink.spec.ts:12`의 legacy 검사는 링크 이동 전 fixture 준비 과정에서 `/`로 다시 이동한 뒤 로그인 화면으로 돌아가 달력을 30초 동안 찾지 못했습니다. 재탐색 약 95ms 전 여러 리소스에서 WebKit 내부 오류가, 재탐색 중에는 Auth IndexedDB closing 오류가 관측됐습니다. 시작 이미지는 두 번 모두 HTTP 200이었으며 최초 원인과 운영 재현 여부는 미확정입니다. 분석은 `%TEMP%/household-startup-v204-web-failure-38703934405-analysis.txt`에 보존했습니다.
+
+v2.0.5의 CI `38706624724`는 실제 시작 화면 검사가 통과했지만, Android 48개 중 기존 `backgroundRendererTermination` 검사가 ActivityScenario의 `CREATED` 전환 중 실패했습니다. 테스트용 EmptyActivity가 닫히면서 MainActivity가 `STOPPED`에서 `RESUMED`로 돌아왔고 renderer 종료 단계에는 도달하지 않았습니다. 정확한 helper 종료 요청자는 미확정이며 시작 화면 변경으로 해결됐다고 하지 않습니다. 분석은 `%TEMP%/household-startup-v205-ci-38706624724-analysis.txt`에 보존했습니다. 기존 검사·제한·실패 판정을 유지하고 최신 후보의 전체 Android 결과를 후속 확인합니다.
+
+### v2.0.6 로컬 검증
+
+관련 Jest 2개 파일 32개 검사가 통과했습니다. 실제 Firebase Emulator와 production build를 사용하는 WebKit에서 두 가구의 시작 화면 검사 2개가 통과했습니다(전체 1.0분). 실제 API 36.1의 시작 화면 보류·회전·전환 검사 1개도 통과했습니다(4.971초). Android release·debug·test 빌드는 11초에 완료됐습니다.
+
+첫 Android 검사는 부제 크기의 기대값 44.625px와 실제 값 45px를 비교해 실패했습니다. TextView는 dimension으로 지정한 textSize를 정수 px로 반올림하므로, 이는 제품 크기 오류가 아닌 테스트 관측 오류였습니다. 기대값도 `getDimensionPixelSize`로 읽어 같은 변환 계약을 확인하도록 수정했습니다. 허용 오차를 넓히지 않았습니다.
+
+로그는 `%TEMP%/household-startup-reference-{build,e2e,native}-20261015.log`에 보존했습니다.
+
+최종 WebKit 캡처에서 Pretendard Variable은 계산된 굵기가 700이어도 부제가 얇게 표시됐습니다. 시작 화면 부제에만 시스템 sans-serif 굵기 700을 사용해 Native의 굵은 실제 텍스트와 맞췄습니다. 제목 Jua와 기존 그림 원본은 그대로 유지하며, 비교 캡처는 `%TEMP%/household-subtitle-{css,axis,system}-weight.png`에 보존했습니다.
+
+v2.0.5 Web E2E는 113 passed / 1 failed입니다. 무응답 재시도 검사에서 status 전체 문자열을 `로딩중...`과 정확히 비교했지만, 분리된 가구명·부제도 같은 status에 포함되어 기존 기대값이 깨졌습니다. 로딩 안내·가구명·부제를 각각 확인하도록 관측을 갱신하며, 기존 20초 오류·무표시·재시도 후 최신 값·새 문서·계측 조건은 유지합니다. 로그는 `%TEMP%/household-startup-v205-web-38706624724.log`에 보존했습니다.
+
+서명 APK는 v2.0.6/code44, 11,271,696바이트, SHA-256 `8cae71f3c627e9dc06a6b4ff509896c2787bf66a9cef6dd725e1767007aebd3e`입니다. apksigner v2와 기존 인증서 일치를 확인했습니다. 이전 공개 APK는 덮어쓰지 않습니다.
+
+최종 시스템 글꼴 적용 후 실제 Emulator·production build·WebKit의 두 가구 시안 검사와 Listen 보류 중 Lite 첫 홈 전환 검사 총 3개가 통과했습니다(1.2분). 최소 2초 이후 로딩→준비된 홈의 두 단계만 나타나며 전환 시점·서버 준비·첫 paint 계측이 일치했습니다. 최종 캡처 `%TEMP%/household-startup-v206-final.png`에서 부제 굵기와 하단 점 위치도 확인했습니다. 로그는 `%TEMP%/household-startup-reference-final-e2e-20261015.log`입니다.

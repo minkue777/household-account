@@ -261,7 +261,7 @@ describe('first home complete paint contract', () => {
     return <StartupDisplayProvider><HouseholdGuard><LedgerPage transactionType="expense" /></HouseholdGuard></StartupDisplayProvider>;
   }
 
-  it('[T-LED-001] 인증과 데이터가 빨리 끝나도 처음 1.2초는 같은 시작 화면을 유지한 뒤 홈을 계측한다', () => {
+  it('[T-LED-001] 인증과 데이터가 빨리 끝나도 처음 2초는 같은 시작 화면을 유지한 뒤 홈을 계측한다', () => {
     jest.useFakeTimers({ doNotFake: ['requestAnimationFrame', 'cancelAnimationFrame'] });
     householdLoading = true;
     const view = render(startupHome());
@@ -275,7 +275,7 @@ describe('first home complete paint contract', () => {
     expect(screen.getByRole('status')).toHaveTextContent('로딩중...');
     expect(screen.queryByTestId('home-calendar')).not.toBeInTheDocument();
     expect(markWebFirstHomeCompletePaint).not.toHaveBeenCalled();
-    act(() => jest.advanceTimersByTime(399));
+    act(() => jest.advanceTimersByTime(1_199));
     expect(screen.queryByTestId('home-calendar')).not.toBeInTheDocument();
     act(() => jest.advanceTimersByTime(1));
     expect(screen.getByTestId('home-calendar')).toBeVisible();
@@ -288,7 +288,7 @@ describe('first home complete paint contract', () => {
   it('[T-LED-001] 최소시간보다 느린 데이터는 도착 즉시 표시하고 대기를 다시 시작하지 않는다', () => {
     jest.useFakeTimers({ doNotFake: ['requestAnimationFrame', 'cancelAnimationFrame'] });
     const view = render(startupHome());
-    act(() => jest.advanceTimersByTime(2_000));
+    act(() => jest.advanceTimersByTime(2_500));
     expect(screen.getByRole('status')).toHaveTextContent('로딩중...');
     prepareHome();
     view.rerender(startupHome());

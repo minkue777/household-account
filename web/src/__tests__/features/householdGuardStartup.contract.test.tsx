@@ -28,12 +28,12 @@ describe('[T-LED-001] 문서 최초 시작 화면의 경로·인증 경계', () 
   });
   afterEach(() => jest.useRealTimers());
 
-  it.each(['/assets', '/settings', '/stats'])('인증된 %s 직접 진입은 최초 1.2초 후 페이지를 표시한다', pathname => {
+  it.each(['/assets', '/settings', '/stats'])('인증된 %s 직접 진입은 최초 2초 후 페이지를 표시한다', pathname => {
     mockPathname = pathname;
     const view = render(guardedPage());
     expect(screen.getByRole('status')).toHaveTextContent('로딩중...');
     expect(screen.queryByTestId('page-content')).not.toBeInTheDocument();
-    act(() => jest.advanceTimersByTime(1_199));
+    act(() => jest.advanceTimersByTime(1_999));
     expect(screen.queryByTestId('page-content')).not.toBeInTheDocument();
     act(() => jest.advanceTimersByTime(1));
     expect(screen.getByTestId('page-content')).toBeVisible();
@@ -56,7 +56,7 @@ describe('[T-LED-001] 문서 최초 시작 화면의 경로·인증 경계', () 
     render(guardedPage());
     expect(screen.getByRole('status')).toBeVisible();
     expect(screen.queryByTestId('household-login')).not.toBeInTheDocument();
-    act(() => jest.advanceTimersByTime(1_200));
+    act(() => jest.advanceTimersByTime(2_000));
     expect(screen.getByTestId('household-login')).toBeVisible();
     expect(screen.queryByTestId('page-content')).not.toBeInTheDocument();
   });
@@ -79,7 +79,7 @@ describe('[T-LED-001] 문서 최초 시작 화면의 경로·인증 경계', () 
     expect(screen.getByRole('heading')).toBeEmptyDOMElement();
     expect(screen.queryByText('함께 쓰는 가계부')).not.toBeInTheDocument();
     expect(screen.queryByTestId('household-login')).not.toBeInTheDocument();
-    act(() => jest.advanceTimersByTime(1_200));
+    act(() => jest.advanceTimersByTime(2_000));
     expect(screen.getByTestId('household-login')).toBeVisible();
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
