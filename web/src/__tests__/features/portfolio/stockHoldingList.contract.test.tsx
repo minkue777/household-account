@@ -210,6 +210,7 @@ describe('StockHoldingList 수동 보유 항목 수정 계약', () => {
     });
     expect(screen.getAllByText('최근 지급 360원 · 연 4회')).toHaveLength(2);
     expect(screen.getAllByText('최근 지급일: 2026-05-20')).toHaveLength(2);
+    expect(screen.getAllByText('배당수익률 2.00%')).toHaveLength(2);
     expect(screen.queryByLabelText('수량')).not.toBeInTheDocument();
 
     // 시세 snapshot/배열 순서와 편집 상태 변경은 같은 종목을 재조회하지 않습니다.
@@ -253,5 +254,13 @@ describe('StockHoldingList 수동 보유 항목 수정 계약', () => {
     await act(async () => { render(<StockHoldingList {...props} />); });
     expect(screen.getByText('최근 지급 420원 · 연 4회')).toBeInTheDocument();
     expect(mockedGetDividendProjection).toHaveBeenCalledTimes(3);
+  });
+
+  test.each([0, 0.64])('[MARKET-001] 가구 배당 이력이 없어도 공급자가 제공한 배당수익률 %s를 표시한다', async dividendYield => {
+    mockedGetDividendProjection.mockResolvedValue({ code: '005930', name: '삼성전자', recentDividend: null, paymentDate: null, frequency: null, dividendYield, annualDividendPerShare: null, isEstimated: false, paymentEvents: [] });
+    await act(async () => { render(<StockHoldingList holdings={[stockHolding()]} isLoading={false} isRefreshing={false} onRefresh={jest.fn()} assetId="asset-1" />); });
+    expect(screen.getByText(`배당수익률 ${dividendYield.toFixed(2)}%`)).toBeInTheDocument();
+    expect(screen.queryByText(/최근 지급/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/연간 추정/)).not.toBeInTheDocument();
   });
 });

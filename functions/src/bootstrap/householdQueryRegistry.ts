@@ -6,6 +6,7 @@ import {
   RemoteInstrumentCatalogRunSource,
 } from "../adapters/firebase/portfolio/firebaseInstrumentCatalog";
 import { FirebasePortfolioDividendProjectionReader } from "../adapters/firebase/portfolio/firebasePortfolioDividendProjectionReader";
+import { NaverDividendYieldReader } from "../adapters/http/naverDividendYieldReader";
 import { FirebasePortfolioInstrumentSearch } from "../adapters/firebase/portfolio/firebasePortfolioInstrumentSearch";
 import { FirebasePortfolioMarketData } from "../adapters/firebase/portfolio/firebasePortfolioMarketData";
 import { FirebasePortfolioQuoteObservations } from "../adapters/firebase/portfolio/firebasePortfolioQuoteObservations";
@@ -19,6 +20,8 @@ import { HouseholdQueryRejection, requireHouseholdReadScope } from "./queries/ho
 
 export function createFirebaseHouseholdQueryRegistry(db: firestore.Firestore) {
   let portfolioInstrumentSearch: FirebasePortfolioInstrumentSearch | undefined;
+  const dividendProjection = new FirebasePortfolioDividendProjectionReader(db);
+  const dividendYield = new NaverDividendYieldReader();
 
   function getPortfolioInstrumentSearch(): FirebasePortfolioInstrumentSearch {
     if (portfolioInstrumentSearch !== undefined) return portfolioInstrumentSearch;
@@ -72,7 +75,18 @@ export function createFirebaseHouseholdQueryRegistry(db: firestore.Firestore) {
         search: (input) => getPortfolioInstrumentSearch().search(input),
       },
       quotes: new FirebasePortfolioMarketData(undefined, new FirebasePortfolioQuoteObservations(db)),
-      dividends: new FirebasePortfolioDividendProjectionReader(db),
+      dividends: {
+        async read(input) {
+          const [projection, yieldValue] = await Promise.all([
+            dividendProjection.read(input),
+            dividendYield.read(input.instrumentCode).catch(() => {
+              console.warn("DIVIDEND_YIELD_UNAVAILABLE");
+              return null;
+            }),
+          ]);
+          return { ...projection, dividendYield: yieldValue };
+        },
+      },
     }),
     ...createAccessHouseholdQueryHandlers(db),
   ]);

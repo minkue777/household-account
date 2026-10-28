@@ -280,7 +280,7 @@ export function createPortfolioMarketHouseholdQueryHandlers(input: {
     [
       "portfolio.get-dividend-projection.v1",
       {
-        permitsAdministrator: true,
+        permitsAdministrator: true, usesExternalQueryQuota: true,
         async execute(context) {
           const payload = context.envelope.payload;
           const instrumentCode = exactKeys(payload, ["instrumentCode"])

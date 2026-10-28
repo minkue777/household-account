@@ -87,6 +87,9 @@ describe("Portfolio market household query handlers", () => {
 
     expect(fixture.search).not.toHaveBeenCalled();
     expect(fixture.getQuote).not.toHaveBeenCalled();
+    await expect(fixture.execute("portfolio.get-dividend-projection.v1", { instrumentCode: "005930" }))
+      .resolves.toMatchObject({ kind: "error", code: "FORBIDDEN" });
+    expect(fixture.readDividend).not.toHaveBeenCalled();
   });
 
   it("[T-MARKET-004][MARKET-002] routes an explicit market to the shared quote provider without inferring it from code", async () => {

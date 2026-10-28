@@ -204,9 +204,9 @@ function HoldingSummaryCard({
         </div>
       ) : dividendInfo === null ? (
         <p className="mt-2 text-xs text-slate-500">배당 정보를 불러오지 못했습니다.</p>
-      ) : holdingType === 'stock' && dividendSummary ? (
+      ) : holdingType === 'stock' && (dividendSummary || dividendYieldLabel) ? (
         <div className="mt-2 border-t border-slate-200 pt-2">
-          <p className="text-xs text-slate-500">{dividendSummary}</p>
+          {dividendSummary ? <p className="text-xs text-slate-500">{dividendSummary}</p> : null}
           {dividendYieldLabel ? <p className="mt-1 text-xs text-slate-400">{dividendYieldLabel}</p> : null}
           {dividendInfo?.paymentDate && !dividendInfo.isEstimated ? (
             <p className="mt-0.5 text-xs text-slate-400">최근 지급일: {dividendInfo.paymentDate}</p>
