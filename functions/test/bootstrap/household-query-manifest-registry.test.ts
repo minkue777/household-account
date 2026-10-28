@@ -32,7 +32,11 @@ describe("household query runtime registry", () => {
     expect([...registry].filter(([, handler]) => !handler.permitsAdministrator).map(([name]) => name))
       .toEqual(["shortcut.get-credential-status.v1"]);
     expect([...registry].filter(([, handler]) => handler.usesExternalQueryQuota).map(([name]) => name))
-      .toEqual(["portfolio.search-instruments.v1", "portfolio.get-instrument-quote.v1"]);
+      .toEqual([
+        "portfolio.search-instruments.v1",
+        "portfolio.get-instrument-quote.v1",
+        "portfolio.get-dividend-projection.v1",
+      ]);
   });
 
   it("누락·비공개·중복 query handler는 composition 단계에서 실패한다", () => {
