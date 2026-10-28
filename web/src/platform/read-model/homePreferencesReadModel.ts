@@ -23,6 +23,9 @@ export function subscribeToHomePreferencesDocument(
   error?: Observer['error'],
 ): () => void {
   const scope = getClientSessionScope();
+  if (process.env.NEXT_PUBLIC_E2E_TEST_MODE === 'true') console.debug('home-preferences-read', JSON.stringify({
+    stage: 'subscribe', sessionGeneration: scope?.sessionGeneration,
+  }));
   const observer = { next, error };
   let entry = entries.get(householdId);
   if (entry && entry.scope !== scope) {
@@ -46,6 +49,10 @@ export function subscribeToHomePreferencesDocument(
       const current = () => entries.get(householdId) === created && getClientSessionScope() === scope
         && created.generation === generation;
       const publish = (data: DocumentData | undefined) => {
+        if (process.env.NEXT_PUBLIC_E2E_TEST_MODE === 'true') console.debug('home-preferences-read', JSON.stringify({
+          stage: 'publish', current: current(), observers: created.observers.size,
+          version: Number.isSafeInteger(data?.aggregateVersion) ? data?.aggregateVersion : null,
+        }));
         if (!current()) return;
         created.data = data;
         created.loaded = true;
@@ -62,6 +69,11 @@ export function subscribeToHomePreferencesDocument(
           recordClientStartupTiming('currencyPreferencesListenStarted');
           return onSnapshot(doc(db, 'households', householdId, 'homePreferences', 'home'),
             { includeMetadataChanges: true }, snapshot => {
+              if (process.env.NEXT_PUBLIC_E2E_TEST_MODE === 'true') console.debug('home-preferences-read', JSON.stringify({
+                stage: 'snapshot', current: current(), scopeCurrent: getClientSessionScope() === scope,
+                fromCache: snapshot.metadata.fromCache,
+                version: Number.isSafeInteger(snapshot.data()?.aggregateVersion) ? snapshot.data()?.aggregateVersion : null,
+              }));
               if (!current() || snapshot.metadata.fromCache) return;
               recordClientStartupTiming('currencyPreferencesServerSnapshotReceived');
               publish(snapshot.data());
@@ -78,6 +90,9 @@ export function subscribeToHomePreferencesDocument(
   }
   const owned = entry;
   return () => {
+    if (process.env.NEXT_PUBLIC_E2E_TEST_MODE === 'true') console.debug('home-preferences-read', JSON.stringify({
+      stage: 'unsubscribe', observers: owned.observers.size,
+    }));
     owned.observers.delete(observer);
     if (owned.observers.size === 0) {
       owned.stop();

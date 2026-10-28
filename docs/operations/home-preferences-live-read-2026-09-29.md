@@ -46,3 +46,15 @@ SHA `1cef6a79c4ed05b2faf039125c607351c54787a0`의 [CI 36448234017](https://githu
 `a7c803d`의 CI `37258790487`에서 같은 표시 실패가 발생했습니다(100 passed/1 failed). 이번 trace의 `home-preferences-live-read`에는 canonical version 1과 브라우저가 받은 `documentChange`의 YEARLY_EXPENSE/LOCAL_CURRENCY_BALANCE/version 1이 모두 있습니다. target 1002가 유지되고 16개 frame 파싱, 오류·잘림 0입니다. 화면은 30초 뒤에도 월 지출/월 잔여 예산입니다. 따라서 이 실행의 저장 실패나 서버→브라우저 전달 누락은 배제할 수 있지만 SDK→공유 구독→React 사이의 정확한 중단점은 아직 확인하지 못했습니다.
 
 로컬에서는 임시 구독/표시 로그를 넣고 실제 Emulator·production build·Chromium으로 같은 검사를 6회 실행했으나 모두 통과했습니다(46초). 임시 제품 로그는 제거했습니다. `TEMP/household-simplicity-home-probe-20261005.log`, 실패 artifact의 `resources/73e1d0af1a595608d348768793e10ae696979da1`을 근거로 보존하며 제품 버그 해결로 기록하지 않습니다. 이전 `598f236` CI `37258239418`의 web-e2e는 success이고 Web unit mock 문제만 남았으며 해당 문제는 `21e5606`에서 수정했습니다.
+
+## 2026-10-28 반복 실패와 SDK 이후 관측
+
+CI `40625003540` (`185ef57d`)에서 같은 홈 설정 검사 1개가 실패했습니다(119 passed/1 failed). 첫 카드는 30초 동안 `10월 지출0`, 오른쪽은 월 잔여 예산을 유지했습니다. 배당 복원 제품 `37c14dd1`의 직전 CI `40624482267`에서는 web-e2e가 성공했습니다. 최신 실패를 이전 성공으로 대체하지 않습니다.
+
+실패 첨부는 canonical version 1 저장과 같은 가구 target 1002의 `YEARLY_EXPENSE`/`LOCAL_CURRENCY_BALANCE`/version 1 문서 전달을 모두 확인합니다. 17개 frame에 파싱 오류·잘림이 없었습니다. 따라서 이번에도 저장 실패·브라우저 전송 누락은 배제하지만 SDK callback, 공유 구독의 세션 확인, React 적용 중 어느 단계가 멈췄는지는 미확정입니다. 배당 파서/조회 결함이나 Emulator 전용 문제로 단정하지 않습니다.
+
+실제 Emulator·production build·Chromium에 임시 경계 관측을 넣은 국소 재현 12회는 모두 통과했습니다(1.8분). 관측 자체가 경합 타이밍에 영향을 줄 수 있으므로 재현되지 않았다는 사실을 원인 해결로 표현하지 않습니다. 원본 artifact·trace·로그는 `TEMP/household-home-preferences-ci-40625003540`, `TEMP/household-home-preferences-trace-40625003540`, `TEMP/household-dividend-yield-ci-40625003540.log`, `TEMP/household-home-preferences-probe-20261028.log`에 보존했습니다.
+
+다음 실패를 좁히기 위해 `NEXT_PUBLIC_E2E_TEST_MODE=true` 빌드에서만 SDK snapshot, 공유 publish/구독 수명, hook 수신과 render를 기록합니다. stage·정수 version/세션 세대·관측자 수·cache/current/active/ready 여부만 출력하며 가구·사용자 식별자, 문서 원문, 인증값은 포함하지 않습니다. E2E는 최대 500개를 성공·실패 첨부에 보존하고, 정상 경로에서는 네 경계의 version 1과 유효 상태 및 기록 잘림 없음도 검증합니다. 기존 30초 UI assertion, canonical 저장, 충돌·재전송·새로고침 검증은 유지합니다. 운영 구독 동작·캐시 정책·타임아웃은 바꾸지 않습니다.
+
+최종 관측을 포함한 실제 Emulator·production build·Chromium 파일 검사는 2개 모두 통과했습니다(50.9초). 관련 Jest 2개 파일 45개, TypeScript 검사도 통과했습니다. 별도로 E2E mode를 끈 운영 build를 완료하고 `.next/static/chunks`에 진단 문자열이 없음을 확인했습니다. 로컬 로그는 `TEMP/household-home-preferences-{observation,production}-20261028.log`이며 테스트 서버와 에뮬레이터는 종료됐습니다. Firebase·APK는 변경하지 않으며 Web 소스 변경에 따른 Git 자동배포는 확인합니다.

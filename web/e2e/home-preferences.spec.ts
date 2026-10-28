@@ -7,6 +7,16 @@ test.beforeEach(async () => { await resetTestAccount(); });
 
 test('[T-HOME-002][T-HOME-003][HOME-001][HOME-003][HOME-004] 기본 홈 카드와 실제 설정 Command·version 충돌·동일 카드 거절을 검증한다', async ({ page, request }, testInfo) => {
   const responseObservation = await observeFirestoreListenResponses(page);
+  // 테스트 빌드의 SDK callback → 공유 구독 → React 경계만 관측합니다.
+  // 가구·사용자 식별자와 문서 원문은 제품 probe가 출력하지 않습니다.
+  const clientReads: Record<string, unknown>[] = [];
+  let clientReadsTruncated = false;
+  page.on('console', entry => {
+    const prefix = 'home-preferences-read ';
+    if (!entry.text().startsWith(prefix)) return;
+    if (clientReads.length >= 500) { clientReadsTruncated = true; return; }
+    clientReads.push(JSON.parse(entry.text().slice(prefix.length)));
+  });
   // 열린 Listen 응답은 Playwright trace에 본문이 남지 않습니다. 허용된 응답 필드와
   // 전송 수명을 함께 관측하며 요청 내용·인증값은 기록하지 않습니다.
   const listens: { startedAt: number; method: string; acknowledgedMessageId: string | null; status?: number; finishedAt?: number; error?: string }[] = [];
@@ -52,8 +62,16 @@ test('[T-HOME-002][T-HOME-003][HOME-001][HOME-003][HOME-004] 기본 홈 카드�
       left: 'YEARLY_EXPENSE', right: 'LOCAL_CURRENCY_BALANCE', aggregateVersion: 1,
     }));
     expect(await responseObservation.read()).toMatchObject({ parseErrors: 0, truncated: false });
+    for (const [stage, flags] of [
+      ['snapshot', { current: true, fromCache: false }], ['publish', { current: true }],
+      ['hook', { active: true }], ['render', { ready: true }],
+    ] as const) {
+      expect(clientReads, `${stage} 경계까지 version 1이 도달해야 합니다.`)
+        .toContainEqual(expect.objectContaining({ stage, version: 1, ...flags }));
+    }
+    expect(clientReadsTruncated).toBe(false);
     await testInfo.attach('home-preferences-listen-responses', {
-      body: JSON.stringify(await responseObservation.read()), contentType: 'application/json',
+      body: JSON.stringify({ responses: await responseObservation.read(), clientReads, clientReadsTruncated }), contentType: 'application/json',
     });
   } catch (error) {
     await testInfo.attach('home-preferences-live-read', {
@@ -62,6 +80,7 @@ test('[T-HOME-002][T-HOME-003][HOME-001][HOME-003][HOME-004] 기본 홈 카드�
         cards: await page.locator('.balance-card-glass').allTextContents(),
         listens,
         responses: await responseObservation.read(),
+        clientReads, clientReadsTruncated,
       }), contentType: 'application/json',
     });
     throw error;

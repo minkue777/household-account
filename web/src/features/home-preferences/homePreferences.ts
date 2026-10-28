@@ -20,6 +20,9 @@ export function useHomePreferences() {
     let active = true;
     setError(false);
     const unsubscribe = subscribeToHomePreferencesDocument(householdKey, value => {
+      if (process.env.NEXT_PUBLIC_E2E_TEST_MODE === 'true') console.debug('home-preferences-read', JSON.stringify({
+        stage: 'hook', active, version: Number.isSafeInteger(value?.aggregateVersion) ? value?.aggregateVersion : null,
+      }));
       if (!active) return;
       const data = value ?? {};
       setSnapshot({ householdId: householdKey,
@@ -32,5 +35,8 @@ export function useHomePreferences() {
     return () => { active = false; unsubscribe(); };
   }, [householdKey, remoteReadEpoch, fallback.leftCard, fallback.rightCard, household?.homeSummaryConfigVersion, household?.selectedLocalCurrencyType]);
   const current = snapshot?.householdId === householdKey ? snapshot : undefined;
+  if (process.env.NEXT_PUBLIC_E2E_TEST_MODE === 'true') console.debug('home-preferences-read', JSON.stringify({
+    stage: 'render', ready: current !== undefined, version: current?.version,
+  }));
   return { configuration: current?.configuration ?? fallback, version: current?.version, selectedType: current?.selectedType ?? household?.selectedLocalCurrencyType, ready: current !== undefined, error };
 }
