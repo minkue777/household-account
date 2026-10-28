@@ -51,6 +51,7 @@ describe("systemAdmin 전용 관리자 callable 경계", () => {
         "admin.household-members.restore",
         "portfolio.asset.restore.deleted",
         "portfolio.asset.restore.read",
+        "portfolio.market.refresh",
       ],
     });
     expect(

@@ -62,6 +62,7 @@ export class HouseholdCommandClient {
     if (
       !isTenantlessCommand(command)
       && this.resolveSessionAccessMode?.() === 'administrator-readonly'
+      && command !== 'portfolio.refresh-market-values.v1'
     ) {
       throw new HouseholdCommandError(
         'ADMIN_VIEW_READ_ONLY',

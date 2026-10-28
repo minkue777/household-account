@@ -71,6 +71,7 @@ function subject(
   customExecute?: HouseholdCommandHandler["execute"],
   idempotencyBoundary?: HouseholdCommandHandler["idempotencyBoundary"],
   access?: HouseholdCommandHandler["access"],
+  permitsAdministrator?: boolean,
 ) {
   let executions = 0;
   const receipts = new ReceiptMemory();
@@ -80,6 +81,7 @@ function subject(
         "ledger.record-manual-transaction.v1",
         {
           access,
+          permitsAdministrator,
           ...(idempotencyBoundary === undefined
             ? {}
             : { idempotencyBoundary }),
@@ -356,4 +358,15 @@ it("정책을 생략한 명령은 관리자가 제출해도 실제 가구 member
     requestedAt: "2026-10-05T00:00:00Z", administrator: { principalRef: "uid-admin", capabilities: ["admin.household-data.read"] } }))
     .resolves.toMatchObject({ kind: "error", code: "HOUSEHOLD_FORBIDDEN" });
   expect(fixture.executions()).toBe(0);
+});
+
+it("관리자 예외가 명시된 명령도 검증된 동일 principal만 membership 없이 실행한다", async () => {
+  const fixture = subject(async context => ({ administrator: context.administrator?.principalRef, member: context.actor?.actingMemberId }), undefined, undefined, true);
+  const input = { principalUid: "uid-admin", request: fixture.request, requestedAt: "2026-10-28T00:00:00Z" };
+  await expect(fixture.router.execute(input)).resolves.toMatchObject({ kind: "error", code: "HOUSEHOLD_FORBIDDEN" });
+  await expect(fixture.router.execute({ ...input, administrator: { principalRef: "another", capabilities: ["portfolio.market.refresh"] } }))
+    .resolves.toMatchObject({ kind: "error", code: "HOUSEHOLD_FORBIDDEN" });
+  expect(fixture.receipts.claimCount).toBe(0);
+  await expect(fixture.router.execute({ ...input, administrator: { principalRef: "uid-admin", capabilities: ["portfolio.market.refresh"] } }))
+    .resolves.toMatchObject({ kind: "success", data: { administrator: "uid-admin", member: undefined } });
 });

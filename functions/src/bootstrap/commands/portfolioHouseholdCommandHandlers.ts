@@ -67,14 +67,16 @@ function stable(value: unknown): string {
 
 function metadata(
   context: HouseholdCommandExecutionContext,
+  actorMemberId = context.actor?.actingMemberId,
 ): PortfolioCommandMetadata {
-  if (context.actor === undefined) {
+  const householdId = context.actor?.householdId ?? context.envelope.householdId;
+  if (actorMemberId === undefined || householdId === undefined) {
     throw new HouseholdCommandRejection("HOUSEHOLD_FORBIDDEN");
   }
   return {
-    householdId: context.actor.householdId,
+    householdId,
     principalUid: context.principalUid,
-    actorMemberId: context.actor.actingMemberId,
+    actorMemberId,
     commandId: context.envelope.commandId,
     idempotencyKey: context.envelope.idempotencyKey,
     commandName: context.envelope.command,
@@ -106,6 +108,23 @@ export function createPortfolioHouseholdCommandHandlers(
     marketQuotes,
     providerHealth: new FirebasePortfolioProviderHealthStore(database),
   });
+  async function refreshMetadata(context: HouseholdCommandExecutionContext) {
+    if (context.actor !== undefined) return metadata(context);
+    const administrator = context.administrator;
+    const householdId = context.envelope.householdId;
+    if (administrator?.principalRef !== context.principalUid ||
+        !administrator?.capabilities.includes("portfolio.market.refresh") ||
+        householdId === undefined) {
+      throw new HouseholdCommandRejection("HOUSEHOLD_FORBIDDEN");
+    }
+    const household = await database.doc(`households/${householdId}`).get();
+    const data = household.data();
+    if (!household.exists || (data?.lifecycleState ?? "active") !== "active" ||
+        data?.deletedAt !== undefined) {
+      throw new HouseholdCommandRejection("HOUSEHOLD_NOT_ACTIVE");
+    }
+    return metadata(context, `administrator:${administrator.principalRef}`);
+  }
   return new Map<string, HouseholdCommandHandler>([
     [
       "portfolio.create-asset.v1",
@@ -268,6 +287,7 @@ export function createPortfolioHouseholdCommandHandlers(
     [
       "portfolio.refresh-market-values.v1",
       {
+        permitsAdministrator: true,
         async execute(context) {
           const payload = record(context.envelope.payload);
           exactFields(payload, ["assetClass", "assetId"]);
@@ -282,7 +302,7 @@ export function createPortfolioHouseholdCommandHandlers(
           }
           return value(
             await application.refreshMarketValues({
-              metadata: metadata(context),
+              metadata: await refreshMetadata(context),
               assetClass,
               ...(payload.assetId === undefined
                 ? {}

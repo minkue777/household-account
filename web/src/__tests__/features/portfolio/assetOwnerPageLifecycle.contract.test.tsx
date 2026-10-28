@@ -4,9 +4,10 @@ import type { AssetOwnerProfileView } from '@/features/access-household/domain/a
 import type { PreviousAssetDailySummary } from '@/features/portfolio/application/dailyAssetChangeSummary';
 
 let mockHouseholdId = 'house-1';
+let mockAdminView: { householdId: string; householdName: string } | null = null;
 const mockCommand = jest.fn();
 const mockProfiles = jest.fn();
-jest.mock('@/contexts/HouseholdContext', () => ({ useHousehold: () => ({ household: { id: mockHouseholdId, name: mockHouseholdId }, adminHouseholdView: null, isSessionVerified: true, remoteReadEpoch: 0 }) }));
+jest.mock('@/contexts/HouseholdContext', () => ({ useHousehold: () => ({ household: { id: mockHouseholdId, name: mockHouseholdId }, adminHouseholdView: mockAdminView, isSessionVerified: true, remoteReadEpoch: 0 }) }));
 jest.mock('@/contexts/ThemeContext', () => ({ useTheme: () => ({ themeConfig: { titleGradient: 'none' } }) }));
 jest.mock('@/contexts/AppDialogContext', () => ({ useAppDialog: () => ({ showPrompt: jest.fn() }) }));
 jest.mock('@/composition/webCommandRuntime', () => ({ getHouseholdCommandClient: () => ({ execute: mockCommand }) }));
@@ -23,7 +24,7 @@ jest.mock('@/components/assets/AssetHistoryModal', () => ({ __esModule: true, de
 jest.mock('@/components/common/ModalOverlay', () => ({ __esModule: true, default: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }));
 
 import AssetsPage from '@/app/assets/page';
-import { subscribeToAssets } from '@/lib/assetService';
+import { refreshAllMarketValues, subscribeToAssets } from '@/lib/assetService';
 import { readPreviousAssetDailySummary } from '@/platform/read-model/assetDailyChangeReadModel';
 import { writeAssetOwnerProfileSnapshot, writeAssetSnapshot, writeDailyAssetChangeSnapshot } from '@/features/portfolio/application/portfolioReadSnapshot';
 import { ALL_MEMBERS_OPTION } from '@/lib/assets/memberOptions';
@@ -47,6 +48,8 @@ describe('[AST-009][T-AST-011] 실제 AssetsPage·명의자 command·일간 cach
     jest.setSystemTime(new Date('2026-09-06T03:00:00Z'));
     window.localStorage.clear();
     mockHouseholdId = 'house-1';
+    mockAdminView = null;
+    jest.mocked(refreshAllMarketValues).mockClear();
     mockCommand.mockReset().mockResolvedValue(dependent);
     mockProfiles.mockReset().mockImplementation((_householdId: string, listener: typeof publishProfiles) => { publishProfiles = listener; return jest.fn(); });
     jest.mocked(subscribeToAssets).mockReset().mockImplementation((listener, _cache, source) => {
@@ -56,6 +59,18 @@ describe('[AST-009][T-AST-011] 실제 AssetsPage·명의자 command·일간 cach
     jest.mocked(readPreviousAssetDailySummary).mockReset().mockImplementation(() => new Promise(resolve => { resolvePrevious = resolve; }));
   });
   afterEach(() => { cleanup(); jest.useRealTimers(); });
+
+  it.each([false, true])('[ADM-004][JOB-AST-001] 관리자=%s도 첫 서버 자산 확인 뒤 한 번 갱신하고 후속 snapshot으로 반복하지 않는다', async administrator => {
+    mockAdminView = administrator ? { householdId: 'house-1', householdName: '관리 대상' } : null;
+    render(<AssetsPage />);
+    const source = jest.mocked(subscribeToAssets).mock.calls[0][2]!;
+    await act(async () => source(assets, { fromCache: true }));
+    expect(refreshAllMarketValues).not.toHaveBeenCalled();
+    await act(async () => publishAssets(assets));
+    expect(refreshAllMarketValues).toHaveBeenCalledTimes(1);
+    await act(async () => publishAssets(assets.map(item => ({ ...item, currentBalance: item.currentBalance + 1 }))));
+    expect(refreshAllMarketValues).toHaveBeenCalledTimes(1);
+  });
 
   it('canonical 자산의 profileId로 표시 이름을 연결하고 프로필 이름 변경을 자산 재조회 없이 반영한다', async () => {
     render(<AssetsPage />);

@@ -78,6 +78,26 @@ describe('Web Household Command 계약', () => {
     expect(envelope).not.toHaveProperty('householdId');
   });
 
+  test('관리자 조회는 현재 가구의 시세 갱신만 전송하고 임의 가구·수량 수정은 거부한다', async () => {
+    const transport = transportReturning({ kind: 'succeeded', value: { refreshedCount: 1 } });
+    const client = new HouseholdCommandClient(transport, () => 'observed-household', () => 'administrator-readonly');
+    await expect(client.execute('portfolio.refresh-market-values.v1', { assetClass: 'all' }))
+      .resolves.toEqual({ refreshedCount: 1 });
+    expect(transport.send).toHaveBeenCalledWith(expect.objectContaining({
+      householdId: 'observed-household', command: 'portfolio.refresh-market-values.v1', payload: { assetClass: 'all' },
+    }));
+    await client.execute('portfolio.refresh-market-values.v1', { assetClass: 'stock', assetId: 'asset' });
+    expect(transport.send).toHaveBeenLastCalledWith(expect.objectContaining({
+      householdId: 'observed-household', payload: { assetClass: 'stock', assetId: 'asset' },
+    }));
+    await expect(client.execute('portfolio.refresh-market-values.v1', { assetClass: 'all' }, { householdId: 'other' }))
+      .rejects.toMatchObject({ code: 'HOUSEHOLD_SCOPE_MISMATCH' });
+    await expect(client.execute('portfolio.update-position.v1', {
+      assetId: 'asset', positionId: 'position', positionKind: 'stock', changes: { quantity: 10 }, expectedVersion: 1, expectedAssetVersion: 1,
+    })).rejects.toMatchObject({ code: 'ADMIN_VIEW_READ_ONLY' });
+    expect(transport.send).toHaveBeenCalledTimes(2);
+  });
+
   test('already-processed는 최초 성공과 같은 value를 반환한다', async () => {
     const transport = transportReturning({
       kind: 'already-processed',

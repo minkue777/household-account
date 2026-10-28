@@ -33,6 +33,7 @@ export interface HouseholdAdministratorActor {
     | "admin.household-members.restore"
     | "portfolio.asset.restore.deleted"
     | "portfolio.asset.restore.read"
+    | "portfolio.market.refresh"
   )[];
 }
 
@@ -80,6 +81,8 @@ export interface HouseholdCommandExecutionContext {
 export interface HouseholdCommandHandler {
   /** Omission requires an active household membership. */
   readonly access?: "signed-in-user" | "administrator";
+  /** Explicit exception to membership; the handler verifies its administrator capability. */
+  readonly permitsAdministrator?: boolean;
   /**
    * 도메인 저장소가 명령 결과 receipt를 실제 상태 변경과 같은 transaction에
    * 기록하는 경우에만 선언합니다. Router의 별도 claim/complete 왕복을 생략하되,

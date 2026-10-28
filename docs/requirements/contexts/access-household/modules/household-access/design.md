@@ -296,7 +296,7 @@ Value Object는 `HouseholdName`, `MemberDisplayName`, `AssetOwnerProfileName`, `
 4. 키 복사는 Presentation 책임이며 API가 clipboard를 다루지 않습니다.
 5. 논리 삭제 확인은 UI가 수행하되 서버 인가와 idempotency를 대체하지 않습니다. 영구 purge 확인은 일반 삭제 확인과 별개의 운영 계약입니다.
 6. 가구 목록의 `가계부 열기`는 현재 탭의 `sessionStorage`에 대상 ID·표시 이름만 보관하고 일반 화면으로 이동합니다. Google ID token의 `systemAdmin: true`와 대상 가구 조회를 강제 재확인한 뒤에만 `administrator-readonly` ClientSessionScope를 만들고 세션을 검증 완료 상태로 전환해 공개 업무 Read Model 구독을 시작하며, Membership과 `actingMemberId`를 생성하지 않습니다.
-7. 관리자 조회 SessionScope는 Firestore의 공개 업무 Read Model과 관리자 허용 Query만 읽습니다. 일반 Household Command, 시세 자동 갱신과 Notification endpoint 등록은 실행하지 않으며 Shortcut credential 같은 서버 전용 자료는 일반 조회 화면에 공개하지 않습니다.
+7. 관리자 조회 SessionScope는 Firestore의 공개 업무 Read Model과 관리자 허용 Query만 읽습니다. 일반 Household Command와 Notification endpoint 등록은 실행하지 않습니다. `portfolio.refresh-market-values.v1`만 명시적인 `permitsAdministrator` 예외로 같은 UID의 검증된 관리자 주체를 전달하고, handler는 `portfolio.market.refresh` capability와 대상 가구 active 상태를 확인합니다. 일반 회원은 기존 Membership 검증을 유지하며 관리자의 저장 receipt에는 `administrator:<principalUid>`를 기록해 회원으로 가장하지 않습니다. 시세 자동·개별 갱신은 기존 lease·cooldown·원자적 평가액 저장 경로를 사용하며 Shortcut credential 같은 서버 전용 자료는 일반 조회 화면에 공개하지 않습니다.
 8. Firestore Rules는 `systemAdmin`에 명시한 업무 컬렉션의 read만 허용하고 client write는 계속 전부 거부합니다. 서버 Query는 별도의 `admin.household-data.read` capability allowlist를 적용하며 임의 Query가 관리자 권한을 상속하지 않습니다.
 9. 화면 상단에 관리자 조회 상태와 대상 가구 이름을 고정 표시합니다. `/admin`으로 돌아오거나 로그아웃하면 탭의 선택값과 관리자 조회 SessionScope를 제거하고, 이후 일반 화면은 관리자의 실제 Membership을 다시 해석합니다.
 
@@ -533,7 +533,7 @@ android/core/auth-session/
 | ADM-001 | Contract·E2E | Admin ports | 허용/비허용 관리자, 최신순 cursor, 삭제 확인 | 조회·생성·복사 UI·삭제 상태 관찰 | T-ADM-001 |
 | ADM-002 | Emulator·보안 E2E | Rules와 server Handler | 무인증·동일 가구·타 가구·관리자 | 최소 권한만 허용하고 거부 시 변경 없음 | T-HH-RULES-001, T-HH-SEC-001 |
 | ADM-003 | Domain·Application·Contract·E2E·동시성 | RequestHouseholdDeletion·RestoreDeletedHousehold·HouseholdPurgeProcess·PurgeClaimFinalizationPolicy | 다중 Context 성공/실패, 다중 claim, snapshot·finalization page 중단, absent·stale claim, 재시도 | snapshot 완료 전 Context 호출 0건, Context 미완료 중 claim 0건 해제, 완료 뒤 일치 claim만 page 해제, 모든 checkpoint 완료 뒤 purged Event 한 번, 재가입 가능 | T-ADM-002 |
-| ADM-004 | Client·Query·Rules·보안 E2E | AdminHouseholdViewSelection·administrator-readonly SessionScope·공개 Read Model | 관리자/일반 사용자, 타 가구 Membership 없음, 탭 전환, 가구 탐색·쓰기·endpoint 등록 시도 | systemAdmin만 선택 가구 조회, Member 가장·업무 쓰기·알림 binding 0건, 관리자 배너와 복귀 시 선택 해제 | T-ADM-003 |
+| ADM-004 | Client·Query·Rules·보안 E2E | AdminHouseholdViewSelection·administrator-readonly SessionScope·공개 Read Model | 관리자/일반 사용자, 타 가구 Membership 없음, 탭 전환, 가구 탐색·쓰기·endpoint 등록 시도 | systemAdmin만 선택 가구 조회, Member 가장·시세 외 업무 쓰기·알림 binding 0건, active 가구 시세 갱신·재전송 멱등, 관리자 배너와 복귀 시 선택 해제 | T-ADM-003 |
 | ADM-005 | Admin Query·Operations Adapter·UI | GetAdminOperationsDashboard | Android Activity 시작, iPhone PWA Navigation 시작, 전체 홈 데이터 성공 paint, 일반 Web, 예약 작업 정상·실패·기록 없음, 공급자 정상·저하·중단, active/deleted 가구, 열린 장애 | systemAdmin에게만 서버·운영·가구·활동 snapshot과 허용 필드로 집계한 모바일 첫 화면·Functions 로직별 처리 시간을 반환하고, custom-token 교환은 제외하며 UI는 업무명과 내부 ID를 병기하고 모든 시간을 초 단위로 표시하며 비정상을 구분 표시 | T-ADM-004 |
 | ADM-006 | Domain·Command·Firebase Adapter·Client | RecordAppVisit·MemberAccessStats·clientStartup structured log | 동일 visitId 재전송, 서울 날짜 경계, 플랫폼 3종, 30일 경계, 0~120초 경계 | 첫 화면 전체 paint 뒤 비동기 호출, 사용자 범위 원자 집계, 동일 visitId 1회, 30일 일별 상세·누적 보존, 신규 Android/iPhone visit만 PII 없는 시작 시간 1회 기록 | T-ADM-005 |
 

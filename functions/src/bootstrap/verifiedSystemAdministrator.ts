@@ -11,6 +11,7 @@ export const SYSTEM_ADMINISTRATOR_CAPABILITIES = Object.freeze([
   "admin.household-members.restore",
   "portfolio.asset.restore.deleted",
   "portfolio.asset.restore.read",
+  "portfolio.market.refresh",
 ] as const);
 
 /**

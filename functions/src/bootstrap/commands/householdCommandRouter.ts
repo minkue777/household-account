@@ -161,17 +161,21 @@ export function createHouseholdCommandRouter(input: {
       setCurrentInteractiveLatencyOperation(parsed.command);
 
       const requiresAdministrator = handler.access === "administrator";
+      const administrator =
+        (requiresAdministrator || handler.permitsAdministrator === true) &&
+        request.administrator?.principalRef === principalUid
+          ? request.administrator
+          : undefined;
       if (
         requiresAdministrator &&
-        (request.administrator === undefined ||
-          request.administrator.principalRef !== principalUid)
+        administrator === undefined
       ) {
         return error("HOUSEHOLD_FORBIDDEN", { commandId: parsed.commandId });
       }
 
       const householdId = parsed.householdId;
       const actor =
-        householdId === undefined || requiresAdministrator
+        householdId === undefined || administrator !== undefined
           ? undefined
           : await measureCurrentInteractiveLatency(
               "actor-membership",
@@ -242,8 +246,8 @@ export function createHouseholdCommandRouter(input: {
             envelope: parsed,
             principalUid,
             ...(actor?.kind === "active" ? { actor: actor.actor } : {}),
-            ...(requiresAdministrator && request.administrator !== undefined
-              ? { administrator: request.administrator }
+            ...(administrator !== undefined
+              ? { administrator }
               : {}),
             requestedAt: request.requestedAt,
           }),

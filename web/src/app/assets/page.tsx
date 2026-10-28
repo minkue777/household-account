@@ -46,7 +46,6 @@ export default function AssetsPage() {
   const { themeConfig } = useTheme();
   const {
     household,
-    adminHouseholdView,
     isSessionVerified = true,
     remoteReadEpoch = 0,
   } = useHousehold();
@@ -233,14 +232,12 @@ export default function AssetsPage() {
     if (
       !isSessionVerified
       || !household?.id
-      || adminHouseholdView !== null
       || !serverAssetsReady
     ) return undefined;
 
     void refreshAllMarketValues().catch(console.error);
     return undefined;
   }, [
-    adminHouseholdView,
     household?.id,
     isSessionVerified,
     serverAssetsReady,

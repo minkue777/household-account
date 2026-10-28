@@ -4,6 +4,8 @@
 
 ## 실행 경계
 
+- `web/e2e/admin-market-refresh.spec.ts`: 대상 가구 Membership이 없는 관리자와 일반 사용자를 실제 Auth token으로 구분하고, 관리자 화면에서 선택한 가구의 자산 진입 자동 갱신·개별 갱신 callable 성공 및 자산 삭제 거절을 검증합니다. 예수금만 있는 계좌를 사용해 외부 시세 대상은 0건이며 잔액·메모·회원 부재를 확인합니다. 실제 가격과 부모 계좌 평가액 저장·수량 보존·중복 방지는 `administrator-market-refresh.test.ts`가 Quote port만 고정하고 운영 Router/Application/Firestore adapter를 실행해 별도로 검증합니다.
+
 - `web/e2e/portfolio-journeys.spec.ts`: 실제 브라우저 → Firebase Auth Emulator → Household callable → 실제 Application/Firestore 트랜잭션 → Client SDK 구독 → 화면입니다.
 - `web/e2e/portfolio-reporting.spec.ts`: 과거 Snapshot/수집된 배당 공시만 Emulator에 준비하고 실제 통계 SDK 읽기·UI를 실행합니다. 기간마다 **다른 기준 금액**을 주어 버튼이 아무 일도 하지 않아도 통과하던 검증을 방지합니다.
 - `web/e2e/portfolio-provider-jobs.spec.ts`: 실제 export된 Scheduler `run` → 실제 SafeExternalHttpClient/Provider parser → 실제 평가 Application → Emulator 저장 → 통계 화면입니다. Cloud Scheduler 전달 및 외부 사업자의 **HTTP 응답만** fixture로 대체합니다. SDK/Domain/Repository 구현을 복제하지 않습니다.
