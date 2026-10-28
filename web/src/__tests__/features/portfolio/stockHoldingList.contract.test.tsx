@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import StockHoldingList from '@/components/assets/StockHoldingList';
@@ -73,7 +73,8 @@ function stockHolding(): StockHolding {
 
 describe('StockHoldingList 수동 보유 항목 수정 계약', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
+    mockedGetDividendProjection.mockReturnValue(new Promise(() => {}));
   });
 
   test('주식과 코인 목록은 정상 0원 시세의 평가액과 100% 손실을 표시한다', () => {
@@ -171,7 +172,7 @@ describe('StockHoldingList 수동 보유 항목 수정 계약', () => {
     });
   });
 
-  test('[T-PERF-HOLD-001][HOLD-005] 계좌 첫 표시는 종목별 배당 조회를 기다리지 않고 선택한 종목만 조회한다', async () => {
+  test('[T-PERF-HOLD-001][HOLD-005] 목록을 먼저 표시하고 클릭 없이 배당을 표시하며 같은 종목은 한 번 조회한다', async () => {
     const dividendQuery =
       deferred<Awaited<ReturnType<typeof portfolioQueries.getDividendProjection>>>();
     const dividendProjection: Awaited<
@@ -190,30 +191,67 @@ describe('StockHoldingList 수동 보유 항목 수정 계약', () => {
     mockedGetDividendProjection.mockReturnValue(dividendQuery.promise);
     const user = userEvent.setup();
 
-    render(
+    const holdings = [stockHolding(), { ...stockHolding(), id: 'stock-2' }, legacyCashHolding()];
+    const props = { holdings, isLoading: false, isRefreshing: false, onRefresh: jest.fn(), assetId: 'asset-1' };
+    const { rerender } = render(
       <StockHoldingList
-        holdings={[stockHolding()]}
-        isLoading={false}
-        isRefreshing={false}
-        onRefresh={jest.fn()}
-        assetId="asset-1"
+        {...props}
       />
     );
 
-    expect(mockedGetDividendProjection).not.toHaveBeenCalled();
-
-    await act(async () => {
-      await user.click(screen.getByRole('button', { name: /삼성전자/ }));
-      await Promise.resolve();
-    });
-
+    expect(screen.getAllByRole('button', { name: /삼성전자/ })).toHaveLength(2);
+    expect(screen.getAllByText('배당 정보를 불러오는 중입니다.')).toHaveLength(2);
     expect(mockedGetDividendProjection).toHaveBeenCalledTimes(1);
     expect(mockedGetDividendProjection).toHaveBeenCalledWith('005930');
-    expect(screen.getByDisplayValue('10')).toBeInTheDocument();
 
     await act(async () => {
       dividendQuery.resolve(dividendProjection);
       await dividendQuery.promise;
     });
+    expect(screen.getAllByText('최근 지급 360원 · 연 4회')).toHaveLength(2);
+    expect(screen.getAllByText('최근 지급일: 2026-05-20')).toHaveLength(2);
+    expect(screen.queryByLabelText('수량')).not.toBeInTheDocument();
+
+    // 시세 snapshot/배열 순서와 편집 상태 변경은 같은 종목을 재조회하지 않습니다.
+    rerender(<StockHoldingList {...props} holdings={[...holdings].reverse().map(h => ({ ...h, currentPrice: 90_000 }))} />);
+    await act(async () => { await user.click(screen.getAllByRole('button', { name: /삼성전자/ })[0]); });
+    await act(async () => { await user.click(screen.getByText('삼성전자', { selector: '.bg-blue-50 p' })); });
+    expect(mockedGetDividendProjection).toHaveBeenCalledTimes(1);
+    expect(screen.getAllByText('최근 지급 360원 · 연 4회')).toHaveLength(2);
+  });
+
+  test('[HOLD-005] 늦게 들어온 보유 목록도 자동 조회하며 실패한 종목이 다른 배당 표시를 막지 않는다', async () => {
+    const errorLog = jest.spyOn(console, 'error').mockImplementation(() => {});
+    mockedGetDividendProjection.mockImplementation(async code => {
+      if (code === '005930') throw new Error('network unavailable');
+      return { code, name: '배당 ETF', recentDividend: 100, paymentDate: '2026-10-02', frequency: 12, dividendYield: 3, annualDividendPerShare: 1_200, isEstimated: false, paymentEvents: [] };
+    });
+    const props = { isLoading: true, isRefreshing: false, onRefresh: jest.fn(), assetId: 'asset-1' };
+    const { rerender } = render(<StockHoldingList {...props} holdings={[]} />);
+    expect(mockedGetDividendProjection).not.toHaveBeenCalled();
+    const holdings = [stockHolding(), { ...stockHolding(), id: 'etf', stockCode: '069500', stockName: '배당 ETF' }, legacyCashHolding(), { ...stockHolding(), id: 'manual', holdingType: 'manual' as const }, { ...stockHolding(), id: 'invalid', stockCode: '' }];
+    await act(async () => { rerender(<StockHoldingList {...props} isLoading={false} holdings={holdings} />); });
+    expect(mockedGetDividendProjection).toHaveBeenCalledTimes(2);
+    expect(screen.getByText('배당 정보를 불러오지 못했습니다.')).toBeInTheDocument();
+    expect(within(screen.getByRole('button', { name: /배당 ETF/ })).getByText('최근 지급 100원 · 연 12회')).toBeInTheDocument();
+    expect(screen.queryByText('배당 정보를 불러오는 중입니다.')).not.toBeInTheDocument();
+    errorLog.mockRestore();
+  });
+
+  test('[HOLD-005] 계좌 전환 시 이전 응답은 버리고 재진입하면 최근 배당을 다시 조회한다', async () => {
+    const oldQuery = deferred<Awaited<ReturnType<typeof portfolioQueries.getDividendProjection>>>();
+    const projection: Awaited<ReturnType<typeof portfolioQueries.getDividendProjection>> = { code: '005930', name: '삼성전자', recentDividend: 360, paymentDate: '2026-05-20', frequency: 4, dividendYield: 2, annualDividendPerShare: 1_440, isEstimated: false, paymentEvents: [] };
+    mockedGetDividendProjection.mockReturnValueOnce(oldQuery.promise).mockResolvedValue({ ...projection, recentDividend: 400, paymentDate: '2026-08-20' });
+    const props = { holdings: [stockHolding()], isLoading: false, isRefreshing: false, onRefresh: jest.fn(), assetId: 'asset-1' };
+    const { rerender, unmount } = render(<StockHoldingList {...props} />);
+    await act(async () => { rerender(<StockHoldingList {...props} assetId="asset-2" />); });
+    expect(screen.getByText('최근 지급 400원 · 연 4회')).toBeInTheDocument();
+    await act(async () => { oldQuery.resolve(projection); await oldQuery.promise; });
+    expect(screen.queryByText('최근 지급 360원 · 연 4회')).not.toBeInTheDocument();
+    unmount();
+    mockedGetDividendProjection.mockResolvedValue({ ...projection, recentDividend: 420 });
+    await act(async () => { render(<StockHoldingList {...props} />); });
+    expect(screen.getByText('최근 지급 420원 · 연 4회')).toBeInTheDocument();
+    expect(mockedGetDividendProjection).toHaveBeenCalledTimes(3);
   });
 });

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import ConfirmDialog from '@/components/common/ConfirmDialog';
 import { deleteStockHolding, updateStockHolding } from '@/lib/assetService';
@@ -36,7 +36,7 @@ interface StockHoldingListProps {
 
 interface HoldingSummaryCardProps {
   holding: StockHolding;
-  dividendInfo?: DividendInfo;
+  dividendInfo?: DividendInfo | null;
   isLoadingDividend: boolean;
   onOpen: (holding: StockHolding) => void;
 }
@@ -109,7 +109,7 @@ function formatCompactAmount(value: number) {
   return `${sign}${absoluteValue.toLocaleString()}원`;
 }
 
-function getDividendSummary(dividendInfo?: DividendInfo) {
+function getDividendSummary(dividendInfo?: DividendInfo | null) {
   if (!dividendInfo) {
     return null;
   }
@@ -202,6 +202,8 @@ function HoldingSummaryCard({
         <div className="mt-2 border-t border-slate-200 pt-2">
           <p className="text-xs text-slate-400">배당 정보를 불러오는 중입니다.</p>
         </div>
+      ) : dividendInfo === null ? (
+        <p className="mt-2 text-xs text-slate-500">배당 정보를 불러오지 못했습니다.</p>
       ) : holdingType === 'stock' && dividendSummary ? (
         <div className="mt-2 border-t border-slate-200 pt-2">
           <p className="text-xs text-slate-500">{dividendSummary}</p>
@@ -374,8 +376,7 @@ export default function StockHoldingList({
   const [editQuantity, setEditQuantity] = useState('');
   const [editAvgPrice, setEditAvgPrice] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [dividendInfoMap, setDividendInfoMap] = useState<Record<string, DividendInfo>>({});
-  const [loadingDividends, setLoadingDividends] = useState<Set<string>>(new Set());
+  const [dividendInfoMap, setDividendInfoMap] = useState<Record<string, DividendInfo | null>>({});
   const [pendingDeleteHolding, setPendingDeleteHolding] = useState<StockHolding | null>(null);
 
   const stockHoldings = useMemo(
@@ -391,30 +392,26 @@ export default function StockHoldingList({
     [manualHoldings, stockHoldings]
   );
 
-  const loadDividendInfo = async (holding: StockHolding) => {
-    const stockCode = holding.stockCode;
-    if (
-      !supportsDividendInfo(holding)
-      || dividendInfoMap[stockCode]
-      || loadingDividends.has(stockCode)
-    ) {
-      return;
-    }
-
-    setLoadingDividends((prev) => new Set(prev).add(stockCode));
-    try {
-      const data = await portfolioQueries.getDividendProjection(stockCode);
-      setDividendInfoMap((prev) => ({ ...prev, [stockCode]: data }));
-    } catch (error) {
-      console.error('배당 조회 오류:', error);
-    } finally {
-      setLoadingDividends((prev) => {
-        const next = new Set(prev);
-        next.delete(stockCode);
-        return next;
-      });
-    }
-  };
+  // 시세·수량 snapshot이 바뀌어도 조회 대상 종목이 같으면 다시 요청하지 않습니다.
+  const dividendCodesKey = JSON.stringify(
+    Array.from(new Set(holdings.filter(supportsDividendInfo).map((holding) => holding.stockCode))).sort()
+  );
+  useEffect(() => {
+    let active = true;
+    setDividendInfoMap({});
+    const codes: string[] = JSON.parse(dividendCodesKey);
+    codes.forEach(async (code) => {
+      try {
+        const data = await portfolioQueries.getDividendProjection(code);
+        if (active) setDividendInfoMap((prev) => ({ ...prev, [code]: data }));
+      } catch (error) {
+        if (!active) return;
+        console.error('배당 조회 오류:', error);
+        setDividendInfoMap((prev) => ({ ...prev, [code]: null }));
+      }
+    });
+    return () => { active = false; };
+  }, [assetId, dividendCodesKey]);
 
   const resetEditingState = () => {
     setEditingHolding(null);
@@ -439,10 +436,6 @@ export default function StockHoldingList({
       setEditQuantity((holding.currentPrice || 0).toString());
       setEditAvgPrice('');
     }
-
-    // 편집 UI 상태를 먼저 확정한 뒤 배당 부가정보를 뒤에서 요청합니다.
-    // 네트워크 시작이 행의 첫 표시보다 앞서지 않게 합니다.
-    void loadDividendInfo(holding);
   };
 
   const handleSaveHolding = async () => {
@@ -526,7 +519,7 @@ export default function StockHoldingList({
         key={holding.id}
         holding={holding}
         dividendInfo={supportsDividendInfo(holding) ? dividendInfoMap[holding.stockCode] : undefined}
-        isLoadingDividend={supportsDividendInfo(holding) ? loadingDividends.has(holding.stockCode) : false}
+        isLoadingDividend={supportsDividendInfo(holding) && dividendInfoMap[holding.stockCode] === undefined}
         onOpen={handleOpenHolding}
       />
     );

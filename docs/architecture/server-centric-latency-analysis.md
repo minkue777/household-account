@@ -127,7 +127,7 @@ Domain, Use Case, Port, Adapter의 경계는 유지했습니다. 제거한 것�
 - navigation HTML을 `StaleWhileRevalidate`로 장기 보존하면 낮의 Web 배포 뒤 이전 client와 새 서버 계약이 섞일 수 있으므로 network-only로 고정합니다. build hash가 붙은 JS·CSS 등 정적 asset만 캐시합니다.
 - 자산 화면 내부에서는 같은 브라우저 세션의 마지막 자산·보유 read model을 재사용하되, 첫 가계부 화면의 Household·원장 데이터를 로컬 화면 snapshot으로 대체하지 않습니다.
 - 계좌 모달은 이미 받은 보유 snapshot을 asset ID로 필터링할 뿐, 열릴 때 새 listener를 만들지 않습니다.
-- 계좌를 열 때 모든 보유 종목의 배당 API를 호출하지 않습니다. 사용자가 실제로 선택한 종목만 조회합니다.
+- 계좌 목록은 기존 보유 snapshot으로 즉시 표시하고, 배당 지원 종목의 가구 Projection을 클릭 없이 비동기로 조회합니다. 동일 코드는 중복 요청하지 않고 시세·수량·편집 변경으로 재조회하지 않습니다. 계좌 재진입 때 배당을 새로 읽고 이전 계좌의 늦은 응답은 버립니다. 외부 배당 공급자를 직접 호출하거나 배당 응답을 계좌 첫 표시의 선행 조건으로 두지 않습니다.
 - 계좌를 열 때 전체 주식·가상자산 시세를 자동 갱신하지 않습니다. 사용자가 요청한 수동 갱신과 별도 background 갱신 경로를 사용합니다.
 - 자산 화면은 같은 기기의 마지막 자산·시세 snapshot을 즉시 표시하고 Firestore 구독으로 최신 자산 원본을 확인합니다. 첫 `fromCache=false` 서버 snapshot이 화면 상태에 반영된 다음에만 전체 시장 시세 갱신을 한 번 시작하므로, 외부 Provider 작업이 최초 자산 읽기와 경쟁하거나 저장된 화면을 막지 않습니다. 페이지 체류 중 30초 반복과 visibility 복귀 갱신은 제거했습니다. 한 번의 전체 갱신은 모든 계좌를 하나의 원자적 반영 단위로 유지합니다.
 - 일간 변동은 명의자마다 레거시 `asset_history`를 조회하지 않습니다. `households/{householdId}/assetSnapshots`에서 오늘보다 앞선 최신 Canonical 요약 한 건만 읽고, 전체·모든 활성 명의자의 현재 차이는 같은 자산 source snapshot을 사용해 메모리에서 함께 계산합니다. 같은 날짜의 마지막 계산값을 먼저 표시한 뒤 새 자산 source snapshot이 오면 추가 Firestore 조회 없이 다시 계산합니다.

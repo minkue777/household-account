@@ -35,7 +35,7 @@
 | HOLD-002 | portfolio-journeys: 실제 코인 Command 수량·원가·평가 정수 반올림 | 거래소 실시간 가용성 |
 | HOLD-003 | portfolio-journeys: Position 변경 후 부모 금액/원가 변경 | 모든 시세 실패 조합 |
 | HOLD-004 | portfolio-journeys: stale 부모 version 거절 시 부모·Position 모두 불변 | DB commit 강제 장애는 Emulator 통합 테스트 병행 |
-| HOLD-005 | portfolio-journeys: 모달 재진입 시 저장된 항목/금액 표시 | 물리 단말에서의 성능 절대값 |
+| HOLD-005 | portfolio-journeys: 모달 재진입 시 저장된 항목/금액 표시. holding-dividends: 실제 가구 Query 응답 보류 중 목록 표시, 클릭 없는 최근 배당·지급일 표시, 편집 중 중복 조회 없음, 재진입 최신 Projection 조회 | 물리 단말에서의 성능 절대값 |
 | MARKET-001 | portfolio-market-catalog/provider-jobs: Storage 경계와 시장별 서버 provider 파싱 | 외부 공급자 실서비스 SLA |
 | MARKET-002 | portfolio-provider-jobs: 국내·미국·펀드·KRX 금·실물 금 provider 경로와 평가 | 지원 시장 전체 상품 목록 |
 | MARKET-003 | portfolio-market-catalog: 코드/별칭/미국 검색·최대10개·검색 중 callable 0회 | 실제 Upbit 검색 HTTP 경로는 별도 서버 경계 검증 필요 |
