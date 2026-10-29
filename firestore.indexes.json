@@ -285,6 +285,28 @@
   ],
   "fieldOverrides": [
     {
+      "collectionGroup": "positions",
+      "fieldPath": "householdId",
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "arrayConfig": "CONTAINS",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        }
+      ]
+    },
+    {
       "collectionGroup": "externalQueryQuotas",
       "fieldPath": "expiresAt",
       "ttl": true,
