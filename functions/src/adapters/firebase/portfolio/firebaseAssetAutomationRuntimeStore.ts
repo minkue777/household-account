@@ -393,20 +393,15 @@ export class FirebaseAssetAutomationRuntimeStore
           .collection("assetAutomationExecutionReceipts")
           .doc(executionHash);
         const canonicalAssetReference = household.collection("assets").doc(assetId);
-        const revisionsQuery = household
-          .collection("assetAutomationPlanRevisions")
-          .where("planId", "==", input.plan.planId);
         const [
           executionSnapshot,
           receiptSnapshot,
           canonicalAssetSnapshot,
-          revisionSnapshot,
-        ] = await Promise.all([
-          transaction.get(executionReference),
-          transaction.get(receiptReference),
-          transaction.get(canonicalAssetReference),
-          transaction.get(revisionsQuery),
-        ]);
+        ] = await transaction.getAll(
+          executionReference,
+          receiptReference,
+          canonicalAssetReference,
+        );
 
         if (executionSnapshot.exists) {
           return {
@@ -489,6 +484,9 @@ export class FirebaseAssetAutomationRuntimeStore
           return markNeedsAttention("INVALID_ASSET_BALANCE", executionKey);
         }
         const currentBalance = Math.max(0, Math.round(Math.abs(rawBalance)));
+        const revisionSnapshot = await transaction.get(household
+          .collection("assetAutomationPlanRevisions")
+          .where("planId", "==", input.plan.planId));
         if (revisionSnapshot.empty) {
           return markNeedsAttention("AUTOMATION_REVISION_NOT_FOUND", executionKey);
         }

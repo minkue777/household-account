@@ -144,6 +144,8 @@ interface AutomationPageResultV1 {
 
 같은 execution key가 이미 있으면 transport idempotency key가 달라도 `AlreadyProcessed(executionId)`를 반환합니다. 같은 envelope key와 같은 payload는 최초 typed 결과를 그대로 재생하고, 같은 key의 다른 payload는 `Conflict`입니다.
 
+실행 transaction은 Plan 정체성을 확인한 뒤 execution·receipt·Asset 문서를 `getAll`로 일괄 조회합니다. 완료된 execution은 즉시 재생하고, 아직 처리하지 않은 유효한 대상만 Revision query를 이어 실행합니다. 실패한 문서 조회와 별도 query가 같은 transaction에서 계속 진행되지 않게 하며, 완료된 월의 재생은 불필요한 Revision 조회에 의존하지 않습니다. SDK의 기존 재시도와 create-only claim·원자 저장은 유지합니다.
+
 요구사항 문서의 `EvaluateSavingsContribution`, `CalculateEffectivePaymentDate`, `CalculateLoanPrincipalPayment`, `EvaluateLoanRepayment`은 Domain Policy·Application Query 연산입니다. 외부 wire API는 부수 효과 없는 `EvaluateAutomationMonth`로 통합하고, 단위 테스트는 각 순수 Policy를 직접 검증합니다.
 
 ### 3.3 권한과 tenant

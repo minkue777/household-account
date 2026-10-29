@@ -31,3 +31,13 @@
 3. 이후 최종 서버 commit의 default·payment-capture·access-session codebase를 기존 wrapper로 배포하고 기본 smoke를 확인한다. Web·APK 변경은 없어 재발행하지 않는다. 두 commit을 함께 push한 최종 SHA의 다섯 CI 검사와 요약을 후속 확인한다.
 
 운영 체감 개선 수치는 배포 뒤 자연스럽게 발생한 동일 범위 갱신 로그로 비교한다. 로컬 조회 속도나 제어된 병렬 검사 결과를 운영 전체 지연 감소로 보고하지 않는다.
+
+## CI 후속: 월별 자동처리 동시 실행
+
+`caf414dd1035490fef1fa928748dc77056a4ca61`은 세 codebase 배포와 기본 smoke를 완료했다. CI `40837415649`의 Functions unit·type·build·callable·Rules는 통과했고 실제 Firebase 통합 검사 156개 중 155개가 통과했다. 새 시세 갱신 통합 4개도 통과했다. 실패는 기존 `firebase-asset-automation-schedule.integration.test.ts:210`의 동일 월 동시 실행 한 건으로, `applied/already-processed` 대신 `applied/retryable-failure`를 받았다. 해당 실행은 실패 이력으로 유지한다.
+
+실패 경로인 `FirebaseAssetAutomationRuntimeStore`는 이번 시세 로더를 호출하지 않는다. 에뮬레이터 로그에는 07:47:49 UTC 문서 읽기 `Transaction lock timeout` 뒤 문서·query 읽기의 `Can't swap from CLOSED to ACTIVE`, 07:47:52 query의 `Transaction is invalid or closed`가 있다. SDK는 callback 실패 시 rollback·재시도를 진행하지만 기존 `Promise.all`의 다른 read RPC는 취소하지 않는다. 이는 종료된 transaction의 후속 읽기와 부합하지만 요청별 ID가 없어 최초 오류와 정확한 인과·운영 재현 여부는 확정하지 못했다. 변경 전 로컬 같은 5개 검사는 모두 통과했다.
+
+후속 수정은 추가 재시도 계층 대신 execution·receipt·Asset을 `getAll` 한 요청으로 읽고, claim 재생·유효성 검사 뒤 필요한 Revision query만 실행한다. 완료된 claim은 Revision 조회 장애에도 기존 결과를 재생하며, 문서 조회 실패 뒤 별도 query/write를 시작하지 않는다. 기존 같은 월 동시 2요청과 15초 제한, 성공/중복 기대값은 유지했고 receipt 1개·Outbox 2개·Asset/Plan version도 확인한다. 실패 때 결과·SDK 요청 로그·시도 횟수·최종 예외를 남긴다.
+
+관련 unit 14개·type 검사가 통과했고 실제 Firestore Emulator의 자동처리 5개와 시세 갱신 4개가 모두 통과했다. 원래 CI 로그는 `%TEMP%/household-market-refresh-ci-40837415649.log`, artifact는 `household-market-refresh-ci-artifacts-40837415649/`, 재현/수정 검증은 `household-asset-automation-{reproduction,concurrency}-20261029.log`에 보존했다. 후속 서버 후보도 세 codebase를 배포하고 새 SHA의 전체 CI로 검증한다.

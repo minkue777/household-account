@@ -1,6 +1,6 @@
 import { deleteApp, initializeApp, type App } from "firebase-admin/app";
-import { getFirestore, type Firestore } from "firebase-admin/firestore";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { getFirestore, setLogFunction, type Firestore } from "firebase-admin/firestore";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FirebaseAssetAutomationRuntimeStore } from "../../../src/adapters/firebase/portfolio/firebaseAssetAutomationRuntimeStore";
 import { createAssetAutomationScheduledApplication } from "../../../src/contexts/portfolio/automation/public";
@@ -192,28 +192,59 @@ describeWithFirestoreEmulator("Firebase asset automation scheduled runtime", () 
       limit: 1,
     });
     const target = due.plans[0];
-    const outcomes = await Promise.all([
-      store.applyNextDue({
-        plan: target,
-        asOfDate: "2026-07-18",
-        occurrenceId: "run-a",
-        processedAt: "2026-07-17T15:00:00.000Z",
-      }),
-      store.applyNextDue({
-        plan: target,
-        asOfDate: "2026-07-18",
-        occurrenceId: "run-b",
-        processedAt: "2026-07-17T15:00:00.000Z",
-      }),
-    ]);
+    const runTransaction = database.runTransaction.bind(database);
+    const attempts: number[] = [];
+    const failures: unknown[] = [];
+    const sdkLog: string[] = [];
+    let outcomes: Awaited<ReturnType<typeof store.applyNextDue>>[] = [];
+    setLogFunction(message => sdkLog.push(message));
+    const observed = vi.spyOn(database, "runTransaction").mockImplementation(operation => {
+      const index = attempts.push(0) - 1;
+      return runTransaction(transaction => {
+        attempts[index] += 1;
+        return operation(transaction);
+      }).catch(error => {
+        failures.push({ index, code: error.code, message: error.message });
+        throw error;
+      });
+    });
+    try {
+      outcomes = await Promise.all([
+        store.applyNextDue({
+          plan: target,
+          asOfDate: "2026-07-18",
+          occurrenceId: "run-a",
+          processedAt: "2026-07-17T15:00:00.000Z",
+        }),
+        store.applyNextDue({
+          plan: target,
+          asOfDate: "2026-07-18",
+          occurrenceId: "run-b",
+          processedAt: "2026-07-17T15:00:00.000Z",
+        }),
+      ]);
 
-    expect(outcomes.map(({ kind }) => kind).sort()).toEqual([
-      "already-processed",
-      "applied",
-    ]);
-    const household = database.collection("households").doc(HOUSEHOLD_ID);
-    expect((await household.collection("assetAutomationExecutions").get()).size).toBe(1);
-    expect((await household.collection("assets").doc(ASSET_ID).get()).data()?.currentBalance).toBe(1_100_000);
+      expect(outcomes.map(({ kind }) => kind).sort()).toEqual([
+        "already-processed",
+        "applied",
+      ]);
+      const household = database.collection("households").doc(HOUSEHOLD_ID);
+      expect((await household.collection("assetAutomationExecutions").get()).size).toBe(1);
+      expect((await household.collection("assetAutomationExecutionReceipts").get()).size).toBe(1);
+      expect((await household.collection("assets").doc(ASSET_ID).get()).data()).toMatchObject({
+        currentBalance: 1_100_000, aggregateVersion: 4,
+      });
+      expect((await household.collection("assetAutomationPlans").doc(PLAN_ID).get()).data()).toMatchObject({
+        lastAppliedMonth: "2026-07", nextDueDate: "2026-08-18", aggregateVersion: 2,
+      });
+      expect((await database.collection("outboxEvents").get()).size).toBe(2);
+    } catch (error) {
+      console.error({ outcomes, attempts, failures, sdkLog });
+      throw error;
+    } finally {
+      observed.mockRestore();
+      setLogFunction(null);
+    }
   }, 15_000);
 
   it("원리금균등 대출은 현재 잔액 기준 원금만 차감하고 잘못된 revision은 needs-attention으로 격리한다", async () => {

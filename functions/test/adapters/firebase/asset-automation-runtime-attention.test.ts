@@ -43,6 +43,50 @@ const cases: Array<{ code: string; path: string; changes: Record<string, unknown
 ];
 
 describe("자동화 실패 격리 저장 계약", () => {
+  it("[T-AUTO-003] 완료된 월은 revision 조회 장애에도 추가 저장 없이 기존 execution을 재생한다", async () => {
+    const memory = fixture();
+    const store = new FirebaseAssetAutomationRuntimeStore(memory as unknown as firestore.Firestore);
+    const command = {
+      plan: { householdId: "house-1", planId: "plan-1", documentPath: planPath, nextDueDate: "2026-03-18" },
+      asOfDate: "2026-03-18", occurrenceId: "run-1", processedAt: "2026-03-17T15:00:00Z",
+    };
+    const first = await store.applyNextDue(command);
+    expect(first).toMatchObject({ kind: "applied", targetMonth: "2026-03", nextDueDate: "2026-04-18" });
+    const writes = vi.spyOn(memory, "write");
+    const query = vi.spyOn(memory, "documentsInCollection").mockImplementation(() => {
+      throw new Error("REVISION_QUERY_UNAVAILABLE");
+    });
+
+    await expect(store.applyNextDue({ ...command, occurrenceId: "run-2" })).resolves.toEqual({
+      ...first, kind: "already-processed",
+    });
+    expect(query).not.toHaveBeenCalled();
+    expect(writes).not.toHaveBeenCalled();
+  });
+
+  it("[T-AUTO-003] claim 문서 조회 실패 뒤 revision 조회와 저장을 시작하지 않는다", async () => {
+    const memory = fixture();
+    const readDocument = memory.document.bind(memory);
+    vi.spyOn(memory, "document").mockImplementation(path => {
+      if (path === `${householdPath}/assetAutomationExecutions/${executionHash}`) {
+        throw new Error("EXECUTION_READ_UNAVAILABLE");
+      }
+      return readDocument(path);
+    });
+    const query = vi.spyOn(memory, "documentsInCollection");
+    const writes = vi.spyOn(memory, "write");
+    const store = new FirebaseAssetAutomationRuntimeStore(memory as unknown as firestore.Firestore);
+
+    await expect(store.applyNextDue({
+      plan: { householdId: "house-1", planId: "plan-1", documentPath: planPath, nextDueDate: "2026-03-18" },
+      asOfDate: "2026-03-18", occurrenceId: "run-1", processedAt: "2026-03-17T15:00:00Z",
+    })).resolves.toEqual({
+      kind: "retryable-failure", targetId: `${planPath}:2026-03`, code: "AUTOMATION_UOW_COMMIT_FAILED",
+    });
+    expect(query).not.toHaveBeenCalled();
+    expect(writes).not.toHaveBeenCalled();
+  });
+
   it.each(cases)("[T-AUTO-003] $code의 코드·target을 보존하고 Plan만 격리한다", async ({ code, path, changes, unresolvedIdentity }) => {
     const memory = fixture();
     memory.seed(path, { ...memory.document(path), ...changes });
