@@ -76,13 +76,79 @@ describe("market refresh distinct quote scheduling", () => {
   it("converts a rejected atomic operation to a retryable result and releases its lease exactly once", async () => {
     const memory = fixture(["A"]);
     const store = new FirebasePortfolioRuntimeStore(memory as unknown as Firestore);
-    vi.spyOn(store, "transact").mockRejectedValueOnce(new Error("unexpected transaction rejection"));
+    const atomicFailed = deferred();
+    const finishHealth = deferred();
+    vi.spyOn(store, "transact").mockImplementationOnce(async () => {
+      atomicFailed.resolve();
+      throw new Error("unexpected transaction rejection");
+    });
     const release = vi.spyOn(store, "releaseRefreshLease");
-    const runtime = createPortfolioRuntimeApplication({ store, marketQuotes: { async getQuote() { return quote; } } });
-    await expect(runtime.refreshMarketValues({ metadata, assetClass: "all" })).resolves.toEqual({ kind: "error", code: "MARKET_REFRESH_FAILED", retryable: true });
+    const runtime = createPortfolioRuntimeApplication({
+      store,
+      marketQuotes: { async getQuote() { return quote; } },
+      providerHealth: { async recordRun() { await finishHealth.promise; throw new Error("health unavailable"); } },
+    });
+    const result = runtime.refreshMarketValues({ metadata, assetClass: "all" });
+    await atomicFailed.promise;
+    try {
+      expect(release).not.toHaveBeenCalled();
+      expect(memory.document("households/house-1/assets/stock")).toMatchObject({ currentBalance: 0 });
+    } finally { finishHealth.resolve(); }
+    await expect(result).resolves.toEqual({ kind: "error", code: "MARKET_REFRESH_FAILED", retryable: true });
     expect(release).toHaveBeenCalledTimes(1);
     expect(memory.paths("households/house-1/operationLocks/").filter(path => !path.includes("cooldown"))).toHaveLength(0);
     expect(memory.document("households/house-1/assets/stock")).toMatchObject({ currentBalance: 0 });
+  });
+
+  it.each([false, true])("persists valuation while health is pending and holds the lease until both settle (health fails: %s)", async failHealth => {
+    const memory = fixture(["A"]);
+    const store = new FirebasePortfolioRuntimeStore(memory as unknown as Firestore);
+    const finishHealth = deferred();
+    const committed = deferred();
+    const transact = store.transact.bind(store);
+    vi.spyOn(store, "transact").mockImplementation(async (...args) => {
+      const result = await transact(...args);
+      committed.resolve();
+      return result;
+    });
+    const release = vi.spyOn(store, "releaseRefreshLease");
+    const recordRun = vi.fn(async () => {
+      await finishHealth.promise;
+      if (failHealth) throw new Error("health unavailable");
+    });
+    const getQuote = vi.fn<PortfolioMarketQuotePort["getQuote"]>(async () => quote);
+    const runtime = createPortfolioRuntimeApplication({ store, marketQuotes: { getQuote }, providerHealth: { recordRun } });
+    let finished = false;
+    const result = runtime.refreshMarketValues({ metadata, assetClass: "all" }).then(value => { finished = true; return value; });
+    await committed.promise;
+    try {
+      expect(recordRun).toHaveBeenCalledTimes(1);
+      expect(memory.document("households/house-1/assets/stock")).toMatchObject({ currentBalance: 1000, aggregateVersion: 2 });
+      expect(finished).toBe(false);
+      expect(release).not.toHaveBeenCalled();
+      await expect(application(memory, { getQuote }).refreshMarketValues({
+        metadata: { ...metadata, principalUid: "uid-2", commandId: "refresh-2", idempotencyKey: "refresh-2" },
+        assetClass: "all",
+      })).resolves.toMatchObject({ kind: "success", value: { skippedReason: "MARKET_REFRESH_IN_PROGRESS" } });
+      expect(getQuote).toHaveBeenCalledTimes(1);
+    } finally { finishHealth.resolve(); }
+    await expect(result).resolves.toMatchObject({ kind: "success", value: { refreshedCount: 1, failedCount: 0 } });
+    expect(release).toHaveBeenCalledTimes(1);
+  });
+
+  it("isolates a synchronous health writer failure without dropping another provider or the valuation", async () => {
+    const memory = fixture(["A"], true);
+    const recordRun = vi.fn(() => Promise.resolve());
+    recordRun.mockImplementationOnce(() => { throw new Error("health writer threw"); });
+    const runtime = createPortfolioRuntimeApplication({
+      store: new FirebasePortfolioRuntimeStore(memory as unknown as Firestore),
+      marketQuotes: { async getQuote() { return quote; } },
+      providerHealth: { recordRun },
+    });
+    await expect(runtime.refreshMarketValues({ metadata, assetClass: "all" })).resolves.toMatchObject({ kind: "success", value: { refreshedCount: 2, failedCount: 0 } });
+    expect(recordRun).toHaveBeenCalledTimes(2);
+    expect(memory.document("households/house-1/assets/stock")).toMatchObject({ currentBalance: 1000 });
+    expect(memory.document("households/house-1/assets/gold")).toMatchObject({ currentBalance: 1000 });
   });
 
   it("uses five slots for distinct quotes and updates all fourteen positions/assets in two provider rounds", async () => {

@@ -24,7 +24,7 @@ export class FirebasePortfolioRuntimeStateLoader {
   ): Promise<LoadedState> {
     const household = this.database.collection("households").doc(householdId);
     const assetCollection = household.collection("assets");
-    const [assetSnapshot, profileSnapshot, planSnapshot] = await Promise.all([
+    const [assetSnapshot, profileSnapshot, planSnapshot, positionSnapshot] = await Promise.all([
       scope.assetId === undefined
         ? transaction.get(assetCollection)
         : transaction.get(assetCollection.doc(scope.assetId)).then(document => ({ docs: document.exists ? [document] : [] })),
@@ -34,28 +34,35 @@ export class FirebasePortfolioRuntimeStateLoader {
         : transaction.get(scope.assetId === undefined
           ? household.collection("assetAutomationPlans")
           : household.collection("assetAutomationPlans").where("assetId", "==", scope.assetId)),
+      scope.positions === false
+        ? Promise.resolve({ docs: [] })
+        : transaction.get(scope.assetId === undefined
+          ? this.database.collectionGroup("positions").where("householdId", "==", householdId)
+          : assetCollection.doc(scope.assetId).collection("positions")),
     ]);
     const ownerProfiles = mapOwnerProfiles(householdId, profileSnapshot.docs);
     const assets = assetSnapshot.docs.flatMap(document => {
       const asset = mapAsset({ householdId, assetId: document.id, canonical: document.data(), ownerProfiles });
       return asset === undefined ? [] : [asset];
     });
-    const positionSnapshots = await Promise.all(
-      (scope.positions === false ? [] : assets).map(asset =>
-        transaction.get(assetCollection.doc(asset.assetId).collection("positions")),
-      ),
-    );
-    const positions = positionSnapshots.flatMap((snapshot, index) => snapshot.docs.flatMap(document => {
+    const assetIds = new Set(assets.map(asset => asset.assetId));
+    // A group query's householdId field is not proof of its canonical parent.
+    const positionDocuments = positionSnapshot.docs.filter(document => {
+      const parent = document.ref.parent.parent;
+      return parent !== null && assetIds.has(parent.id) &&
+        parent.path === `${assetCollection.path}/${parent.id}`;
+    });
+    const positions = positionDocuments.flatMap(document => {
       const data = document.data();
       const position = mapPosition({
         householdId,
-        assetId: assets[index].assetId,
+        assetId: document.ref.parent.parent!.id,
         positionId: document.id,
         sourceKind: text(data, "positionKind") === "crypto" ? "crypto" : "stock",
         canonical: data,
       });
       return position === undefined ? [] : [position];
-    }));
+    });
     const automationPlans = planSnapshot.docs.flatMap(document => {
       const plan = mapPlan(householdId, document);
       return plan === undefined ? [] : [plan];
@@ -63,7 +70,7 @@ export class FirebasePortfolioRuntimeStateLoader {
     return {
       state: { assets, positions, ownerProfiles, automationPlans },
       canonicalAssetIds: new Set(assetSnapshot.docs.map(({ id }) => id)),
-      canonicalPositionIds: new Set(positionSnapshots.flatMap(snapshot => snapshot.docs.map(({ id }) => id))),
+      canonicalPositionIds: new Set(positionDocuments.map(({ id }) => id)),
       planIds: new Set(planSnapshot.docs.map(({ id }) => id)),
     };
   }

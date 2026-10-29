@@ -312,6 +312,10 @@ transaction callback 재실행은 Provider를 다시 호출하지 않습니다. 
 
 일반 회원과 검증된 관리자 조회는 같은 시세 갱신 Application을 사용합니다. 관리자는 `portfolio.market.refresh` capability와 active 가구를 확인한 뒤에만 이 명령을 실행하며 자산 수량·원금·명의·메모 편집 권한은 얻지 않습니다. `RefreshAccountPrices`는 개별 자산 수동 갱신, `RefreshHouseholdPrices`는 다른 화면에서 자산 메인 페이지로 진입할 때의 전체 갱신입니다. 화면은 마지막 자산 Read Model과 같은 날짜의 가구별 일간 변동 snapshot을 먼저 렌더링합니다. Firestore listener의 캐시 응답은 즉시 표시할 수 있지만 진입 갱신의 시작 신호로 사용하지 않으며, 첫 비캐시 서버 snapshot이 화면 상태에 반영된 다음 `RefreshHouseholdPrices`를 막지 않는 background 작업으로 한 번만 시작합니다. 페이지 체류 중 30초 반복과 visibility 복귀 갱신은 하지 않습니다. 같은 화면의 중복 mount는 client single-flight로 한 요청에 합칩니다. 서버 lease가 같은 가구·범위의 선행 run을 발견하면 후속 요청은 `Success(refreshedCount=0, skippedReason=MARKET_REFRESH_IN_PROGRESS)`로 즉시 끝내고 Provider·상태 조회·write를 실행하지 않습니다. 예약 작업 Adapter는 이 결과를 `SKIPPED`로 집계하며 사용자 오류·Provider Health 실패·관리자 실패 건수에는 포함하지 않습니다. 선행 run의 Canonical write를 실시간 listener가 전달하므로 화면은 같은 결과로 수렴합니다. 이 30초 window는 반복 주기가 아니라 중복 Provider fan-out 방지 경계입니다. 전체 갱신은 target 총수 상한 없이 서로 다른 Quote target을 50개씩 page 처리하고, 한 run에서 외부 호출 최대 5개·요청당 timeout 10초·retryable 결과 총 3회 제한을 적용합니다.
 
+전체 가구 상태를 읽을 때 Asset·OwnerProfile·Position 조회는 함께 시작합니다. Position은 `collectionGroup("positions").where("householdId", "==", householdId)` 한 query로 읽고, 실제 문서 경로가 해당 가구의 존재하는 canonical Asset 바로 아래인지 검증합니다. 단일 Asset scope는 그 계좌의 Position subcollection만 읽습니다. canonical writer와 migration은 Position의 `householdId`를 부모 가구와 동일하게 저장하며, 필요한 collection-group 단일 필드 인덱스를 서버 전환 전에 배포합니다. 자산 종류로 Position을 제외하지 않으므로 예수금·수동 항목과 유형 변경 뒤 남은 보유내역도 같은 평가 규칙을 따릅니다.
+
+시세 응답 이후 Provider Health 기록과 평가액 transaction을 함께 시작합니다. Health Promise는 실패를 격리하되 반환 전에 반드시 정리하며, 평가액 commit과 Health 기록이 모두 끝난 뒤 lease를 해제합니다. Provider 호출은 계속 transaction 밖에 있고 저장 전 Asset·Position version을 다시 읽어 경합을 검사합니다. 전체 갱신의 원자 저장 범위·재전송 멱등성·마지막 성공 Quote 보존은 유지합니다.
+
 ### 5.3 `RunDailyAssetValuation`
 
 1. Scheduler Adapter는 매일 23:55 `Asia/Seoul`에 runId, asOf, page cursor만 전달합니다.

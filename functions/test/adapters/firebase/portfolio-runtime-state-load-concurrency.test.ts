@@ -10,7 +10,6 @@ function deferred() {
   const promise = new Promise<void>(done => { resolve = done; });
   return { promise, resolve };
 }
-async function settle() { for (let turn = 0; turn < 20; turn += 1) await Promise.resolve(); }
 
 function fixture() {
   const memory = new InMemoryFirestore();
@@ -33,7 +32,7 @@ describe("portfolio state read dependency branches", () => {
     expect(result.ownerDisplayNames).toEqual({ "profile:owner-1": "Owner" });
   });
 
-  it("starts profiles with assets, then reads only canonical positions", async () => {
+  it("starts household positions with assets and profiles without waiting for the asset list", async () => {
     const memory = fixture();
     const assetsReady = deferred();
     await memory.runTransaction(async transaction => {
@@ -47,15 +46,48 @@ describe("portfolio state read dependency branches", () => {
       const loader = new FirebasePortfolioRuntimeStateLoader(memory as unknown as Firestore);
       const loaded = loader.load({ get } as unknown as Transaction, "house-1", { automationPlans: false });
       const paths = () => get.mock.calls.map(([reference]) => pathOf(reference));
-      expect(paths()).toEqual(["households/house-1/assets", "households/house-1/assetOwnerProfiles"]);
+      expect(paths()).toEqual(["households/house-1/assets", "households/house-1/assetOwnerProfiles", "positions"]);
       assetsReady.resolve();
-      await settle();
-      expect(paths()).toContain("households/house-1/assets/asset-1/positions");
       const result = await loaded;
       expect(result.state.assets).toEqual([expect.objectContaining({ assetId: "asset-1", name: "Canonical", currentBalance: 100, ownerRef: { kind: "profile", profileId: "owner-1" }, ownerDisplayName: "Owner" })]);
       expect(result.state.positions).toEqual([expect.objectContaining({ positionId: "position-1", quantity: 3, aggregateVersion: 2 })]);
       expect(result.canonicalPositionIds).toEqual(new Set(["position-1"]));
       expect(paths()).not.toEqual(expect.arrayContaining(["assets", "stock_holdings", "crypto_holdings"]));
+    });
+  });
+
+  it("uses three queries for nineteen assets while retaining canonical positions and excluding forged or orphan parents", async () => {
+    const memory = fixture();
+    for (let index = 2; index <= 19; index += 1) {
+      memory.seed(`households/house-1/assets/asset-${index}`, { householdId: "house-1", type: "savings", name: `Account ${index}`, currentBalance: index });
+    }
+    const position = memory.document("households/house-1/assets/asset-1/positions/position-1")!;
+    memory.seed("households/house-1/assets/asset-2/positions/manual", { ...position, assetId: "asset-2", instrumentType: "manual", market: "UNRESOLVED" });
+    for (const path of [
+      "households/house-2/assets/asset-1/positions/foreign",
+      "households/house-1/assets/missing/positions/orphan",
+      "households/house-1/assets/asset-1/archive/old/positions/nested",
+    ]) memory.seed(path, position);
+    const result = await memory.runTransaction(transaction => new FirebasePortfolioRuntimeStateLoader(memory as unknown as Firestore)
+      .load(transaction as unknown as Transaction, "house-1", { automationPlans: false }));
+    expect(memory.transactionReads().map(read => read.path)).toEqual(["households/house-1/assets", "households/house-1/assetOwnerProfiles", "positions"]);
+    expect(result.state.assets).toHaveLength(19);
+    expect(result.state.positions).toEqual([
+      expect.objectContaining({ positionId: "position-1", assetId: "asset-1", quantity: 3 }),
+      expect.objectContaining({ positionId: "manual", assetId: "asset-2", instrumentType: "manual", quantity: 3 }),
+    ]);
+    expect(result.canonicalPositionIds).toEqual(new Set(["position-1", "manual"]));
+  });
+
+  it("propagates a failed position query instead of returning an empty portfolio", async () => {
+    const memory = fixture();
+    await memory.runTransaction(async transaction => {
+      const get = async (reference: Parameters<typeof transaction.get>[0]) => {
+        if ("collectionPath" in reference && reference.collectionPath === "positions") throw new Error("POSITION_READ_FAILED");
+        return transaction.get(reference);
+      };
+      await expect(new FirebasePortfolioRuntimeStateLoader(memory as unknown as Firestore)
+        .load({ get } as unknown as Transaction, "house-1", { automationPlans: false })).rejects.toThrow("POSITION_READ_FAILED");
     });
   });
 

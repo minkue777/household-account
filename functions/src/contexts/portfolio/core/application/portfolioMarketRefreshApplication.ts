@@ -62,6 +62,7 @@ export function createPortfolioMarketRefreshCommand(dependencies: {
       }
       if (lease.kind === "failed") return error("PORTFOLIO_UOW_FAILED", true);
 
+      let providerHealthRecords: Promise<unknown> | undefined;
       try {
         const snapshot = await dependencies.store.readState(metadata.householdId, { assetId, automationPlans: false });
         const targets = marketTargets(snapshot, assetClass, assetId);
@@ -98,9 +99,9 @@ export function createPortfolioMarketRefreshCommand(dependencies: {
           executions.push({ target, ...execution });
         }
         if (dependencies.providerHealth !== undefined) {
-          await Promise.allSettled(
+          providerHealthRecords = Promise.allSettled(
             providerObservations({ metadata, scopeKey, executions }).map(
-              (observation) => dependencies.providerHealth!.recordRun(observation),
+              async (observation) => dependencies.providerHealth!.recordRun(observation),
             ),
           );
         }
@@ -281,6 +282,8 @@ export function createPortfolioMarketRefreshCommand(dependencies: {
       } catch {
         return error("MARKET_REFRESH_FAILED", true);
       } finally {
+        // Independent observation writes must finish even when valuation fails.
+        await providerHealthRecords;
         await dependencies.store.releaseRefreshLease(metadata, scopeKey);
       }
     },

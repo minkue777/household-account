@@ -85,6 +85,8 @@
 | JOB-AST-002 | 결함 | 총자산, 금융자산과 현재·직전 snapshot에 존재하는 소유자별·유형별 scope의 전일 대비 변화량을 계산하고, 사라진 scope와 자산이 없는 가구에는 명시적 0원 snapshot intent를 요청한다. Web의 당일 변동은 오늘 이전 최신 Canonical `assetSnapshots` 문서 한 건만 읽고 현재 자산 source snapshot과의 전체·안정 profile ID별 차이를 메모리에서 함께 계산한다. | 활성 자산만 포함하고 대출은 음수이다. Web은 명의자별 레거시 history 조회를 하지 않으며, 전일 문서·해당 명의자 기준값이 없으면 참고 변동을 0원으로 둔다. 실제 snapshot 저장 불변식은 Portfolio `AST-008`이 소유한다. | [자산 평가 예약 작업](../../../../../../functions/src/bootstrap/firebaseAssetValuationScheduledJob.ts), [Web 일간 변동 계산](../../../../../../web/src/features/portfolio/application/dailyAssetChangeSummary.ts), [AST-008](../portfolio/requirements.md#5-요구사항) | U, C, I |
 | JOB-AST-003 | 현재 명세 | Web과 예약 작업은 레거시 자산 생명주기를 동일하게 해석하고, 일부 가격 갱신 뒤 실패해도 일관된 복구 상태를 가져야 한다. | `isActive` 누락·true는 active, false는 deleted로 변환한다. 공용 lifecycle mapper를 사용하고 자산별 Position·평가·Snapshot을 같은 transaction에서 갱신한다. 외부 관측 후 version 경합은 전체 거부하고 재시도로 수렴한다. | 같은 근거 | U, I |
 
+`JOB-AST-001`의 전체 갱신은 자산 개수에 비례하는 빈 Position 목록 조회를 만들지 않습니다. Canonical 가구 Position을 일괄 조회하되 같은 계좌의 예수금·수동 평가·유형 변경 후 보유내역을 보존하고, 저장 전 최신 Asset·Position version을 다시 검사합니다. 공급자 Health 기록과 자산 저장은 독립적으로 진행하며 두 작업의 완료·실패 정리가 끝난 뒤 갱신 잠금을 해제합니다. 보조 기록 실패는 성공한 평가액 저장을 되돌리지 않습니다.
+
 ## 6. 모듈 결함
 
 - 금 시세 실패가 고정 추정값의 성공 응답으로 바뀌어 실제 자산 잔액을 덮어쓸 수 있습니다. (`GOLD-002`)
