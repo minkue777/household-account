@@ -456,13 +456,15 @@ Position history를 활성화하면 `PositionChanged.v1` Consumer가 `(eventId, 
 
 Provider Adapter는 transport status, timeout, parse 결과를 내부 Market union으로 변환합니다. Naver 실패를 Nasdaq·추정값으로 조용히 대체하거나 금 실패를 고정 가격 성공으로 바꾸지 않습니다. 특히 환율 `ExchangeRatePort`의 목표 Adapter는 Frankfurter v2 하나뿐이며 수출입은행·네이버 HTML·다른 무료 API로 fallback하지 않습니다. 다른 Quote 유형에 fallback Provider를 도입하려면 별도 `QuoteSourceSelectionPolicy`가 provenance와 freshness를 포함한 성공 기준을 명시해야 합니다.
 
+국민성장펀드 C-e의 원천은 미래에셋 공식 기준가 그대로이며, 전송 경로만 운영자 Linux 서버의 HTTPS 전용 중계를 사용합니다. `FUND_NAV_RELAY` Secret은 고정 `url`과 `token`을 가진 JSON입니다. Adapter는 HTTPS·443·인증값·query와 fragment 부재를 검증하고 해당 host만 허용하며 redirect를 따라가지 않습니다. 같은 Adapter를 쓰는 Command·Query·일일 자산 평가에 Secret을 bind합니다. 설정이 잘못되면 펀드 요청을 시작하지 않고 명시적 실패를 반환합니다. 중계는 GET·인증된 고정 경로만 받아 공식 `fundCd=539502` URL을 조회하고 원문 응답을 전달합니다. 추가 query는 거절합니다. 인증 헤더·쿠키·사용자 URL·수량·가구 데이터는 원천에 보내지 않으며, 파싱·금액 계산·시세 저장은 기존 Functions 책임으로 유지합니다. 중계의 TLS와 원천 TLS를 모두 검증하고 실패·오래된 값을 새 성공으로 위장하는 cache는 두지 않습니다.
+
 Frankfurter Adapter는 `GET /v2/rate/USD/KRW`의 `date`, `base`, `quote`, `rate`만 읽습니다. `base=USD`, `quote=KRW`, 유한 양수 rate, 서울 현재일보다 미래가 아닌 ISO LocalDate를 검증하고, 검증 시각을 `observedAt`으로 기록합니다. 저장값보다 과거인 `rateDate`는 `InvalidData(STALE_EXCHANGE_RATE_RESPONSE)`이며 정상 관측을 덮어쓰지 않습니다. 같은 `rateDate`의 정상 응답은 재조회 성공으로 인정하되 rate가 바뀐 경우 새 version으로 보존하여 공급자 정정을 반영합니다.
 
 배당 공시는 배당 모듈이 정의한 `DividendDisclosurePort`를 Market Data 플랫폼 Adapter가 구현합니다. Holdings는 KIND DTO나 공시 상태를 공개하지 않습니다.
 
 ### 8.4 서버리스 장애 관측
 
-별도 상시 서버를 도입하지 않습니다. 기존 `dailyAssetSnapshot` 계열 Firebase Scheduled Function이 Naver·Nasdaq·Frankfurter·Upbit·실물 금 Provider의 시세 갱신과 canary 상태 점검을 실행하고, `firebase-functions/logger` 구조화 로그를 Cloud Logging으로 보냅니다. Web의 Next.js 시세 Route 로그는 배포 위치에 종속되므로 장애 판정의 단일 원본으로 사용하지 않습니다.
+장애 관측용 상시 서버는 도입하지 않습니다. 기준가 전용 중계는 위 Market Data ACL의 전송 경로만 담당합니다. 기존 `dailyAssetSnapshot` 계열 Firebase Scheduled Function이 Naver·Nasdaq·Frankfurter·Upbit·실물 금 Provider의 시세 갱신과 canary 상태 점검을 실행하고, `firebase-functions/logger` 구조화 로그를 Cloud Logging으로 보냅니다. Web의 Next.js 시세 Route 로그는 배포 위치에 종속되므로 장애 판정의 단일 원본으로 사용하지 않습니다.
 
 Operations Adapter는 provider+operation별 최신 상태를 Firestore `operations/runtime/providerHealth/{provider_operation}`에 upsert합니다. 이 문서는 가격·보유수량·가구 ID를 저장하지 않고 `lastAttemptAt`, `lastSuccessAt`, `consecutiveFailedRuns`, `failureStartedAt`, `lastResultKind`, `lastErrorCode`, `alertState`, `recoveredAt`만 가집니다. Cloud Monitoring은 구조화 log·metric을 기준으로 즉시 또는 연속 실패 경보를 보내며, Firestore 상태는 운영 조회와 에이전트 진단용입니다.
 

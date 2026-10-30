@@ -64,6 +64,7 @@ const router = createHouseholdQueryRouter({
 
 export const executeHouseholdQuery = functions
   .region(REGION)
+  .runWith({ secrets: ["FUND_NAV_RELAY"] })
   .https.onCall(async (data, context): Promise<HouseholdQueryWireResponse> => {
     const latency = startInteractiveLatencyInvocation("executeHouseholdQuery");
     return latency.run(async () => {

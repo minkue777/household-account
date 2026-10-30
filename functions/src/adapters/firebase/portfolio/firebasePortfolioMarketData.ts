@@ -19,8 +19,6 @@ const NATIONAL_GROWTH_FUND_CODES = new Set([
   "K55301EW0012",
   "EW001",
 ]);
-const NATIONAL_GROWTH_FUND_PRICE_URL =
-  "https://investments.miraeasset.com/magi/fund/basePrices.do?fundGb=2&fundCd=539502&period=1M";
 const NAVER_GOLD_URL = "https://m.stock.naver.com/marketindex/metals/M04020000";
 const FRANKFURTER_USD_KRW_URL =
   "https://api.frankfurter.dev/v2/rate/USD/KRW";
@@ -58,7 +56,29 @@ function numberFromText(value: unknown): number | undefined {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
 }
 
-function defaultSafeHttp(): SafeExternalTextHttpInputPort {
+type FundNavRelay =
+  | { readonly kind: "configured"; readonly url: string; readonly host: string; readonly token: string }
+  | { readonly kind: "invalid"; readonly code: "FUND_NAV_RELAY_NOT_CONFIGURED" | "FUND_NAV_RELAY_INVALID" };
+
+function fundNavRelay(): FundNavRelay {
+  const raw = process.env.FUND_NAV_RELAY;
+  if (!raw?.trim()) return { kind: "invalid", code: "FUND_NAV_RELAY_NOT_CONFIGURED" };
+  try {
+    const config: unknown = JSON.parse(raw);
+    if (typeof config !== "object" || config === null || !("url" in config) || !("token" in config)
+      || typeof config.url !== "string" || typeof config.token !== "string"
+      || !/^[A-Za-z0-9._~+\/-]+=*$/u.test(config.token)) throw new Error("invalid relay configuration");
+    const url = new URL(config.url);
+    if (url.protocol !== "https:" || url.port !== "" || url.username || url.password || url.search || url.hash) {
+      throw new Error("invalid relay URL");
+    }
+    return { kind: "configured", url: url.href, host: url.hostname.toLowerCase(), token: config.token };
+  } catch {
+    return { kind: "invalid", code: "FUND_NAV_RELAY_INVALID" };
+  }
+}
+
+function defaultSafeHttp(relay: FundNavRelay): SafeExternalTextHttpInputPort {
   return createSafeExternalTextHttpApplication({
     policy: {
       providers: [
@@ -88,9 +108,9 @@ function defaultSafeHttp(): SafeExternalTextHttpInputPort {
         },
         {
           provider: "miraeasset-fund-nav",
-          allowedHosts: ["investments.miraeasset.com"],
+          allowedHosts: relay.kind === "configured" ? [relay.host] : [],
           allowedPorts: [443],
-          maxRedirectHops: 2,
+          maxRedirectHops: 0,
         },
         {
           provider: "naver-krx-gold-market",
@@ -218,13 +238,17 @@ type ExchangeRateResult =
   | Extract<PortfolioMarketQuoteResult, { readonly kind: "failure" }>;
 
 export class FirebasePortfolioMarketData implements PortfolioMarketQuotePort {
+  private readonly http: SafeExternalTextHttpInputPort;
+  private readonly fundRelay = fundNavRelay();
   private cachedExchangeRate?: CachedExchangeRate;
   private pendingExchangeRate?: Promise<ExchangeRateResult>;
   private readonly pendingRateObservations = new Map<string, Promise<ExchangeRateObservation | undefined>>();
   private activeProviderRequests = 0;
   private readonly providerRequestWaiters: (() => void)[] = [];
 
-  constructor(private readonly http: SafeExternalTextHttpInputPort = defaultSafeHttp(), private readonly observations?: FirebasePortfolioQuoteObservations) {}
+  constructor(http?: SafeExternalTextHttpInputPort, private readonly observations?: FirebasePortfolioQuoteObservations) {
+    this.http = http ?? defaultSafeHttp(this.fundRelay);
+  }
 
   private async executeHttp(request: SafeExternalTextHttpRequest): Promise<SafeExternalTextHttpResult> {
     // A USD target can fetch its price and FX concurrently without exceeding
@@ -287,13 +311,17 @@ export class FirebasePortfolioMarketData implements PortfolioMarketQuotePort {
     if (!NATIONAL_GROWTH_FUND_CODES.has(code.toLocaleUpperCase("en-US"))) {
       return failure("INSTRUMENT_NOT_FOUND", false, "miraeasset-fund-nav");
     }
+    if (this.fundRelay.kind === "invalid") {
+      return failure(this.fundRelay.code, false, "miraeasset-fund-nav");
+    }
     const response = await this.executeHttp({
       provider: "miraeasset-fund-nav",
       operation: "fund-nav",
-      url: NATIONAL_GROWTH_FUND_PRICE_URL,
+      url: this.fundRelay.url,
       headers: {
         "User-Agent": USER_AGENT,
         Accept: "text/html,application/xhtml+xml",
+        Authorization: `Bearer ${this.fundRelay.token}`,
       },
     });
     if (response.kind !== "success") {

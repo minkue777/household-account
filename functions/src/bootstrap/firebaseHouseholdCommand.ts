@@ -80,7 +80,7 @@ export const executeHouseholdCommand = functions
   .region(REGION)
   .runWith({
     memory: "1GB",
-    secrets: ["SHORTCUT_CREDENTIAL_PEPPER"],
+    secrets: ["SHORTCUT_CREDENTIAL_PEPPER", "FUND_NAV_RELAY"],
   })
   .https.onCall(async (data, context): Promise<HouseholdCommandWireResponse> => {
     const latency = startInteractiveLatencyInvocation(

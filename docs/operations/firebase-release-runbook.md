@@ -42,7 +42,7 @@ build 출력 다음에 표시되는 마지막 JSON의 `commitSha`, `artifact`, `
 - project와 environment는 예시의 production 값으로 고정합니다. 다섯 resource binding을 모두 유지합니다.
 - `authorizedActorIds`는 실제 승인된 GitHub 계정, `monitoringChannelReference`는 검증되고 활성화된 실제 channel로 바꿉니다.
 - Monitoring GET의 `VERIFIED`와 검증 면제 상태(필드 생략·`VERIFICATION_STATUS_UNSPECIFIED`)는 활성 channel에 한해 허용합니다. `UNVERIFIED`, 비활성, 다른 resource 응답과 조회 실패는 차단합니다. 이는 [Google Monitoring API의 상태 의미](https://cloud.google.com/monitoring/api/ref_v3/rest/v3/projects.notificationChannels)를 따릅니다.
-- `secretReferences`는 Secret 원문이 아닌 활성 version reference입니다. 현재 runtime에 필요한 `SHORTCUT_CREDENTIAL_PEPPER`를 반드시 포함합니다. 검토와 실행 사이 version 변경을 피하려면 승인된 숫자 version을 지정합니다.
+- `secretReferences`는 Secret 원문이 아닌 활성 version reference입니다. 현재 runtime에 필요한 `SHORTCUT_CREDENTIAL_PEPPER`와 `FUND_NAV_RELAY`를 반드시 포함합니다. 후자는 기준가 전용 중계의 HTTPS `url`과 인증 `token`을 담은 JSON이며, 중계 설치·인증 및 공식 기준가 조회 성공을 확인한 뒤 배포합니다. 검토와 실행 사이 version 변경을 피하려면 승인된 숫자 version을 지정합니다.
 - 공유 계약을 바꾸는 후보는 변경을 `compatibility.sharedContractChanges`에 선언하고 각 변경에 정확히 하나의 plan을 둡니다. 예시의 빈 배열은 공유 계약 변경이 없을 때만 유효합니다. 자동으로 소스 diff에서 변화 목록을 추정하지 않습니다.
 
 호환 plan에는 서로 다른 `oldContractVersion`·`newContractVersion`, 시작/종료 시각, `minimumSupportedClients`, `expand` → `migrate` → `contract` 순서의 `steps`와 각 단계의 `rollbackCheckpoint`가 필요합니다. FID 변경(`fid-token-to-fid`)과 Membership claim 변경(`legacy-membership-to-claims`)은 [상세 설계](../requirements/supporting-platform/modules/delivery-assurance/design.md#53-호환-전환-예)의 capability 순서도 지켜야 합니다. 일반 계약 변화는 `generic-shared-contract` plan으로 기술합니다. 실제 client 배포와 migration·관측 증거를 검토한 뒤 해당 단계의 서버 후보를 실행합니다.

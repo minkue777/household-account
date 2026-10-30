@@ -190,6 +190,7 @@ async function main() {
   if (!await verifyCloudResource(credential, manifest.monitoringChannelReference, 'monitoring.googleapis.com')) throw new Error('MONITORING_CHANNEL_UNVERIFIED');
   if (!Array.isArray(manifest.secretReferences) || manifest.secretReferences.length === 0) throw new Error('SECRET_BINDINGS_REQUIRED');
   if (!manifest.secretReferences.some(reference => /^projects\/household-account-6f300\/secrets\/SHORTCUT_CREDENTIAL_PEPPER\/versions\/(latest|[0-9]+)$/.test(reference))) throw new Error('SHORTCUT_SECRET_BINDING_REQUIRED');
+  if (!manifest.secretReferences.some(reference => /^projects\/household-account-6f300\/secrets\/FUND_NAV_RELAY\/versions\/(latest|[0-9]+)$/.test(reference))) throw new Error('FUND_NAV_RELAY_SECRET_BINDING_REQUIRED');
   for (const reference of manifest.secretReferences) {
     if (!/^projects\/household-account-6f300\/secrets\/[A-Za-z0-9_-]+\/versions\/(latest|[0-9]+)$/.test(reference)) throw new Error('SECRET_PROJECT_MISMATCH');
     const token = await credential.getAccessToken();

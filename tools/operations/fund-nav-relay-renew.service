@@ -1,0 +1,11 @@
+[Unit]
+Description=Renew the household fund NAV relay certificate
+After=network-online.target nginx.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+UMask=0077
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=AUTO_UPGRADE=0
+ExecStart=/opt/household-fund-nav/acme.sh --cron --home /var/lib/household-fund-nav/acme

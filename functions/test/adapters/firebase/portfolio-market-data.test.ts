@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FirebasePortfolioMarketData } from "../../../src/adapters/firebase/portfolio/firebasePortfolioMarketData";
 import type { PortfolioMarketTarget } from "../../../src/contexts/portfolio/core/application/ports/out/portfolioRuntimeStorePort";
@@ -36,8 +36,15 @@ function json(value: unknown): Response {
   });
 }
 
+const fundRelay = { url: "https://fund-relay.example.test/fund-nav", token: "emulator-only-relay-token" };
+
+beforeEach(() => {
+  vi.stubEnv("FUND_NAV_RELAY", JSON.stringify(fundRelay));
+});
+
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   vi.useRealTimers();
 });
 
@@ -146,6 +153,90 @@ describe("Firebase portfolio market-data adapter", () => {
     await expect(new FirebasePortfolioMarketData().getQuote(target("KOFIA_FUND", "EW001"))).resolves.toMatchObject({ kind: "success", quote: { priceInWon: 1001.19 }, quoteAsOf: "2026-09-06" });
   });
 
+  it("sends the relay credential only to the configured fund endpoint and preserves official NAV provenance", async () => {
+    const fetcher = vi.fn(async (url: string, _init: RequestInit) => url === fundRelay.url
+      ? new Response("<table><tr><td>2026.10.30</td><td>995.71</td></tr></table>")
+      : json({ closePrice: 70000 }));
+    vi.stubGlobal("fetch", fetcher);
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-30T03:00:00Z"));
+    const adapter = new FirebasePortfolioMarketData();
+    await expect(adapter.getQuote(target("KOFIA_FUND", "FUND:K55301EW0012"))).resolves.toMatchObject({
+      kind: "success", quote: { priceInWon: 995.71, provider: "miraeasset-fund-nav" }, quoteAsOf: "2026-10-30",
+    });
+    await adapter.getQuote(target("KRX", "005930"));
+    expect(fetcher.mock.calls[0]).toEqual([fundRelay.url, expect.objectContaining({
+      redirect: "manual", headers: expect.objectContaining({ Authorization: `Bearer ${fundRelay.token}` }),
+    })]);
+    expect(fetcher.mock.calls[1][1].headers).not.toHaveProperty("Authorization");
+    expect(fetcher.mock.calls).toHaveLength(2);
+  });
+
+  it.each([
+    undefined, "", "not-json", "null", "[]", JSON.stringify({ url: fundRelay.url }),
+    JSON.stringify({ ...fundRelay, url: "http://fund-relay.example.test/fund-nav" }),
+    JSON.stringify({ ...fundRelay, url: "https://fund-relay.example.test:8443/fund-nav" }),
+    JSON.stringify({ ...fundRelay, url: "https://user:password@fund-relay.example.test/fund-nav" }),
+    JSON.stringify({ ...fundRelay, url: `${fundRelay.url}#fragment` }),
+    JSON.stringify({ ...fundRelay, url: `${fundRelay.url}?fundCd=539500` }),
+    JSON.stringify({ ...fundRelay, token: "token\r\nInjected: header" }),
+    JSON.stringify({ ...fundRelay, token: "" }),
+  ])("fails without HTTP or direct fallback when relay configuration is invalid: %j", async config => {
+    vi.stubEnv("FUND_NAV_RELAY", config);
+    const fetcher = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+    await expect(new FirebasePortfolioMarketData().getQuote(target("KOFIA_FUND", "EW001"))).resolves.toEqual({
+      kind: "failure", code: !config ? "FUND_NAV_RELAY_NOT_CONFIGURED" : "FUND_NAV_RELAY_INVALID",
+      retryable: false, provider: "miraeasset-fund-nav",
+    });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it.each([fundRelay.url + "/other", "https://other.example.test/fund-nav"])("does not follow a relay redirect or forward its credential to %s", async location => {
+    const fetcher = vi.fn(async (_url: string) => new Response("", { status: 302, headers: { location } }));
+    vi.stubGlobal("fetch", fetcher);
+    await expect(new FirebasePortfolioMarketData().getQuote(target("KOFIA_FUND", "EW001")))
+      .resolves.toMatchObject({ kind: "failure", retryable: false, provider: "miraeasset-fund-nav" });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher.mock.calls[0][0]).toBe(fundRelay.url);
+  });
+
+  it.each([
+    { status: 401, code: "HTTP_STATUS_NOT_SUPPORTED", retryable: false },
+    { status: 502, code: "PROVIDER_UNAVAILABLE", retryable: true },
+  ])("keeps relay HTTP $status as a typed failure", async ({ status, code, retryable }) => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("unavailable", { status })));
+    await expect(new FirebasePortfolioMarketData().getQuote(target("KOFIA_FUND", "EW001")))
+      .resolves.toEqual({ kind: "failure", code, retryable, provider: "miraeasset-fund-nav" });
+  });
+
+  it("preserves the last published fund NAV and account value when the relay rejects a refresh", async () => {
+    const memory = new InMemoryFirestore();
+    const lastQuote = { priceInWon: 989.02, observedAt: "2026-10-26T14:55:00Z", provider: "miraeasset-fund-nav" };
+    memory.seed("households/house-1/assets/fund", { householdId: "house-1", type: "stock", name: "Fund", currency: "KRW", currentBalance: 29670600, aggregateVersion: 1, lifecycleState: "active" });
+    memory.seed("households/house-1/assets/fund/positions/fund-position", {
+      householdId: "house-1", assetId: "fund", positionKind: "stock", instrumentType: "fund", market: "KOFIA_FUND", instrumentCode: "FUND:K55301EW0012",
+      instrumentName: "C-e", quantity: 30000000, averagePriceInWon: 1000, priceScale: 1000, lastQuote, quoteAsOf: "2026-10-26", lifecycleState: "active", aggregateVersion: 1,
+    });
+    const fetcher = vi.fn(async () => new Response("unauthorized", { status: 401 }));
+    vi.stubGlobal("fetch", fetcher);
+    const recordRun = vi.fn(async () => {});
+    const runtime = createPortfolioRuntimeApplication({
+      store: new FirebasePortfolioRuntimeStore(memory as unknown as Firestore), marketQuotes: new FirebasePortfolioMarketData(),
+      providerHealth: { recordRun },
+    });
+    await expect(runtime.refreshMarketValues({
+      metadata: { householdId: "house-1", principalUid: "uid-1", actorMemberId: "member-1", commandId: "fund-refresh", idempotencyKey: "fund-refresh", commandName: "portfolio.refresh-market-values.v1", payloadFingerprint: "payload", occurredAt: "2026-10-30T03:00:00Z" },
+      assetClass: "all",
+    })).resolves.toMatchObject({ kind: "success", value: { refreshedCount: 0, failedCount: 0, retainedLastSuccessCount: 1 } });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(recordRun).toHaveBeenCalledWith(expect.objectContaining({
+      provider: "miraeasset-fund-nav", finalResult: { kind: "CONTRACT_FAILURE", code: "HTTP_STATUS_NOT_SUPPORTED" },
+    }));
+    expect(memory.document("households/house-1/assets/fund")).toMatchObject({ currentBalance: 29670600 });
+    expect(memory.document("households/house-1/assets/fund/positions/fund-position")).toMatchObject({ lastQuote, quoteAsOf: "2026-10-26" });
+  });
+
   it("preserves fractional unit quotes until the account valuation rounds the total", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => json([{ trade_price: 0.03 }])));
     const quote = await new FirebasePortfolioMarketData().getQuote(target("UPBIT_KRW", "KRW-SMALL"));
@@ -174,7 +265,7 @@ describe("Firebase portfolio market-data adapter", () => {
         if (url.includes("api.upbit.com")) {
           return json([{ trade_price: 50_000, timestamp: 1_774_281_600_000 }]);
         }
-        if (url.includes("basePrices.do")) {
+        if (url === fundRelay.url) {
           return new Response(
             "<table><tr><td>2026.07.20</td><td>1,001.19</td></tr></table>",
             { status: 200 },
@@ -243,7 +334,7 @@ describe("Firebase portfolio market-data adapter", () => {
     expect(requested.some((url) => url.includes("api.nasdaq.com"))).toBe(true);
     expect(requested.some((url) => url.includes("frankfurter.dev"))).toBe(true);
     expect(requested.some((url) => url.includes("api.upbit.com"))).toBe(true);
-    expect(requested.some((url) => url.includes("basePrices.do"))).toBe(true);
+    expect(requested).toContain(fundRelay.url);
     expect(requested.some((url) => url.includes("marketindex/metals"))).toBe(true);
   });
 

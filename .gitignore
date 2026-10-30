@@ -44,6 +44,7 @@ web/performance-results/
 .env.test.local
 .env.production.local
 .secret.local
+.secret.local.run.lock
 
 # IDE
 .idea/

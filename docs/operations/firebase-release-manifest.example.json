@@ -17,7 +17,8 @@
   "authorizedActorIds": ["REPLACE_WITH_GITHUB_LOGIN"],
   "monitoringChannelReference": "projects/household-account-6f300/notificationChannels/REPLACE_WITH_CHANNEL_ID",
   "secretReferences": [
-    "projects/household-account-6f300/secrets/SHORTCUT_CREDENTIAL_PEPPER/versions/latest"
+    "projects/household-account-6f300/secrets/SHORTCUT_CREDENTIAL_PEPPER/versions/latest",
+    "projects/household-account-6f300/secrets/FUND_NAV_RELAY/versions/latest"
   ],
   "target": {
     "environment": "production",

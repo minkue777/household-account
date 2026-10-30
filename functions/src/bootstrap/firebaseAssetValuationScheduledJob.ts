@@ -27,6 +27,7 @@ export const assetValuationDaily = onSchedule(
     region: REGION,
     timeoutSeconds: scheduledFunctionTimeoutSeconds(definition),
     memory: "1GiB",
+    secrets: ["FUND_NAV_RELAY"],
     retryCount: 2,
     minBackoffSeconds: 60,
     maxBackoffSeconds: 300,
