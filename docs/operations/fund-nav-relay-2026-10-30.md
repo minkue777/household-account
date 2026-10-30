@@ -34,8 +34,11 @@
 
 - 기존 MobaXterm 터널의 공개 기준가 GET 성공. 운영 데이터 변경 없음.
 - Emulator Secret 파일 생성·caller 보존·복원·불일치·동시 실행 차단 10개 검사 통과.
-- Node 22.23.4에서 시세 Adapter·펀드 계약·Emulator 파일·architecture 합계 107개 통과. production build 성공. 초기 callable Emulator 검사는 Node 24에서 3개 통과했으며 운영 버전 Node 22로 재검증한다.
+- Node 22.23.4에서 시세 Adapter·펀드 계약·Emulator 파일·architecture 합계 107개 통과. production build 성공. callable Emulator 검사도 Node 22의 세 codebase에서 3개 통과했으며 임시 Secret·잠금 잔여가 없음을 확인했다.
 - Node 22.23.4의 외부 HTTPS probe: 무인증/오인증 401, POST 405, 다른 경로 404, 추가 query 400. 공식 HTML 200, 표본 36ms. 이 값은 전체 자산 갱신 시간이나 GCP 출발 조회 시간과 다르다.
 - 초기 Nginx 검증에서 caller query를 허용하자 URL 형태 값을 넣은 요청은 원천 CloudFront 403을 반환했다. [Nginx 1.18 정적 proxy_pass 경로](https://github.com/nginx/nginx/blob/release-1.18.0/src/http/modules/ngx_http_proxy_module.c#L1332)의 args 전달을 확인하고 query 없는 고정 endpoint 계약으로 제한했다. CloudFront의 구체적인 차단 규칙은 미확정이며, 최종 중계는 해당 입력을 원천 요청 전에 400으로 거절한다.
 - 같은 production adapter를 Firestore 관측 저장 없이 실행해 `miraeasset-fund-nav`, 기준일 `2026-10-30`, NAV `995.71`을 확인했다.
-- Linux 중계·인증서·갱신 timer 설치 완료. Firebase Secret `FUND_NAV_RELAY` version 1 활성화. Firebase 배포는 다음 clean commit에서 wrapper로 진행한다.
+- Linux 중계·인증서·갱신 timer 설치 완료. Firebase Secret `FUND_NAV_RELAY` version 1 활성화. 제품 SHA `a9c206754b5a79c25d84c6cc5fc7083ea1b07af9`를 `release-20261030-fund-relay-a9c20675`로 세 codebase에 배포했고 13:22 KST 기본 smoke·provenance `completed`를 확인했다. Command rev78·Query rev61·일일 평가 rev57 모두 ACTIVE/Node 22와 Secret version 1 바인딩을 확인했다. 기본 smoke는 사용자 로그인·실제 가구 갱신 검사가 아니다.
+- 설치를 마친 후 임시 SSH 공개키 한 줄만 제거하고 해당 키의 인증 거절을 확인했다. 기존 접속 키·MobaXterm 터널은 보존했다. 렌더링 설정의 staging 복제본은 삭제하고 서비스가 사용하는 root 전용 설정·Secret Manager 값은 유지했다.
+- 제품 CI [41002126793](https://github.com/minkue777/household-account/actions/runs/41002126793): 13:23 KST functions·web·android 성공, web-e2e·android-instrumentation 진행 중. 별도 후속 확인으로 전체 결과를 확정한다. Web·APK 실행 파일은 변경하지 않았다.
+- 배포 직후 조회한 로그에는 새 `miraeasset-fund-nav` 운영 호출이 없었다. Firebase 출발 업무 경로의 복구와 전체 갱신 3초 달성은 아직 미확인이다. 자연 발생한 다음 갱신의 provider 결과·total로 판정하며 공개 HTML probe의 37ms를 전체 갱신 시간으로 쓰지 않는다.
