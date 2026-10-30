@@ -46,13 +46,39 @@ export async function addAssetUi(page: Page, input: { name: string; type?: strin
 }
 /** 실제 exported Scheduler 함수의 run 경계부터 실제 Firestore Adapter까지 실행합니다.
  * Cloud Scheduler 전달만 대신하며 Domain/Repository/Provider를 mock하지 않습니다. */
-export interface ProviderHttpFixture { urlIncludes: string; body: string; status?: number; headers?: Record<string, string> }
+export const FUND_NAV_RELAY_FIXTURE = {
+  url: 'https://fund-relay.example.test/household-fund-nav/ew001',
+  token: 'e2e-fund-relay-token',
+};
+export interface ProviderHttpFixture { urlIncludes: string; body: string; status?: number; headers?: Record<string, string>; requestHeaders?: Record<string, string> }
 export async function runScheduled(name: 'assetAutomationDaily' | 'dividendHourly' | 'assetValuationDaily' | 'recurringDaily', scheduledFor: string, httpFixtures?: ProviderHttpFixture[]): Promise<string[]> {
   const module = { assetAutomationDaily: 'firebaseAssetAutomationScheduledJob', dividendHourly: 'firebaseDividendScheduledJob', assetValuationDaily: 'firebaseAssetValuationScheduledJob', recurringDaily: 'firebaseScheduledJobs' }[name];
   const entry = path.resolve(process.cwd(), '../functions/lib/bootstrap', `${module}.js`);
-  const code = `const fixtures=JSON.parse(process.argv[4]);const urls=[];if(fixtures){const realFetch=globalThis.fetch;globalThis.fetch=async(url,init)=>{const target=new URL(String(url));if(target.hostname==='127.0.0.1'||target.hostname==='localhost')return realFetch(url,init);urls.push(target.href);const fixture=fixtures.find(item=>target.href.includes(item.urlIncludes));if(!fixture)throw new Error('UNEXPECTED_EXTERNAL_HTTP:'+target.href);return new Response(fixture.body,{status:fixture.status||200,headers:fixture.headers||{'content-type':'application/json'}});}}const job=require(process.argv[1])[process.argv[2]]; job.run({jobName:'e2e-scheduler',scheduleTime:process.argv[3],context:{eventId:'e2e-'+process.argv[2]+'-'+process.argv[3]}}).then(()=>{console.log('HTTP_E2E_RECORD:'+JSON.stringify(urls));process.exit(0)}).catch(error=>{console.error(error);process.exit(1)});`;
+  const code = `
+    const fixtures = JSON.parse(process.argv[4]);
+    const urls = [];
+    if (fixtures) {
+      const realFetch = globalThis.fetch;
+      globalThis.fetch = async (url, init) => {
+        const target = new URL(String(url));
+        if (target.hostname === '127.0.0.1' || target.hostname === 'localhost') return realFetch(url, init);
+        urls.push(target.href);
+        const fixture = fixtures.find(item => target.href.includes(item.urlIncludes));
+        if (!fixture) throw new Error('UNEXPECTED_EXTERNAL_HTTP:' + target.href);
+        const headers = new Headers(init?.headers);
+        for (const [name, value] of Object.entries(fixture.requestHeaders || {})) {
+          if (headers.get(name) !== value) throw new Error('UNEXPECTED_REQUEST_HEADER:' + name);
+        }
+        return new Response(fixture.body, { status: fixture.status || 200, headers: fixture.headers || { 'content-type': 'application/json' } });
+      };
+    }
+    const job = require(process.argv[1])[process.argv[2]];
+    job.run({ jobName: 'e2e-scheduler', scheduleTime: process.argv[3], context: { eventId: 'e2e-' + process.argv[2] + '-' + process.argv[3] } })
+      .then(() => { console.log('HTTP_E2E_RECORD:' + JSON.stringify(urls)); process.exit(0); })
+      .catch(error => { console.error(error); process.exit(1); });
+  `;
   const output = await promisify(execFile)(process.execPath, ['-e', code, entry, name, scheduledFor, JSON.stringify(httpFixtures ?? null)], {
-    env: { ...process.env, DEBUG: '', GCLOUD_PROJECT: E2E_PROJECT_ID, GOOGLE_CLOUD_PROJECT: E2E_PROJECT_ID, FIRESTORE_EMULATOR_HOST: '127.0.0.1:8080', FIREBASE_AUTH_EMULATOR_HOST: '127.0.0.1:9099', FIREBASE_CONFIG: JSON.stringify({ projectId: E2E_PROJECT_ID }) },
+    env: { ...process.env, DEBUG: '', GCLOUD_PROJECT: E2E_PROJECT_ID, GOOGLE_CLOUD_PROJECT: E2E_PROJECT_ID, FIRESTORE_EMULATOR_HOST: '127.0.0.1:8080', FIREBASE_AUTH_EMULATOR_HOST: '127.0.0.1:9099', FIREBASE_CONFIG: JSON.stringify({ projectId: E2E_PROJECT_ID }), FUND_NAV_RELAY: JSON.stringify(FUND_NAV_RELAY_FIXTURE) },
     timeout: 60_000,
     maxBuffer: 1024 * 1024,
   });

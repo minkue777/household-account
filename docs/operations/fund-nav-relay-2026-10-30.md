@@ -42,3 +42,12 @@
 - 설치를 마친 후 임시 SSH 공개키 한 줄만 제거하고 해당 키의 인증 거절을 확인했다. 기존 접속 키·MobaXterm 터널은 보존했다. 렌더링 설정의 staging 복제본은 삭제하고 서비스가 사용하는 root 전용 설정·Secret Manager 값은 유지했다.
 - 제품 CI [41002126793](https://github.com/minkue777/household-account/actions/runs/41002126793): 13:23 KST functions·web·android 성공, web-e2e·android-instrumentation 진행 중. 별도 후속 확인으로 전체 결과를 확정한다. Web·APK 실행 파일은 변경하지 않았다.
 - 배포 직후 조회한 로그에는 새 `miraeasset-fund-nav` 운영 호출이 없었다. Firebase 출발 업무 경로의 복구와 전체 갱신 3초 달성은 아직 미확인이다. 자연 발생한 다음 갱신의 provider 결과·total로 판정하며 공개 HTML probe의 37ms를 전체 갱신 시간으로 쓰지 않는다.
+
+## CI의 Scheduler fixture 누락 보강
+
+- 제품 CI `41002126793`과 문서 후속 CI `41002635602`는 모두 `portfolio-provider-jobs.spec.ts:34`에서 실패했다. 각각 Web E2E 120개 성공·1개 실패이며 나머지 네 검사는 성공했다. 과거 실행을 성공으로 변경하지 않는다.
+- 별도 Node 프로세스로 실행하는 Scheduler helper에는 `FUND_NAV_RELAY`가 주입되지 않았다. 펀드 HTTP가 호출되지 않았고 assertion도 이전 직접 접속 URL의 `fundCd=539502`를 기대했다. 운영 Secret 바인딩 실패가 아닌 테스트 실행 구성 누락이다.
+- Scheduler 모듈 로드 전에 테스트 전용 HTTPS URL·Bearer 값을 주입한다. 실제 HTTP 경계 fixture에서 인증 헤더를 검사하고 정확한 중계 URL 한 번 호출·원천 직접 요청 없음·NAV 1,200·공식 provider·오늘 기준일·평가액 3,000원을 검증한다. 운영 중계·자격 증명은 테스트에 쓰지 않는다.
+- 로컬 보강 검사의 첫 실행에서 두 번째 Scheduler 호출의 기존 `rejects.toThrow()`는 통과했지만 공급자 상태가 `SUCCESS`로 남는 빈틈이 드러났다. 미래 예약 날짜만 전달하고 30초의 실제 갱신 쿨다운이 남은 상태에서 실행했기 때문이다. 저장된 `nextAllowedAt`까지 기다린 뒤 실제 503 요청, `RETRYABLE_FAILURE/PROVIDER_UNAVAILABLE`, 마지막 정상 NAV·기준일·자산 잔액 보존을 함께 검사한다. 정상값 보존은 기존 Scheduler 계약의 완료 결과이며 공급자 실패 기록을 성공으로 바꾸지 않는다.
+- 이번 후속은 E2E helper·검사·문서만 변경하므로 Firebase·Web·APK 재배포 대상은 없다.
+- Node 22.23.4·Java 21·실제 Auth/Firestore/Functions Emulator·Chromium에서 해당 파일의 E2E 두 건을 다시 실행해 모두 통과했다(시세 42.2초, KIND 7.1초, 전체 1.3분). 정상 중계 인증과 가격 반영, 실제 503 관측과 값 보존을 확인했으며 기존 실패 이력은 위에 유지한다. 로그: `%TEMP%/household-fund-relay-e2e-20261030-r2.log`.
