@@ -4,6 +4,8 @@ import { FirebasePortfolioMarketData } from "../../../src/adapters/firebase/port
 import type { PortfolioMarketTarget } from "../../../src/contexts/portfolio/core/application/ports/out/portfolioRuntimeStorePort";
 import { calculateAccountValuationPolicy } from "../../../src/contexts/portfolio/holdings/domain/policies/accountValuation";
 import { FirebasePortfolioQuoteObservations } from "../../../src/adapters/firebase/portfolio/firebasePortfolioQuoteObservations";
+import { FirebasePortfolioRuntimeStore } from "../../../src/adapters/firebase/portfolio/firebasePortfolioRuntimeStore";
+import { createPortfolioRuntimeApplication } from "../../../src/contexts/portfolio/core/application/portfolioRuntimeApplication";
 import { InMemoryFirestore } from "../../support/in-memory-firestore";
 import type { Firestore } from "firebase-admin/firestore";
 
@@ -58,6 +60,48 @@ describe("Firebase portfolio market-data adapter", () => {
       : json({ data: { primaryData: { lastSalePrice: "N/A" }, secondaryData: { lastSalePrice: "$1.25" } } })));
     await expect(new FirebasePortfolioMarketData().getQuote(target("US", "US:AAPL")))
       .resolves.toMatchObject({ kind: "success", quote: { priceInWon: 1750 } });
+  });
+
+  it("uses the saved ETF classification for the first Nasdaq request during a refresh", async () => {
+    const memory = new InMemoryFirestore();
+    memory.seed("households/house-1/assets/stock", { householdId: "house-1", type: "stock", name: "Account", currency: "USD", currentBalance: 0, aggregateVersion: 1, lifecycleState: "active" });
+    memory.seed("households/house-1/assets/stock/positions/spy", {
+      householdId: "house-1", assetId: "stock", positionKind: "stock", instrumentType: "etf", market: "US", instrumentCode: "US:SPY",
+      instrumentName: "SPY", quantity: 2, averagePriceInWon: 100, priceScale: 1, lifecycleState: "active", aggregateVersion: 1,
+    });
+    const fetcher = vi.fn(async input => String(input).includes("frankfurter")
+      ? json({ base: "USD", quote: "KRW", rate: 1400, date: "2026-09-01" })
+      : json({ data: { primaryData: { lastSalePrice: "$100" } } }));
+    vi.stubGlobal("fetch", fetcher);
+    const runtime = createPortfolioRuntimeApplication({
+      store: new FirebasePortfolioRuntimeStore(memory as unknown as Firestore),
+      marketQuotes: new FirebasePortfolioMarketData(),
+    });
+    await expect(runtime.refreshMarketValues({
+      metadata: { householdId: "house-1", principalUid: "uid-1", actorMemberId: "member-1", commandId: "refresh-1", idempotencyKey: "refresh-1", commandName: "portfolio.refresh-market-values.v1", payloadFingerprint: "payload-1", occurredAt: "2026-09-06T00:00:00Z" },
+      assetClass: "all",
+    })).resolves.toMatchObject({ kind: "success", value: { refreshedCount: 1, failedCount: 0 } });
+    expect(fetcher.mock.calls.map(([input]) => String(input)).filter(url => url.includes("nasdaq")))
+      .toEqual(["https://api.nasdaq.com/api/quote/SPY/info?assetclass=etf"]);
+    expect(memory.document("households/house-1/assets/stock")).toMatchObject({ currentBalance: 280000 });
+  });
+
+  it.each([
+    { instrumentType: "etf" as const, first: "etf", fallback: "stocks" },
+    { instrumentType: "stock" as const, first: "stocks", fallback: "etf" },
+    { instrumentType: undefined, first: "stocks", fallback: "etf" },
+  ])("retains the alternate Nasdaq route when the $instrumentType classification has no price", async ({ instrumentType, first, fallback }) => {
+    const requested: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async input => {
+      const url = String(input);
+      if (url.includes("frankfurter")) return json({ base: "USD", quote: "KRW", rate: 1400, date: "2026-09-01" });
+      const assetClass = new URL(url).searchParams.get("assetclass")!;
+      requested.push(assetClass);
+      return json(assetClass === first ? { data: null } : { data: { primaryData: { lastSalePrice: "$100" } } });
+    }));
+    await expect(new FirebasePortfolioMarketData().getQuote({ ...target("US", "US:SPY"), instrumentType }))
+      .resolves.toMatchObject({ kind: "success", quote: { priceInWon: 140000 } });
+    expect(requested).toEqual([first, fallback]);
   });
 
   it("keeps the newer FX date, rejects future FX, and revalues the retained USD quote on FX-only success", async () => {

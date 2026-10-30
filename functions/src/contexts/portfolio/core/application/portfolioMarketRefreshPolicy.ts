@@ -45,6 +45,7 @@ export function marketTargets(
         kind: position.positionKind,
         market: position.market,
         instrumentCode: position.instrumentCode,
+        instrumentType: position.instrumentType,
         quantity: position.quantity,
         priceScale: position.priceScale,
       } satisfies PortfolioMarketTarget,

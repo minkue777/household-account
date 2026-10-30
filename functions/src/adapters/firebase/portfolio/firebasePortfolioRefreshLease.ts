@@ -29,11 +29,11 @@ export class FirebasePortfolioRefreshLease {
     const now = this.now();
     try {
       return await this.database.runTransaction(async (transaction) => {
-        const [receiptSnapshot, lockSnapshot, cooldownSnapshot] = await Promise.all([
-          transaction.get(receipt),
-          transaction.get(lock),
-          transaction.get(cooldown),
-        ]);
+        const [receiptSnapshot, lockSnapshot, cooldownSnapshot] = await transaction.getAll(
+          receipt,
+          lock,
+          cooldown,
+        );
         if (receiptSnapshot.exists) {
           if (
             receiptSnapshot.data()?.payloadFingerprint !==

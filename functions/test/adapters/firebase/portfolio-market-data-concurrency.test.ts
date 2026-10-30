@@ -32,7 +32,7 @@ function observations() { return new FirebasePortfolioQuoteObservations(new InMe
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe("portfolio price and FX concurrency", () => {
-  it("overlaps independent price and FX HTTP while selecting durable FX after the price is ready", async () => {
+  it("overlaps price and FX HTTP, then saves both independent observations after the price is ready", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-06T00:00:00Z"));
     const store = observations();
@@ -51,13 +51,16 @@ describe("portfolio price and FX concurrency", () => {
       return value;
     });
     expect(execute.mock.calls.map(([request]) => request.provider)).toEqual(["nasdaq-us", "frankfurter-v2"]);
-    await vi.advanceTimersByTimeAsync(140);
+    await vi.advanceTimersByTimeAsync(120);
+    expect(store.saveSource).toHaveBeenCalledTimes(1);
     expect(store.saveRate).toHaveBeenCalledTimes(1);
     expect(completedAfter).toBeUndefined();
-    await vi.advanceTimersByTimeAsync(30);
+    await vi.advanceTimersByTimeAsync(20);
+    expect(completedAfter).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(10);
     await expect(result).resolves.toMatchObject({ kind: "success", quote: { priceInWon: 140000, sourcePrice: 100, exchangeRateDate: "2026-09-05", quoteObservedAt: "2026-09-06T00:00:00.120Z", exchangeRateObservedAt: "2026-09-06T00:00:00.080Z" } });
     // The same sequential I/O takes 120 + 20 + 80 + 30 = 250 ms.
-    expect(completedAfter).toBe(170);
+    expect(completedAfter).toBe(150);
   });
 
   it("shares one FX request and transaction across five USD quotes without exceeding five HTTP slots", async () => {
@@ -157,6 +160,36 @@ describe("portfolio price and FX concurrency", () => {
     await expect(adapter.getQuote(target("AAPL"))).rejects.toThrow("store unavailable");
     await expect(adapter.getQuote(target("MSFT"))).resolves.toMatchObject({ kind: "success", quote: { priceInWon: 140000 } });
     expect(store.saveRate).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(["source", "rate"] as const)("settles the independent successful observation before surfacing a rejected %s transaction", async failedObservation => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-06T00:00:00Z"));
+    const store = observations();
+    const saveReady = deferred<void>();
+    if (failedObservation === "rate") {
+      const saveSource = store.saveSource.bind(store);
+      vi.spyOn(store, "saveSource").mockImplementation(async (...args) => { await saveReady.promise; return saveSource(...args); });
+      vi.spyOn(store, "saveRate").mockRejectedValueOnce(new Error("store unavailable"));
+    } else {
+      const saveRate = store.saveRate.bind(store);
+      vi.spyOn(store, "saveRate").mockImplementation(async (...args) => { await saveReady.promise; return saveRate(...args); });
+      vi.spyOn(store, "saveSource").mockRejectedValueOnce(new Error("store unavailable"));
+    }
+    const execute: SafeExternalTextHttpInputPort["execute"] = async request => request.provider === "frankfurter-v2" ? rate : price;
+    let finished = false;
+    const result = new FirebasePortfolioMarketData({ execute }, store).getQuote(target("AAPL"));
+    void result.then(() => { finished = true; }, () => { finished = true; });
+    const rejection = expect(result).rejects.toThrow("store unavailable");
+    await settle();
+    try {
+      expect(store.saveSource).toHaveBeenCalledTimes(1);
+      expect(store.saveRate).toHaveBeenCalledTimes(1);
+      expect(finished).toBe(false);
+    } finally { saveReady.resolve(); }
+    await rejection;
+    if (failedObservation === "rate") await expect(store.source("AAPL")).resolves.toMatchObject({ sourcePrice: 100 });
+    else await expect(store.rate()).resolves.toMatchObject({ rate: 1400, rateDate: "2026-09-05" });
   });
 
   it("returns HTTP slots to queued quotes even when the transport unexpectedly throws", async () => {

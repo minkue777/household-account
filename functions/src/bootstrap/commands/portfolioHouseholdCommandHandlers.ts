@@ -7,6 +7,7 @@ import { FirebasePortfolioQuoteObservations } from "../../adapters/firebase/port
 import { FirebasePortfolioProviderHealthStore } from "../../adapters/firebase/portfolio/firebasePortfolioProviderHealthStore";
 import { FirebasePortfolioRuntimeStore } from "../../adapters/firebase/portfolio/firebasePortfolioRuntimeStore";
 import { createPortfolioRuntimeApplication } from "../../contexts/portfolio/core/application/portfolioRuntimeApplication";
+import { withPortfolioHealthLatency, withPortfolioQuoteLatency, withPortfolioStoreLatency } from "../portfolioInteractiveLatency";
 import type {
   PortfolioCommandMetadata,
   PortfolioCommandResult,
@@ -104,9 +105,9 @@ export function createPortfolioHouseholdCommandHandlers(
   marketQuotes: PortfolioMarketQuotePort = new FirebasePortfolioMarketData(undefined, new FirebasePortfolioQuoteObservations(database)),
 ): ReadonlyMap<string, HouseholdCommandHandler> {
   const application = createPortfolioRuntimeApplication({
-    store: new FirebasePortfolioRuntimeStore(database),
-    marketQuotes,
-    providerHealth: new FirebasePortfolioProviderHealthStore(database),
+    store: withPortfolioStoreLatency(new FirebasePortfolioRuntimeStore(database)),
+    marketQuotes: withPortfolioQuoteLatency(marketQuotes),
+    providerHealth: withPortfolioHealthLatency(new FirebasePortfolioProviderHealthStore(database)),
   });
   async function refreshMetadata(context: HouseholdCommandExecutionContext) {
     if (context.actor !== undefined) return metadata(context);

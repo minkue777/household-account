@@ -73,6 +73,7 @@ export class FirebasePortfolioRuntimeStore implements PortfolioRuntimeStorePort 
   async readState(householdId: string, scope?: PortfolioRuntimeReadScope): Promise<PortfolioRuntimeState> {
     return this.database.runTransaction(async (transaction) =>
       (await this.loader.load(transaction, householdId, scope)).state,
+      { readOnly: true },
     );
   }
 

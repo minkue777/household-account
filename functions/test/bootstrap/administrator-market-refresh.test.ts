@@ -4,6 +4,7 @@ import { FirebaseHouseholdCommandMembershipAdapter, FirebaseHouseholdCommandRece
 import { createHouseholdCommandRouter } from '../../src/bootstrap/commands/householdCommandRouter';
 import { createPortfolioHouseholdCommandHandlers } from '../../src/bootstrap/commands/portfolioHouseholdCommandHandlers';
 import { verifiedSystemAdministrator } from '../../src/bootstrap/verifiedSystemAdministrator';
+import { startInteractiveLatencyInvocation, type InteractiveLatencyLogEntry } from '../../src/observability/interactiveLatency';
 import { InMemoryFirestore } from '../support/in-memory-firestore';
 
 function setup(lifecycleState = 'active') {
@@ -36,6 +37,31 @@ function setup(lifecycleState = 'active') {
 }
 
 describe('[ADM-004][T-ADM-003][JOB-AST-001] 관리자 시세 갱신', () => {
+  it('실제 명령 경로의 임대·조회·시세·저장·해제 시간을 금융정보 없이 같은 요청에 연결한다', async () => {
+    const f = setup();
+    const entries: InteractiveLatencyLogEntry[] = [];
+    const latency = startInteractiveLatencyInvocation('executeHouseholdCommand', {
+      sink: { write: entry => entries.push(entry) },
+    });
+    await latency.run(async () => {
+      await expect(f.router.execute(f.input)).resolves.toMatchObject({ kind: 'success', data: { refreshedCount: 1 } });
+      latency.complete('succeeded');
+    });
+    const stages = entries.map(entry => entry.stage);
+    for (const stage of ['portfolio-lease-acquire', 'portfolio-state-read', 'portfolio-quote',
+      'portfolio-persistence', 'portfolio-provider-health', 'portfolio-lease-release', 'total']) {
+      expect(stages.filter(value => value === stage)).toHaveLength(1);
+    }
+    expect(stages.indexOf('portfolio-lease-release')).toBeGreaterThan(stages.indexOf('portfolio-persistence'));
+    expect(stages.indexOf('portfolio-lease-release')).toBeGreaterThan(stages.indexOf('portfolio-provider-health'));
+    expect(new Set(entries.map(entry => entry.correlationId))).toEqual(new Set([latency.correlationId]));
+    expect(new Set(entries.map(entry => entry.operation))).toEqual(new Set(['portfolio.refresh-market-values.v1']));
+    const serialized = JSON.stringify(entries);
+    for (const sensitive of ['householdId', 'principalUid', 'instrumentCode', 'priceInWon', '005930', '삼성전자']) {
+      expect(serialized).not.toContain(sensitive);
+    }
+  });
+
   it('일반 회원은 관리자 claim 없이 기존 Membership으로 시세를 갱신한다', async () => {
     const f = setup();
     f.memory.seed('households/target/memberships/member', {

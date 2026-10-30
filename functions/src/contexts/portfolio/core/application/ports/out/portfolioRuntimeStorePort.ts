@@ -201,6 +201,7 @@ export interface PortfolioMarketTarget {
     | "UPBIT_KRW"
     | "PHYSICAL_GOLD";
   readonly instrumentCode: string;
+  readonly instrumentType?: PortfolioRuntimePosition["instrumentType"];
   readonly quantity: number;
   readonly priceScale: number;
 }

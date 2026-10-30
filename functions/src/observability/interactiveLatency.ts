@@ -27,7 +27,13 @@ export type InteractiveLatencyStage =
   | "capture-receipt-claim"
   | "capture-receipt-save"
   | "capture-configuration"
-  | "capture-persistence";
+  | "capture-persistence"
+  | "portfolio-lease-acquire"
+  | "portfolio-state-read"
+  | "portfolio-quote"
+  | "portfolio-persistence"
+  | "portfolio-provider-health"
+  | "portfolio-lease-release";
 
 export type InteractiveLatencyStatus =
   | "succeeded"

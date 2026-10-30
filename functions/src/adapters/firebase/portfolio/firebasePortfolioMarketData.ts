@@ -252,7 +252,7 @@ export class FirebasePortfolioMarketData implements PortfolioMarketQuotePort {
           ? this.krxGoldSpot()
           : this.domesticStock(target.instrumentCode);
       case "US":
-        return this.usStock(target.instrumentCode);
+        return this.usStock(target.instrumentCode, target.instrumentType);
       case "KOFIA_FUND":
         return this.fund(target.instrumentCode);
       case "UPBIT_KRW":
@@ -370,20 +370,28 @@ export class FirebasePortfolioMarketData implements PortfolioMarketQuotePort {
         });
   }
 
-  private async usStock(code: string): Promise<PortfolioMarketQuoteResult> {
+  private async usStock(code: string, instrumentType?: PortfolioMarketTarget["instrumentType"]): Promise<PortfolioMarketQuoteResult> {
     const symbol = code.replace(/^US:/u, "").trim().toLocaleUpperCase("en-US");
     if (symbol === "") return failure("INSTRUMENT_NOT_FOUND", false, "nasdaq-us");
-    const [{ quote, lastFailure }, observedRate] = await Promise.all([
-      this.usStockSource(symbol),
+    const [{ quote: observedQuote, lastFailure }, observedRate] = await Promise.all([
+      this.usStockSource(symbol, instrumentType),
       this.usdKrwRate(),
     ]);
     const providerFailures: { kind: "failure"; code: string; retryable: boolean; provider: string }[] = [];
     if (lastFailure !== undefined) providerFailures.push({ ...lastFailure, provider: "nasdaq-us" });
     if (observedRate.kind === "failure") providerFailures.push({ ...observedRate, provider: "frankfurter-v2" });
-    // Select the durable FX observation after the price is ready, even when
-    // its HTTP response came from the five-minute cache. Other instances may
-    // have published a newer rate while this quote was being fetched.
-    const rate = await this.usdKrwObservation(observedRate);
+    // Both durable observations are independent. Select them together after
+    // price HTTP completes so cached FX still sees newer cross-instance rates.
+    const [sourceSelection, rateSelection] = await Promise.allSettled([
+      observedQuote === undefined
+        ? this.observations?.source(symbol)
+        : this.observations?.saveSource(symbol, observedQuote) ?? observedQuote,
+      this.usdKrwObservation(observedRate),
+    ]);
+    if (sourceSelection.status === "rejected") throw sourceSelection.reason;
+    if (rateSelection.status === "rejected") throw rateSelection.reason;
+    const quote = sourceSelection.value;
+    const rate = rateSelection.value;
     if (quote === undefined) return lastFailure ?? failure("QUOTE_NOT_PUBLISHED", false, "nasdaq-us");
     if (rate === undefined) return failure("EXCHANGE_RATE_NOT_OBSERVED", observedRate.kind === "failure" && observedRate.retryable, "frankfurter-v2");
     return {
@@ -396,7 +404,7 @@ export class FirebasePortfolioMarketData implements PortfolioMarketQuotePort {
     };
   }
 
-  private async usStockSource(symbol: string): Promise<{
+  private async usStockSource(symbol: string, instrumentType?: PortfolioMarketTarget["instrumentType"]): Promise<{
     readonly quote?: SourceMarketObservation;
     readonly lastFailure?: Extract<PortfolioMarketQuoteResult, { readonly kind: "failure" }>;
   }> {
@@ -411,7 +419,8 @@ export class FirebasePortfolioMarketData implements PortfolioMarketQuotePort {
       false,
       "nasdaq-us",
     );
-    for (const assetClass of ["stocks", "etf"] as const) {
+    const assetClasses = instrumentType === "etf" ? ["etf", "stocks"] : ["stocks", "etf"];
+    for (const assetClass of assetClasses) {
       const response = await this.executeHttp({
         provider: "nasdaq-us",
         operation: "market-quote",
@@ -442,10 +451,9 @@ export class FirebasePortfolioMarketData implements PortfolioMarketQuotePort {
       }
     }
     if (quote !== undefined) {
-      return { quote: await this.observations?.saveSource(symbol, quote) ?? quote };
+      return { quote };
     }
     return {
-      quote: await this.observations?.source(symbol),
       ...(lastFailure.kind === "failure" ? { lastFailure } : {}),
     };
   }
