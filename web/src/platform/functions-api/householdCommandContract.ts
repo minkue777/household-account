@@ -1,4 +1,3 @@
-import type { ForeignPayment } from '@/types/expense';
 import type { PortfolioMutationResult } from './portfolioCommandResult';
 import type { AssetOwnerProfileWireView } from './accessContractTypes';
 import type { ClientStartupDiagnostics } from './clientStartupDiagnosticsContract';
@@ -13,7 +12,6 @@ export interface LedgerTransactionCommandResult {
   memo: string;
   tags?: string[];
   amountInWon: number;
-  foreignPayment?: ForeignPayment;
   categoryId: string;
   accountingDate: string;
   localTime: string;

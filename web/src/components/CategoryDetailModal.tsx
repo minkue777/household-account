@@ -1,6 +1,5 @@
 'use client';
 
-import ExpenseAmount from '@/components/expense/ExpenseAmount';
 import { X } from 'lucide-react';
 import Portal from '@/components/common/Portal';
 import { Expense, Category, TransactionType } from '@/types/expense';
@@ -88,7 +87,7 @@ export default function CategoryDetailModal({
                     </div>
                   </div>
                   <div className="ml-3 flex-shrink-0 font-semibold text-slate-800">
-                    <ExpenseAmount expense={expense} />
+                    {expense.amount.toLocaleString()}원
                   </div>
                 </button>
               ))}

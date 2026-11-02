@@ -2,14 +2,6 @@
 export type Category = string;
 export type TransactionType = 'expense' | 'income';
 
-export interface ForeignPayment {
-  currency: 'JPY';
-  amount: number;
-  rateInWon: number;
-  rateDate: string;
-  provider: 'frankfurter-ecb';
-}
-
 // 합쳐진 지출의 원본 정보
 export interface MergedExpenseInfo {
   merchant: string;
@@ -26,7 +18,6 @@ export interface Expense {
   time?: string;          // HH:mm
   merchant: string;       // 가맹점명
   amount: number;         // 통계·예산에 반영하는 원화 금액
-  foreignPayment?: ForeignPayment;
   transactionType?: TransactionType;
   category: Category;     // 카테고리 (동적)
   cardType?: string;  // 'manual' | 'captured' | 'local_currency' | legacy type

@@ -344,12 +344,6 @@ export default function ExpenseEditModal({
       {expense.date}
       {expense.time ? ` · ${expense.time}` : ''}
       {displayCardLabel ? ` · ${displayCardLabel}` : ''}
-      {expense.foreignPayment && <div className="mt-3 rounded-lg bg-slate-50 p-3">
-        <p className="font-semibold text-slate-800">원 결제액 {expense.foreignPayment.amount.toLocaleString('ko-KR')}엔</p>
-        <p className="mt-1 text-xs">등록 환율: 100엔 = {(expense.foreignPayment.rateInWon * 100).toLocaleString('ko-KR', { maximumFractionDigits: 4 })}원</p>
-        <p className="text-xs">{expense.foreignPayment.rateDate} ECB 기준 · Frankfurter</p>
-        <p className="mt-1 text-xs">아래 금액은 통계에 반영할 원화 금액입니다.</p>
-      </div>}
     </div>
   );
 
