@@ -112,6 +112,7 @@ export function createCaptureTransactionGatewayApplication(input: {
           householdId: command.householdId,
           downstreamKey: command.downstreamKey,
           branch: {
+            ...(context.foreignPayment === undefined ? {} : { foreignPayment: context.foreignPayment }),
             ...(context.verifiedRawPayloadHash === undefined ? {} : { verifiedRawPayloadHash: context.verifiedRawPayloadHash }),
             observationId: context.observationId,
             creatorMemberId: context.creatorMemberId,
@@ -186,6 +187,7 @@ export function createCaptureTransactionGatewayApplication(input: {
         householdId: command.householdId,
         downstreamKey: command.downstreamKey,
         branch: {
+          ...(context.foreignPayment === undefined ? {} : { foreignPayment: context.foreignPayment }),
           ...(context.verifiedRawPayloadHash === undefined ? {} : { verifiedRawPayloadHash: context.verifiedRawPayloadHash }),
           observationId: context.observationId,
           originChannel: context.originChannel,

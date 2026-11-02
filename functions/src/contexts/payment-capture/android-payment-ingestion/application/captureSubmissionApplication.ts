@@ -119,6 +119,7 @@ function branchEnvelope(
               ? {}
               : { localCurrencyType: payment.localCurrencyType }),
             captureContext: {
+              ...(command.foreignPayment === undefined ? {} : { foreignPayment: command.foreignPayment }),
               ...(command.verifiedRawPayloadHash === undefined ? {} : {
                 verifiedRawPayloadHash: command.verifiedRawPayloadHash,
               }),

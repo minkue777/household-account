@@ -1,5 +1,6 @@
 'use client';
 
+import ExpenseAmount from '@/components/expense/ExpenseAmount';
 import { useMemo } from 'react';
 import { ChevronRight, Search } from 'lucide-react';
 import { Expense, TransactionType } from '@/types/expense';
@@ -152,7 +153,7 @@ export default function SearchResultList({
                       </div>
                     </div>
                     <div className="ml-3 flex-shrink-0 font-semibold text-slate-800">
-                      {expense.amount.toLocaleString()}원
+                      <ExpenseAmount expense={expense} />
                     </div>
                   </div>
                 );

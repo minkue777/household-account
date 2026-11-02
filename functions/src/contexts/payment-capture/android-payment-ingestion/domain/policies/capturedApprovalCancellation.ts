@@ -4,6 +4,7 @@ const DAY = 24 * 60 * 60 * 1_000;
 const SEARCH_DAYS = 30;
 
 interface CancellationEvidence {
+  readonly foreignPayment?: { readonly currency: string; readonly amount: number };
   readonly cancellationDate: string;
   readonly amountInWon: number;
   readonly originalMerchant?: string;
@@ -13,6 +14,7 @@ interface CancellationEvidence {
 }
 
 interface CapturedApprovalEvidence {
+  readonly foreignPayment?: { readonly currency: string; readonly amount: number };
   readonly approvalDate: string;
   readonly approvalAmountInWon: number;
   readonly merchant: string;
@@ -43,7 +45,10 @@ export function matchesCapturedApprovalCancellation(
   if (
     !Number.isFinite(end) || !Number.isFinite(approvedAt) ||
     approvedAt > end || approvedAt < start ||
-    approval.approvalAmountInWon !== cancellation.amountInWon ||
+    (approval.foreignPayment !== undefined || cancellation.foreignPayment !== undefined
+      ? approval.foreignPayment?.currency !== cancellation.foreignPayment?.currency ||
+        approval.foreignPayment?.amount !== cancellation.foreignPayment?.amount
+      : approval.approvalAmountInWon !== cancellation.amountInWon) ||
     normalizeCancellationMerchant(approval.merchant) !==
       normalizeCancellationMerchant(cancellation.originalMerchant ?? cancellation.merchant)
   ) return false;

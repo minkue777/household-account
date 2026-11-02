@@ -1,9 +1,11 @@
 import type { CaptureTransactionBranchResult } from "../in/captureBranchSubmissionInputPort";
+import type { ForeignPayment } from "../../../../../household-finance/ledger/public";
 
 export interface CaptureApprovalPersistenceCommand {
   readonly householdId: string;
   readonly downstreamKey: string;
   readonly branch: {
+    readonly foreignPayment?: ForeignPayment;
     readonly verifiedRawPayloadHash?: string;
     readonly observationId: string;
     readonly originChannel: "android-notification" | "ios-shortcut";
@@ -36,6 +38,7 @@ export interface CaptureCancellationPersistenceCommand {
   readonly householdId: string;
   readonly downstreamKey: string;
   readonly branch: {
+    readonly foreignPayment?: ForeignPayment;
     readonly verifiedRawPayloadHash?: string;
     readonly observationId: string;
     readonly creatorMemberId: string;

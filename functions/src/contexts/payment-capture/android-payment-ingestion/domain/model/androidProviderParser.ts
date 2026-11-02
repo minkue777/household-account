@@ -30,6 +30,10 @@ export type AndroidProviderParseResult =
   | {
       readonly kind: "Parsed";
       readonly payment?: ParsedPaymentGolden;
+      readonly foreignCurrencyPayment?: Omit<ParsedPaymentGolden, "amountInWon" | "approvalAmountInWon"> & {
+        readonly currency: "JPY";
+        readonly amount: number;
+      };
       readonly balance?: {
         readonly amountInWon: number;
         readonly localCurrencyType: string;

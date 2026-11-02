@@ -3,6 +3,7 @@ import type { LedgerTransactionCommandResult } from '@/platform/functions-api/ho
 import type { Expense, TransactionType } from '@/types/expense';
 import { normalizeStoredCategoryId } from '@/lib/categoryCompatibility';
 import { normalizeExpenseTags } from '@/lib/utils/expenseTags';
+import { readForeignPayment } from '@/lib/utils/foreignPayment';
 
 const DEFAULT_TRANSACTION_TYPE: TransactionType = 'expense';
 
@@ -91,6 +92,7 @@ export function mapExpenseReadData(id: string, data: DocumentData): Expense {
     time: data.localTime ?? data.time,
     merchant: data.merchant,
     amount: data.amountInWon ?? data.amount,
+    foreignPayment: readForeignPayment(data.foreignPayment),
     transactionType: (data.transactionType || DEFAULT_TRANSACTION_TYPE) as TransactionType,
     category: normalizeStoredCategoryId(data.categoryId || data.category),
     cardType: data.cardType?.toLowerCase() || (data.source === 'manual' ? 'manual' : 'main'),
@@ -121,6 +123,7 @@ export function mapCommandTransaction(
     time: transaction.localTime,
     merchant: transaction.merchant,
     amount: transaction.amountInWon,
+    foreignPayment: readForeignPayment(transaction.foreignPayment),
     transactionType: transaction.transactionType,
     category: normalizeStoredCategoryId(transaction.categoryId),
     cardType: previous?.cardType ?? transaction.cardType,

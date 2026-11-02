@@ -1,3 +1,4 @@
+import { PaymentExchangeRateReader } from "../adapters/http/paymentExchangeRateReader";
 import * as functions from "firebase-functions/v1";
 
 import {
@@ -307,6 +308,7 @@ const rawNotificationSubmissionHandler =
       payloads: new Sha256AndroidRawNotificationHasher(),
       clock: { now: () => new Date().toISOString() },
       configurationPrefetch: captureConfiguration,
+      exchangeRates: new PaymentExchangeRateReader(),
     }),
   });
 

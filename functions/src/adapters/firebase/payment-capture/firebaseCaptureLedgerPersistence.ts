@@ -15,6 +15,7 @@ import { planCaptureLineageCancellation } from "../../../contexts/household-fina
 import { FirebaseTransactionalOutbox } from "../outbox/firebaseTransactionalOutbox";
 import { firestoreTtlAfter } from "../shared/firestoreTtl";
 import { verifiedRawCaptureFingerprint } from "../../crypto/payment-capture/verifiedRawCaptureFingerprint";
+import { readForeignPayment, type ForeignPayment } from "../../../contexts/household-finance/ledger/public";
 
 const RECEIPT_CONTEXT = "payment-capture-ledger";
 const FINGERPRINT_VERSION = 1;
@@ -42,7 +43,8 @@ function approvalFingerprint(command: CaptureApprovalPersistenceCommand): {
     command.householdId,
     command.branch.accountingDate,
     localTime,
-    command.branch.amountInWon,
+    command.branch.foreignPayment === undefined ? command.branch.amountInWon
+      : [command.branch.foreignPayment.currency, command.branch.foreignPayment.amount],
     normalizeCancellationMerchant(command.branch.originalMerchant),
   ]);
   return { canonical, fingerprintHash: hash(canonical) };
@@ -226,6 +228,7 @@ function transactionVersion(data: FirebaseFirestore.DocumentData): number {
 }
 
 interface CancellationCandidate {
+  readonly foreignPayment?: ForeignPayment;
   readonly documentId: string;
   readonly transactionId: string;
   readonly captureLineageId: string;
@@ -270,6 +273,7 @@ function candidate(
     fingerprintHash: data.fingerprintHash,
     approvalDate: data.approvalDate,
     approvalAmountInWon,
+    foreignPayment: readForeignPayment(data.foreignPayment),
     merchant: typeof data.originalMerchant === "string" ? data.originalMerchant : data.merchant,
     companyLabel: typeof card.companyLabel === "string" ? card.companyLabel : "",
     lastFour: typeof card.lastFour === "string" ? card.lastFour : "",
@@ -421,6 +425,7 @@ export class FirebaseCaptureLedgerPersistence
           command.branch.resolvedCardEvidence,
         );
         const common = {
+          ...(command.branch.foreignPayment === undefined ? {} : { foreignPayment: command.branch.foreignPayment }),
           householdId: command.householdId,
           transactionType: "expense",
           lifecycleState: "active",
@@ -463,6 +468,7 @@ export class FirebaseCaptureLedgerPersistence
         };
         transaction.create(canonical, common);
         transaction.create(captureRecord, {
+          ...(command.branch.foreignPayment === undefined ? {} : { foreignPayment: command.branch.foreignPayment }),
           householdId: command.householdId,
           captureId: ids.captureId,
           captureLineageId: ids.captureLineageId,

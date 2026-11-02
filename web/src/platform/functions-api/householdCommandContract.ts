@@ -1,3 +1,4 @@
+import type { ForeignPayment } from '@/types/expense';
 import type { PortfolioMutationResult } from './portfolioCommandResult';
 import type { AssetOwnerProfileWireView } from './accessContractTypes';
 import type { ClientStartupDiagnostics } from './clientStartupDiagnosticsContract';
@@ -12,6 +13,7 @@ export interface LedgerTransactionCommandResult {
   memo: string;
   tags?: string[];
   amountInWon: number;
+  foreignPayment?: ForeignPayment;
   categoryId: string;
   accountingDate: string;
   localTime: string;
@@ -164,7 +166,7 @@ export interface HouseholdCommandPayloads {
   'portfolio.add-position.v1': { assetId: string; positionKind: 'stock' | 'crypto'; position: Record<string, unknown>; expectedAssetVersion: number };
   'portfolio.update-position.v1': { assetId: string; positionId: string; positionKind: 'stock' | 'crypto'; changes: Record<string, unknown>; expectedVersion: number; expectedAssetVersion: number };
   'portfolio.delete-position.v1': { assetId: string; positionId: string; positionKind: 'stock' | 'crypto'; expectedVersion: number; expectedAssetVersion: number };
-  'portfolio.refresh-market-values.v1': { assetClass: 'stock' | 'crypto' | 'physical-gold' | 'all' };
+  'portfolio.refresh-market-values.v1': { assetClass: 'stock' | 'crypto' | 'physical-gold' | 'all'; assetId?: string };
 
   'payment-configuration.create-merchant-rule.v1': { rule: Record<string, unknown> };
   'payment-configuration.update-merchant-rule.v1': { ruleId: string; changes: Record<string, unknown>; expectedVersion: number };

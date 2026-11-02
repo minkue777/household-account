@@ -1,5 +1,6 @@
 'use client';
 
+import ExpenseAmount from '@/components/expense/ExpenseAmount';
 import { useMemo, useState } from 'react';
 import { ChevronRight, X } from 'lucide-react';
 import { Expense, Category } from '@/types/expense';
@@ -103,7 +104,7 @@ export default function CategoryExpenseModal({
                             {expense.date}{expense.memo && ` · ${expense.memo}`}
                           </span>
                         </span>
-                        <span className="ml-3 shrink-0 font-semibold text-slate-800">{expense.amount.toLocaleString()}원</span>
+                        <span className="ml-3 shrink-0"><ExpenseAmount expense={expense} /></span>
                       </button>
                     ))}
                   </div>}

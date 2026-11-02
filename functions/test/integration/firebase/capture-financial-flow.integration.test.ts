@@ -61,6 +61,30 @@ emulator('실제 SDK Capture와 원장·잔액·Outbox', () => {
     expect(await rows('outboxEvents')).toHaveLength(1);
   }, 30_000);
 
+  it('[PARSE-TOSS-001][CAN-003] 엔화 원금·환율을 보존하고 환율이 달라져도 중복과 취소를 연결한다', async () => {
+    const { application } = setup();
+    const foreignPayment = { currency: 'JPY' as const, amount: 1000, rateInWon: 8.5,
+      rateDate: '2026-07-17', provider: 'frankfurter-ecb' as const };
+    const command = { ...paymentCommand({ rootIdempotencyKey: 'yen', originChannel: 'android-notification', amountInWon: 8500 }), foreignPayment };
+    const approved = await application.submit(command);
+    expect(approved).toMatchObject({ kind: 'success', value: { transactionResult: { kind: 'created' } } });
+    const stored = await rows('households/household-1/ledgerTransactions');
+    expect(stored).toEqual([expect.objectContaining({ amountInWon: 8500, foreignPayment })]);
+    expect(await application.submit(command)).toEqual(approved);
+    const revisedRate = { ...foreignPayment, rateInWon: 9 };
+    expect(await application.submit({ ...paymentCommand({ rootIdempotencyKey: 'yen-duplicate', originChannel: 'android-notification', amountInWon: 9000 }), foreignPayment: revisedRate }))
+      .toMatchObject({ value: { transactionResult: { kind: 'duplicate' } } });
+    expect(await rows('households/household-1/ledgerTransactions')).toEqual(stored);
+    expect(await application.submit(paymentCommand({ rootIdempotencyKey: 'won-cancel', originChannel: 'android-notification', amountInWon: 8500, observationType: 'cancellation' })))
+      .toMatchObject({ value: { transactionResult: { kind: 'notFound' } } });
+    expect(await rows('households/household-1/ledgerTransactions')).toEqual(stored);
+    const cancellation = { ...paymentCommand({ rootIdempotencyKey: 'yen-cancel', originChannel: 'android-notification', amountInWon: 9000, observationType: 'cancellation' }), foreignPayment: revisedRate };
+    const cancelled = await application.submit(cancellation);
+    expect(cancelled).toMatchObject({ value: { transactionResult: { kind: 'cancelled' } } });
+    expect(await rows('households/household-1/ledgerTransactions')).toEqual([]);
+    expect(await application.submit(cancellation)).toEqual(cancelled);
+  }, 30_000);
+
   it('[T-DUP-001][ING-SAVE-005][IOS-006] 서로 다른 채널·키·카드의 동시 결제는 실제 공통 fingerprint에서 한 거래로 수렴한다', async () => {
     const { application } = setup();
     const commands = [paymentCommand({ rootIdempotencyKey: 'android', originChannel: 'android-notification' }), paymentCommand({ rootIdempotencyKey: 'ios', originChannel: 'ios-shortcut', merchant: '  가맹점   A ', card: { companyLabel: '농협', maskedToken: '9999' } })];

@@ -4,6 +4,7 @@ import {
   bodyLines,
   ignoredParseFailure,
   paymentAtReceivedTime,
+  receivedLocalTime,
   type ProviderParserContext,
   type ProviderParserDefinition,
 } from "./providerParsingSupport";
@@ -59,6 +60,19 @@ function parseNaver(context: ProviderParserContext): AndroidProviderParseResult 
 
 function parseToss(context: ProviderParserContext): AndroidProviderParseResult {
   const normalized = bodyLines(context.body).join("\n").trim();
+  const yen = /(?:^|\n)(\d{1,3}(?:,\d{3})+|\d+) JPY (결제(?:\s*취소)?)(?:\n|$)/u.exec(normalized);
+  if (yen !== null) {
+    const merchant = TOSS_MERCHANT_PATTERN.exec(normalized)?.[1]?.trim();
+    const amount = amountInWon(yen[1]);
+    const received = receivedLocalTime(context);
+    if (!merchant || !amount || received === undefined) return ignoredParseFailure();
+    if (merchant.includes("가승인")) return { kind: "Ignored", code: "PREAUTHORIZATION" };
+    return { kind: "Parsed", foreignCurrencyPayment: {
+      type: yen[2].includes("취소") ? "cancellation" : "approval", currency: "JPY", amount,
+      merchant, cardCompany: "토스", occurredLocalDate: received.localDate,
+      occurredLocalTime: received.localTime, timeSource: received.timeSource,
+    } };
+  }
   const completed = TOSS_PAYMENT_COMPLETE_PATTERN.exec(normalized);
   const amountEvent = completed ?? TOSS_AMOUNT_EVENT_PATTERN.exec(normalized);
   const merchant = (completed?.[3] ?? TOSS_MERCHANT_PATTERN.exec(normalized)?.[1] ??

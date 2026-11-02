@@ -14,6 +14,7 @@ export function ledgerTransactionDocument(
     memo: transaction.memo,
     tags: transaction.tags ?? [],
     amountInWon: transaction.amountInWon,
+    ...(transaction.foreignPayment === undefined ? {} : { foreignPayment: transaction.foreignPayment }),
     amount: transaction.amountInWon,
     categoryId: transaction.categoryId,
     category: transaction.categoryId,

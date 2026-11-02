@@ -13,9 +13,10 @@ import { categoryCatalogDocument } from "../../support/category-catalog-document
 import { readContractJson } from "../../support/contract-json";
 import type { AndroidRawNotificationInput } from "../../../src/contexts/payment-capture/android-payment-ingestion/public";
 import { Sha256AndroidRawNotificationHasher } from "../../../src/adapters/crypto/payment-capture/sha256AndroidRawNotificationHasher";
+import type { PaymentExchangeRatePort } from "../../../src/contexts/payment-capture/android-payment-ingestion/application/ports/out/paymentExchangeRatePort";
 
 const actor = { principalId: "uid", householdId: "house", actingMemberId: "member", capabilities: ["paymentCapture:submit" as const] };
-function setup() {
+function setup(exchangeRates?: PaymentExchangeRatePort) {
   const memory = new InMemoryFirestore();
   const database = memory as unknown as firestore.Firestore;
   const balance = vi.fn(async (_actor: unknown, _observation: unknown) => ({ kind: "success" as const, status: "created" as const, balanceId: "balance", balanceVersion: 1 }));
@@ -34,11 +35,54 @@ function setup() {
     branches: createCaptureBranchSubmissionApplication({ receipts: new FirebaseCaptureSubmissionReceiptStore(database), payloads: new Sha256CapturePayloadFingerprint(), transactions: gateway, balances: { recordBalanceObservation: balance } }),
   });
   const parser = createAndroidProviderParser();
-  const raw = createAndroidRawNotificationSubmissionApplication({ parser, submissions, payloads: new Sha256AndroidRawNotificationHasher(), clock: { now: () => "2026-09-06T00:00:00.000Z" } });
+  const raw = createAndroidRawNotificationSubmissionApplication({ parser, submissions, exchangeRates, payloads: new Sha256AndroidRawNotificationHasher(), clock: { now: () => "2026-09-06T00:00:00.000Z" } });
   return { memory, balance, configuration, parser, submit: (notification: AndroidRawNotificationInput["notification"], packageName = "com.samsung.android.messaging", observationId = "observation.flow") => raw.submit({ actor, input: { contractVersion: "android-raw-notification.v1", observationId, packageName, notification } }) };
 }
 
 describe("raw parser부터 실제 Capture receipt와 Firebase Ledger까지", () => {
+  const yen = (amount = 16_248, cancel = false) => ({ postedAt: cancel ? '2026-10-31T10:34:38+09:00' : '2026-10-30T10:34:38+09:00',
+    title: '토스뱅크', text: `${amount.toLocaleString('en-US')} JPY 결제${cancel ? ' 취소' : ''}\n토스뱅크 체크카드 | Ralph Lauren\n잔액 92,752 JPY` });
+
+  it('[PARSE-TOSS-001] 엔화 원금과 환율 근거를 보존하며 환율 변경 후 재전송·중복·취소는 원금으로 판정한다', async () => {
+    const getYenRate = vi.fn(async () => ({ rateInWon: 8.5, rateDate: '2026-10-30', provider: 'frankfurter-ecb' as const }));
+    const subject = setup({ getYenRate });
+    const approved = await subject.submit(yen(), 'viva.republica.toss', 'observation.yen.approval');
+    expect(approved).toMatchObject({ kind:'success', value:{ transactionResult:{kind:'created',quickEditSnapshot:{amountInWon:138_108}} } });
+    const before = subject.memory.documentsInCollection('households/house/ledgerTransactions');
+    expect(before).toHaveLength(1);
+    expect(before[0].value).toMatchObject({amountInWon:138_108, amount:138_108, foreignPayment:{currency:'JPY',amount:16_248,rateInWon:8.5,rateDate:'2026-10-30',provider:'frankfurter-ecb'}});
+    expect(getYenRate).toHaveBeenCalledWith('2026-10-30');
+    expect(subject.balance).not.toHaveBeenCalled();
+    getYenRate.mockResolvedValue({rateInWon:9,rateDate:'2026-10-30',provider:'frankfurter-ecb'});
+    expect(await subject.submit(yen(), 'viva.republica.toss', 'observation.yen.approval')).toEqual(approved);
+    expect(await subject.submit(yen(), 'viva.republica.toss', 'observation.yen.duplicate')).toMatchObject({value:{transactionResult:{kind:'duplicate'}}});
+    expect(subject.memory.documentsInCollection('households/house/ledgerTransactions')).toEqual(before);
+    expect(await subject.submit(yen(16_247,true), 'viva.republica.toss', 'observation.yen.partial')).toMatchObject({value:{transactionResult:{kind:'notFound'}}});
+    expect(subject.memory.documentsInCollection('households/house/ledgerTransactions')).toEqual(before);
+    const cancelled = await subject.submit(yen(16_248,true), 'viva.republica.toss', 'observation.yen.cancel');
+    expect(cancelled).toMatchObject({value:{transactionResult:{kind:'cancelled'}}});
+    expect(subject.memory.documentsInCollection('households/house/ledgerTransactions')).toHaveLength(0);
+    expect(await subject.submit(yen(16_248,true), 'viva.republica.toss', 'observation.yen.cancel')).toEqual(cancelled);
+  });
+
+  it('[PARSE-TOSS-001] 환율 장애 시 원화로 오등록하거나 terminal 처리하지 않고 같은 원문을 재시도한다', async () => {
+    const getYenRate = vi.fn<PaymentExchangeRatePort['getYenRate']>().mockResolvedValue(undefined);
+    const subject = setup({getYenRate});
+    expect(await subject.submit(yen(),'viva.republica.toss')).toMatchObject({value:{completion:'partial-retryable',transactionResult:{kind:'retryableFailure',code:'EXCHANGE_RATE_UNAVAILABLE'}}});
+    expect(subject.memory.documentsInCollection('households/house/ledgerTransactions')).toHaveLength(0);
+    getYenRate.mockResolvedValue({rateInWon:8.5,rateDate:'2026-10-30',provider:'frankfurter-ecb'});
+    expect(await subject.submit(yen(),'viva.republica.toss')).toMatchObject({value:{completion:'terminal',transactionResult:{kind:'created'}}});
+  });
+
+  it('[PARSE-TOSS-001] 엔화 잔액·잘못된 금액·다른 통화를 결제액으로 사용하지 않는다', async () => {
+    const getYenRate = vi.fn<PaymentExchangeRatePort['getYenRate']>();
+    const subject = setup({getYenRate});
+    for (const text of ['잔액 92,752 JPY\n토스뱅크 체크카드 | 매장', '0 JPY 결제\n토스뱅크 체크카드 | 매장', '1,23 JPY 결제\n토스뱅크 체크카드 | 매장', '100 USD 결제\n토스뱅크 체크카드 | 매장']) {
+      await subject.submit({...yen(),text},'viva.republica.toss');
+    }
+    expect(getYenRate).not.toHaveBeenCalled();
+    expect(subject.memory.documentsInCollection('households/house/ledgerTransactions')).toHaveLength(0);
+  });
   const toss = (amount: number, cancel = false, cashback = 500): AndroidRawNotificationInput["notification"] => ({
     postedAt: cancel ? "2026-09-06T13:10:00+09:00" : "2026-09-05T13:10:00+09:00",
     title: "토스",

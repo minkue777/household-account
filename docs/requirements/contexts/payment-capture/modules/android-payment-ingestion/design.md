@@ -1,5 +1,7 @@
 # Android 결제 알림 수집 모듈 상세 설계
 
+토스 JPY 원문은 parser에서 통화·원금·수신 날짜를 반환하고 raw submission이 고정된 외부 환율 Port를 호출해 원화 내부 Capture 입력으로 변환한다. 외부 I/O는 Firestore transaction 밖에서 실행한다. 신뢰된 서버 메타데이터만 내부 command에 전달하며 공개 raw 입력은 그대로 유지한다. [엔화 처리 계약](../../../../../operations/toss-yen-payment-2026-11-02.md)에 환율 실패·원금 비교·저장 검증을 정의한다.
+
 2026-10-05: Capture receipt의 transaction/balance 결과는 분기 상태 전이 때 전체 필드로 교체합니다. 재귀 병합으로 이전 retryable code가 terminal 성공에 남아서는 안 되며, 최초 terminal 결과·동시성·TTL 보존은 실제 Firestore 검사로 확인합니다.
 
 > 설계 대상: [`ING-*`, `PARSE-*`, `ING-SAVE-*`, `CAN-*` 요구사항](requirements.md#5-요구사항) 38개  

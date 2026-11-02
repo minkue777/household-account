@@ -1,4 +1,5 @@
 import type { BalanceObservationV1 } from "../../../../../household-finance/local-currency/public";
+import type { ForeignPayment } from "../../../../../household-finance/ledger/public";
 
 export interface CaptureTransactionBranch {
   readonly branchKey: string;
@@ -14,6 +15,7 @@ export interface CaptureTransactionBranch {
   readonly rawPayloadHash: string;
   readonly localCurrencyType?: "gyeonggi" | "daejeon" | "sejong";
   readonly captureContext?: {
+    readonly foreignPayment?: ForeignPayment;
     readonly verifiedRawPayloadHash?: string;
     readonly observationId: string;
     readonly observationType: "approval" | "cancellation";

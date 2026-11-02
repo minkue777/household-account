@@ -1,4 +1,5 @@
 import type { CaptureApprovalActor } from "./captureAuthorizationInputPort";
+import type { ForeignPayment } from "../../../../../household-finance/ledger/public";
 import type { CaptureQuickEditSnapshot } from "./captureBranchSubmissionInputPort";
 
 export type CaptureOriginChannel = "android-notification" | "ios-shortcut";
@@ -55,6 +56,8 @@ export interface CaptureEnvelopeInput {
 }
 
 export interface CaptureSubmissionCommand {
+  /** 서버 원문 파서와 환율 조회로만 생성하며 공개 typed wire에서는 받지 않습니다. */
+  readonly foreignPayment?: ForeignPayment;
   readonly actor: CaptureApprovalActor;
   readonly rootIdempotencyKey: string;
   readonly envelope: CaptureEnvelopeInput;

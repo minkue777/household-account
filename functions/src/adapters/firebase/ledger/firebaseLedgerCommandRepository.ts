@@ -1,3 +1,4 @@
+import { readForeignPayment } from "../../../contexts/household-finance/ledger/public";
 import { createHash } from "node:crypto";
 import { readExpenseTags } from "../../../contexts/household-finance/ledger/domain/policies/expenseTags";
 
@@ -70,6 +71,7 @@ function mapTransaction(
       : data.lifecycleState === "superseded" ? "superseded" : "active";
   const cardType = data.cardType === "captured" ? "captured" : "manual";
   const localCurrencyType = text(data, "localCurrencyType");
+  const foreignPayment = readForeignPayment(data.foreignPayment);
   return {
     transactionId: snapshot.id,
     householdId,
@@ -78,6 +80,7 @@ function mapTransaction(
     memo: text(data, "memo"),
     tags: readExpenseTags(data.tags),
     amountInWon: numberValue(data, 0, "amountInWon", "amount"),
+    ...(foreignPayment === undefined ? {} : { foreignPayment }),
     categoryId: text(data, "categoryId", "category") || "etc",
     accountingDate: text(data, "accountingDate", "date"),
     localTime: text(data, "localTime", "time") || "00:00",

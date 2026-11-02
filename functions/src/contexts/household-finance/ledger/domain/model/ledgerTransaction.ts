@@ -1,3 +1,4 @@
+import type { ForeignPayment } from "./foreignPayment";
 export type LedgerTransactionType = "expense" | "income";
 
 export interface LedgerTransactionView {
@@ -8,6 +9,7 @@ export interface LedgerTransactionView {
   memo: string;
   tags?: string[];
   amountInWon: number;
+  foreignPayment?: ForeignPayment;
   categoryId: string;
   accountingDate: string;
   localTime: string;

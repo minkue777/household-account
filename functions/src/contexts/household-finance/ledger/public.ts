@@ -40,3 +40,4 @@ export {
   type RecurringLedgerPosting,
   type RecurringLedgerRecordedEvent,
 } from "./domain/policies/recurringPosting";
+export { readForeignPayment, type ForeignPayment } from "./domain/model/foreignPayment";

@@ -1,5 +1,6 @@
 'use client';
 
+import ExpenseAmount from './ExpenseAmount';
 import { useEffect, useRef, useState } from 'react';
 import type { Expense, TransactionType } from '@/types/expense';
 import { getLedgerPrimaryText, getLedgerSecondaryText } from '@/lib/utils/ledgerDisplay';
@@ -290,7 +291,7 @@ export default function ExpenseItem({
         </div>
         <div className="flex items-center gap-2 flex-shrink-0 ml-2">
           <div className="font-semibold text-slate-800">
-            {expense.amount.toLocaleString()}원
+            <ExpenseAmount expense={expense} />
           </div>
         </div>
       </div>

@@ -1,5 +1,7 @@
 # 거래 원장 모듈 상세 설계
 
+외화 자동 수집은 원화 `amountInWon`과 선택 `foreignPayment` 증거를 함께 저장한다. 일반 수정 Mapper와 응답은 증거를 보존하며 클라이언트 명령으로 증거를 바꾸지 않는다. 조회 Mapper와 공통 `ExpenseAmount`가 개별 내역을 엔화·보조 원화로 표시하고 합계는 기존 원화 계산을 사용한다. [환율·실패·변환 계약](../../../../../operations/toss-yen-payment-2026-11-02.md)을 따른다.
+
 > 2026-09-17 실행 경로 정리: Command는 [실제 handler](../../../../../../functions/src/bootstrap/commands/ledgerHouseholdCommandHandlers.ts)가 조립하는 Basic Ledger·Item Split·Monthly Split Lifecycle·Transformation Lineage Service가 담당합니다. 검색은 [Web 원장 서비스](../../../../../../web/src/lib/expenseService.ts)의 bounded snapshot과 페이지/요약 계산을 사용합니다. 이 실행 경로와 중복되던 미사용 Service·검색 Query는 제거했습니다. 정기 거래의 원장 posting 계약은 [Ledger 공개 계약](../../../../../../functions/src/contexts/household-finance/ledger/public.ts)이 제공하며 Finance UoW가 commit합니다.
 
 > 상태: Proposed — 테스트 구현 기준  

@@ -1,4 +1,7 @@
 import { parseCityGasBill } from "../domain/policies/parseCityGasBill";
+import type { AndroidProviderParseResult } from "../domain/model/androidProviderParser";
+import type { ForeignPayment } from "../../../household-finance/ledger/public";
+import type { PaymentExchangeRatePort } from "./ports/out/paymentExchangeRatePort";
 import { buildNotificationEnvelope } from "../domain/policies/buildNotificationEnvelope";
 import {
   ANDROID_PAYMENT_SOURCE_REGISTRY,
@@ -26,6 +29,7 @@ export interface AndroidRawNotificationSubmissionDependencies {
   readonly clock: { readonly now: () => string };
   readonly registry?: readonly AndroidPaymentSourceRegistryEntry[];
   readonly configurationPrefetch?: CaptureConfigurationPrefetchPort;
+  readonly exchangeRates?: PaymentExchangeRatePort;
 }
 
 function terminalIgnored(observationId: string): CaptureSubmissionOutcome {
@@ -142,17 +146,11 @@ interface ParsedAndroidCapture {
 function parsedEnvelope(
   input: AndroidRawNotificationInput,
   source: AndroidPaymentSourceRegistryEntry,
-  parser: AndroidProviderParserInputPort,
+  result: AndroidProviderParseResult,
   payloads: AndroidRawNotificationHashPort,
-  clockNow: string,
 ): ParsedAndroidCapture | undefined {
   // 다목적 Kakao source도 등록된 전용 parser 하나만 실행합니다. 그 parser가
   // 완전한 카드 블록을 찾지 못한 경우에만 같은 source의 도시가스 정책을 봅니다.
-  const result = parser.parse({
-    source: { packageName: source.packageName, parserId: source.parserId },
-    notification: input.notification,
-    clockNow,
-  });
   if (result.kind === "Parsed") {
     const parsedCurrency = currencyType(result.payment?.localCurrencyType);
     const balanceCurrency = currencyType(result.balance?.localCurrencyType);
@@ -276,12 +274,30 @@ class DefaultAndroidRawNotificationSubmissionApplication
     if (source === undefined) {
       return terminalIgnored(command.input.observationId);
     }
+    let result = this.dependencies.parser.parse({
+      source: { packageName: source.packageName, parserId: source.parserId },
+      notification: command.input.notification,
+      clockNow: this.dependencies.clock.now(),
+    });
+    let foreignPayment: ForeignPayment | undefined;
+    if (result.kind === "Parsed" && result.foreignCurrencyPayment !== undefined) {
+      const foreign = result.foreignCurrencyPayment;
+      const rate = await this.dependencies.exchangeRates?.getYenRate(foreign.occurredLocalDate).catch(() => undefined);
+      const amountInWon = rate === undefined ? NaN : Math.round(foreign.amount * rate.rateInWon);
+      if (rate === undefined || !Number.isSafeInteger(amountInWon) || amountInWon <= 0 || amountInWon > 2_147_483_647 ||
+          rate.rateDate > foreign.occurredLocalDate) {
+        return { kind: "success", value: { observationId: command.input.observationId,
+          completion: "partial-retryable", transactionResult: { kind: "retryableFailure", code: "EXCHANGE_RATE_UNAVAILABLE" } } };
+      }
+      foreignPayment = { currency: foreign.currency, amount: foreign.amount, ...rate };
+      const { currency: _currency, amount: _amount, ...payment } = foreign;
+      result = { kind: "Parsed", payment: { ...payment, amountInWon } };
+    }
     const parsed = parsedEnvelope(
       command.input,
       source,
-      this.dependencies.parser,
+      result,
       this.dependencies.payloads,
-      this.dependencies.clock.now(),
     );
     if (parsed === undefined) {
       return terminalIgnored(command.input.observationId);
@@ -301,6 +317,7 @@ class DefaultAndroidRawNotificationSubmissionApplication
       rootIdempotencyKey: command.input.observationId,
       envelope: parsed.envelope,
       verifiedRawPayloadHash: parsed.envelope.rawPayloadHash,
+      ...(foreignPayment === undefined ? {} : { foreignPayment }),
       ...(parsed.approvalAmountInWon === undefined
         ? {}
         : { approvalAmountInWon: parsed.approvalAmountInWon }),
