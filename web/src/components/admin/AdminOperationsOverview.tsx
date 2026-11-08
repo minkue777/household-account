@@ -20,6 +20,7 @@ import type { AdminOperationsDashboardWireView } from '@/platform/functions-api'
 interface AdminOperationsOverviewProps {
   dashboard: AdminOperationsDashboardWireView;
   refreshing: boolean;
+  functionLatencyLoading?: boolean;
   onRefresh(): void;
 }
 
@@ -395,6 +396,7 @@ function statusClasses(status: string): string {
 export function AdminOperationsOverview({
   dashboard,
   refreshing,
+  functionLatencyLoading = false,
   onRefresh,
 }: AdminOperationsOverviewProps) {
   const health = healthCopy(dashboard.service.health);
@@ -560,12 +562,17 @@ export function AdminOperationsOverview({
         title="사용자 체감·서버 처리 시간"
         description={`최근 ${functionLatency.windowHours}시간 앱 첫 화면과 서버 로직별 total 구조화 로그 집계`}
       >
+        {functionLatencyLoading && (
+          <p role="status" className="px-4 py-3 text-xs text-slate-400">
+            처리 시간 통계를 불러오는 중입니다.
+          </p>
+        )}
         {functionLatency.status === 'partial' && (
           <p role="status" className="px-4 py-3 text-xs text-amber-300">
             조회 한도에 도달하여 최신 일부 기록만 집계했습니다. 전체 기간의 통계가 아닙니다.
           </p>
         )}
-        {functionLatency.status === 'unavailable' ? (
+        {functionLatencyLoading && functionLatency.status === 'unavailable' ? null : functionLatency.status === 'unavailable' ? (
           <EmptyState>
             Cloud Logging 처리 시간을 읽지 못했습니다.
           </EmptyState>

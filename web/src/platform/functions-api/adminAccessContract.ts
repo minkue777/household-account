@@ -10,6 +10,8 @@ export const ADMIN_ACCESS_RESPONSE_VERSION = 'admin-access-response.v1' as const
 
 export interface AdminAccessPayloads {
   'get-dashboard': { rangeDays?: number };
+  'get-dashboard-overview': { rangeDays?: number };
+  'get-function-latency': Record<string, never>;
   'list-households': { cursor?: string; limit?: number };
   'create-household': { name: string };
   'get-legacy-share-key': { householdId: string };
@@ -46,6 +48,8 @@ export interface AdminAccessPayloads {
 
 export interface AdminAccessResults {
   'get-dashboard': AdminOperationsDashboardWireView;
+  'get-dashboard-overview': Omit<AdminOperationsDashboardWireView, 'functionLatency'>;
+  'get-function-latency': AdminOperationsDashboardWireView['functionLatency'];
   'list-households': {
     items: AdminHouseholdWireView[];
     nextCursor?: string;

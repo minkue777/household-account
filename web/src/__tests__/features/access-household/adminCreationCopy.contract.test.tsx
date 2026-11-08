@@ -7,7 +7,7 @@ const mockCreate = jest.fn();
 const mockShareKey = jest.fn();
 const mockWriteText = jest.fn();
 jest.mock('@/features/access-household/application/adminHouseholds', () => ({
-  adminHouseholds: { dashboard: (...args: unknown[]) => mockDashboard(...args), create: (...args: unknown[]) => mockCreate(...args), getLegacyShareKey: (...args: unknown[]) => mockShareKey(...args) },
+  adminHouseholds: { dashboard: (...args: unknown[]) => mockDashboard(...args), functionLatency: async () => ({ status: 'available', windowHours: 24, operations: [] }), create: (...args: unknown[]) => mockCreate(...args), getLegacyShareKey: (...args: unknown[]) => mockShareKey(...args) },
 }));
 jest.mock('@/lib/authService', () => ({
   onAuthChange: (callback: (user: unknown) => void) => { callback({ uid: 'admin', email: 'admin@example.test' }); return () => {}; },

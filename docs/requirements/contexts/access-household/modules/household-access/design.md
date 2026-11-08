@@ -569,6 +569,14 @@ partner 선택 정책은 [DEC-022](../../../../governance/decisions.md#dec-022),
 - 일반 자산 화면의 명의자 `+`는 dependent 프로필 생성만 수행하며, 이름 변경은 허용하되 보관은 관리자 화면에서만 실행합니다. 자산 입력은 표시 이름 대신 typed `ownerRef`를 함께 전송합니다.
 - 관리자 claim 부여는 배포와 별개인 운영 절차입니다. [배포 전제조건](../../../../../operations/deployment-prerequisites.md)에 따라 대상 프로젝트와 Firebase UID를 명시하고 토큰을 갱신해야 합니다.
 
+### 관리자 초기 조회 분리 (2026-11-08, ADM-005 / T-ADM-004)
+
+`admin-access.v1`의 `get-dashboard-overview`는 기존 대시보드에서 `functionLatency`를 제외한 가구·멤버·접속·예약 작업·공급자·장애·비용 정보를 반환합니다. `rangeDays`의 기본 14일, 정수 7~30일 검증을 유지합니다. 빈 payload의 `get-function-latency`는 최근 24시간의 기존 Cloud Logging 집계를 반환하며 가구 데이터는 다시 읽지 않습니다. 두 operation 모두 기존 systemAdmin 인증 경계를 통과해야 합니다.
+
+Web은 두 조회를 병행하고 기본 응답부터 표시합니다. 통계 대기는 해당 영역에만 표시하고 갱신 중인 기존 통계는 보존합니다. 통계 실패는 unavailable로 표시하며 기본 데이터나 운영 Health를 지우지 않습니다. 인증·관리자 권한 거절은 전체 관리자 데이터를 지웁니다. 같은 요청의 중복 실행과 다른 인증 세션의 늦은 응답 적용을 차단합니다.
+
+구 Web의 `get-dashboard` 전체 응답은 유지하며 새 서버를 Web보다 먼저 배포합니다. 캐시, 운영 데이터 변경, 통계 산식·표본 축소는 없습니다. T-ADM-004에서 조회의 독립성, 응답 순서·실패·인증 교체를 검사하고 실제 callable 브라우저 E2E에서 통계 응답 전달을 보류한 동안 가구 상세와 비용 표시를 검증합니다.
+
 ### iPhone 시작 진단 보강 계약 (2026-09-23, ADM-006 / T-ADM-005)
 
 - 기존 전체 시간·화면 완료 조건·문서당 1회·재전송 멱등성은 유지한다. iPhone PWA만 `clientStartupDiagnostics` version 1을 선택적으로 보내며 구 Web/Android와 진단 없는 요청도 유지한다. 일반 Web이나 Android의 이 필드는 사용하지 않는다.

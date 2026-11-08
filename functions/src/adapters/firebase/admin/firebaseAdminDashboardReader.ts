@@ -192,6 +192,28 @@ export class FirebaseAdminDashboardReader {
     readonly generatedAt: string;
     readonly rangeDays: number;
   }): Promise<AdminOperationsDashboard> {
+    const [overview, functionLatency] = await Promise.all([
+      this.readOverview(input),
+      this.readFunctionLatency(input.generatedAt),
+    ]);
+    return { ...overview, functionLatency };
+  }
+
+  async readFunctionLatency(generatedAt: string): Promise<AdminOperationsDashboard["functionLatency"]> {
+    try {
+      if (this.functionLatencyReader) {
+        return await this.functionLatencyReader.read({ generatedAt, windowHours: 24 });
+      }
+    } catch {
+      // Logging failure must not hide the operational dashboard.
+    }
+    return { status: "unavailable", windowHours: 24, operations: [] };
+  }
+
+  async readOverview(input: {
+    readonly generatedAt: string;
+    readonly rangeDays: number;
+  }): Promise<Omit<AdminOperationsDashboard, "functionLatency">> {
     const definitions = loadScheduledJobDefinitions();
     const [
       [householdSnapshot, memberSnapshots],
@@ -199,12 +221,10 @@ export class FirebaseAdminDashboardReader {
       jobStatusSnapshot,
       providerSnapshot,
       incidentSnapshot,
-      functionLatency,
       billingCostSnapshot,
     ] =
       await Promise.all([
-        // Member reads depend only on households, not on the slower external
-        // Cloud Logging request or the other independent dashboard sections.
+        // Member reads depend only on households, not on other dashboard sections.
         this.database.collection("households").get().then(async (households) => [
           households,
           await Promise.all(households.docs.map((household) =>
@@ -217,21 +237,6 @@ export class FirebaseAdminDashboardReader {
         operationsCollection(this.database, "scheduledJobIncidents")
           .where("state", "==", "OPEN")
           .get(),
-        this.functionLatencyReader
-          ?.read({
-            generatedAt: input.generatedAt,
-            windowHours: 24,
-          })
-          .catch(() => ({
-            status: "unavailable" as const,
-            windowHours: 24,
-            operations: [],
-          })) ??
-          Promise.resolve({
-            status: "unavailable" as const,
-            windowHours: 24,
-            operations: [],
-          }),
         this.database.doc(BILLING_COST_SNAPSHOT_PATH).get(),
       ]);
 
@@ -486,7 +491,6 @@ export class FirebaseAdminDashboardReader {
       scheduledJobs,
       providerHealth,
       incidents,
-      functionLatency,
       billingCost: parseAdminDashboardBillingCost(
         billingCostSnapshot.data(),
         input.generatedAt,

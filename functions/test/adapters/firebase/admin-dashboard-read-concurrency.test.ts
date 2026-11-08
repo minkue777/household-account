@@ -34,12 +34,34 @@ function fixture() {
     doc: () => ({ get: async () => ({ data: () => undefined }) }),
   } as unknown as firestore.Firestore;
   const latency = deferred<Awaited<ReturnType<AdminFunctionLatencyReaderPort['read']>>>();
-  const read = () => new FirebaseAdminDashboardReader(database, {
+  const loggingRead = vi.fn(() => latency.promise);
+  const reader = new FirebaseAdminDashboardReader(database, {
     serviceName: 'test', revision: 'test', region: 'test',
-  }, { read: () => latency.promise }).read({ generatedAt: '2026-09-07T12:00:00Z', rangeDays: 14 });
+  }, { read: loggingRead });
+  const read = () => reader.read({ generatedAt: '2026-09-07T12:00:00Z', rangeDays: 14 });
   const member = (id: string) => ({ docs: [{ id, data: () => ({ displayName: id }) }] });
-  return { first, second, memberReads, householdRead, latency, read, member };
+  return { first, second, memberReads, householdRead, latency, read, member, reader, loggingRead };
 }
+
+it('[T-ADM-004] returns the complete overview without reading Cloud Logging', async () => {
+  const f = fixture();
+  const pending = f.reader.readOverview({ generatedAt: '2026-09-07T12:00:00Z', rangeDays: 14 });
+  f.first.resolve(f.member('first-member'));
+  f.second.resolve(f.member('second-member'));
+  const result = await pending;
+  expect(result.summary.activeMembers).toBe(2);
+  expect(result.households.map(h => h.members[0].memberId)).toEqual(['first-member', 'second-member']);
+  expect(result).not.toHaveProperty('functionLatency');
+  expect(f.loggingRead).not.toHaveBeenCalled();
+});
+
+it('[T-ADM-004] reads latency without reading household data', async () => {
+  const f = fixture();
+  const pending = f.reader.readFunctionLatency('2026-09-07T12:00:00Z');
+  f.latency.resolve({ status: 'partial', windowHours: 24, operations: [] });
+  expect(await pending).toEqual({ status: 'partial', windowHours: 24, operations: [] });
+  expect(f.householdRead).not.toHaveBeenCalled();
+});
 
 it('reads all household members while Cloud Logging is still pending and preserves household ownership', async () => {
   const f = fixture();

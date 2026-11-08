@@ -7,7 +7,10 @@ const client = new AdminAccessClient(new FirebaseCallableAdminAccessTransport())
 
 export const adminHouseholds = {
   dashboard(rangeDays = 14) {
-    return client.execute('get-dashboard', { rangeDays });
+    return client.execute('get-dashboard-overview', { rangeDays });
+  },
+  functionLatency() {
+    return client.execute('get-function-latency', {});
   },
   list(cursor?: string, limit = 50) {
     return client.execute('list-households', { ...(cursor ? { cursor } : {}), limit });

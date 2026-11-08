@@ -96,10 +96,23 @@ export default function AdminPage() {
     setIsLoading(true);
     setErrorMessage(null);
     try {
+      // Consume either outcome immediately, even if the overview fails first.
+      const latencyRequest = adminHouseholds.functionLatency().then(
+        value => ({ value }),
+        error => ({ error }),
+      );
       const result = await adminHouseholds.dashboard(14);
       if (!isCurrent()) return;
-      setDashboard(result);
+      const unavailable = { status: 'unavailable' as const, windowHours: 24, operations: [] };
+      setDashboard(previous => ({ ...result, functionLatency: previous?.functionLatency ?? unavailable }));
       setAccessDenied(false);
+      const latency = await latencyRequest;
+      if (!isCurrent()) return;
+      if ('error' in latency && latency.error instanceof AdminAccessError
+        && (latency.error.code === 'ADMIN_CAPABILITY_REQUIRED' || latency.error.code === 'AUTH_REQUIRED')) {
+        throw latency.error;
+      }
+      setDashboard({ ...result, functionLatency: 'value' in latency ? latency.value : unavailable });
     } catch (error) {
       if (!isCurrent()) return;
       if (
@@ -428,6 +441,7 @@ export default function AdminPage() {
 
         {dashboard ? (
           <AdminOperationsOverview
+            functionLatencyLoading={isLoading}
             dashboard={dashboard}
             refreshing={isLoading}
             onRefresh={() => void loadDashboard()}

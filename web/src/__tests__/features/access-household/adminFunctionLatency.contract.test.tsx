@@ -148,7 +148,7 @@ describe('admin Cloud Function latency contract', () => {
       billingCost: { status: 'unavailable' },
     };
 
-    render(
+    const { rerender } = render(
       <AdminOperationsOverview
         dashboard={dashboard}
         refreshing={false}
@@ -213,5 +213,16 @@ describe('admin Cloud Function latency contract', () => {
       mergeRow!.compareDocumentPosition(unmergeRow!)
       & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
+
+    rerender(<AdminOperationsOverview dashboard={dashboard} refreshing functionLatencyLoading onRefresh={jest.fn()} />);
+    expect(screen.getByText('처리 시간 통계를 불러오는 중입니다.')).toBeInTheDocument();
+    expect(screen.getByText('ledger.update-transaction.v1')).toBeInTheDocument();
+    const unavailable = { ...dashboard, functionLatency: { status: 'unavailable' as const, windowHours: 24, operations: [] } };
+    rerender(<AdminOperationsOverview dashboard={unavailable} refreshing functionLatencyLoading onRefresh={jest.fn()} />);
+    expect(screen.getByText('처리 시간 통계를 불러오는 중입니다.')).toBeInTheDocument();
+    expect(screen.queryByText('Cloud Logging 처리 시간을 읽지 못했습니다.')).not.toBeInTheDocument();
+    rerender(<AdminOperationsOverview dashboard={unavailable} refreshing={false} onRefresh={jest.fn()} />);
+    expect(screen.getByText('Cloud Logging 처리 시간을 읽지 못했습니다.')).toBeInTheDocument();
+    expect(screen.queryByText('처리 시간 통계를 불러오는 중입니다.')).not.toBeInTheDocument();
   });
 });

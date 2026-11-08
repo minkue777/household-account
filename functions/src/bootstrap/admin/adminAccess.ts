@@ -3,6 +3,8 @@ import type { HouseholdAdministratorActor } from "../commands/householdCommand";
 export const ADMIN_ACCESS_CONTRACT_VERSION = "admin-access.v1" as const;
 export const ADMIN_ACCESS_OPERATIONS = Object.freeze([
   "get-dashboard",
+  "get-dashboard-overview",
+  "get-function-latency",
   "list-households",
   "create-household",
   "get-legacy-share-key",

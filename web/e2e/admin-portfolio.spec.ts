@@ -15,6 +15,12 @@ test('[AST-006][ADM-001][ADM-002][ADM-004][ADM-005][EXT-001][EXT-002][EXT-004] �
     operation: 'list-deleted-assets', payload: { householdId: scope.householdId },
   }, scope.idToken);
   expect(denied.result).toMatchObject({ kind: 'rejected', error: { code: 'ADMIN_CAPABILITY_REQUIRED' } });
+  for (const operation of ['get-dashboard-overview', 'get-function-latency']) {
+    const response = await callEmulatorFunction<{ result: { kind: string; error: { code: string } } }>(request, 'executeAdminAccess', {
+      contractVersion: 'admin-access.v1', requestId: id, idempotencyKey: id, operation, payload: {},
+    }, scope.idToken);
+    expect(response.result).toMatchObject({ kind: 'rejected', error: { code: 'ADMIN_CAPABILITY_REQUIRED' } });
+  }
   await page.goto('/admin');
   await expect(page.getByRole('heading', { name: '접근 권한 없음', exact: true })).toBeVisible();
 
@@ -60,7 +66,32 @@ test('[AST-006][ADM-001][ADM-002][ADM-004][ADM-005][EXT-001][EXT-002][EXT-004] �
     await admin.goto('/');
     await admin.getByRole('button', { name: '테스트 계정으로 로그인' }).click();
     await expect(admin.locator('.calendar-glass')).toHaveAttribute('aria-busy', 'false');
-    await admin.goto('/admin');
+    let releaseLatency!: () => void;
+    const latencyGate = new Promise<void>(resolve => { releaseLatency = resolve; });
+    // 실제 인증·reader 응답은 유지하고 첫 통계 응답의 전달 순서만 제어합니다.
+    await admin.route('**/executeAdminAccess', async route => {
+      if (route.request().method() !== 'POST'
+        || route.request().postDataJSON()?.data?.operation !== 'get-function-latency') {
+        await route.continue();
+        return;
+      }
+      const response = await route.fetch();
+      await latencyGate;
+      await route.fulfill({ response });
+    });
+    try {
+      await admin.goto('/admin');
+      await expect(admin.getByText('처리 시간 통계를 불러오는 중입니다.', { exact: true })).toBeVisible();
+      await expect(admin.getByText('12,345원', { exact: true }).first()).toBeVisible();
+      const readyHousehold = admin.locator('article').filter({ has: admin.getByRole('heading', { name: householdName, exact: true }) });
+      await readyHousehold.getByRole('button', { name: '관리', exact: true }).click();
+      await expect(readyHousehold.getByText(/^복구할 예금 · v/)).toBeVisible();
+      await readyHousehold.getByRole('button', { name: '닫기', exact: true }).click();
+      await expect(admin.getByRole('row').filter({ hasText: 'ledger.update-transaction.v1' })).toHaveCount(0);
+    } finally { releaseLatency(); }
+    await expect(admin.getByText('처리 시간 통계를 불러오는 중입니다.', { exact: true })).toHaveCount(0);
+    await expect(admin.getByRole('row').filter({ hasText: 'ledger.update-transaction.v1' })).toHaveCount(1);
+    await admin.unroute('**/executeAdminAccess');
     await expect(admin.getByRole('heading', { name: 'Household Operations', exact: true })).toBeVisible();
     await expect(admin.getByText('12,345원', { exact: true }).first()).toBeVisible();
     await expect(admin.getByText('23,456원', { exact: true })).toBeVisible();
