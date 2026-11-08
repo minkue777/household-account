@@ -534,10 +534,11 @@ export class FirebasePortfolioMarketData implements PortfolioMarketQuotePort {
   }
 
   private async fetchUsdKrwRate(): Promise<ExchangeRateResult> {
+    const asOfDate = resolveSeoulMonthBoundary({ instant: new Date().toISOString(), zoneId: "Asia/Seoul" }).localDate;
     const response = await this.executeHttp({
       provider: "frankfurter-v2",
       operation: "exchange-rate",
-      url: FRANKFURTER_USD_KRW_URL,
+      url: `${FRANKFURTER_USD_KRW_URL}?date=${asOfDate}`,
       headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
     });
     if (response.kind !== "success") {
@@ -554,7 +555,7 @@ export class FirebasePortfolioMarketData implements PortfolioMarketQuotePort {
         rate?: unknown;
       };
       const observedAt = new Date().toISOString();
-      const parsed = parseFrankfurterRate({ body: payload, observedAt, asOfDate: resolveSeoulMonthBoundary({ instant: observedAt, zoneId: "Asia/Seoul" }).localDate });
+      const parsed = parseFrankfurterRate({ body: payload, observedAt, asOfDate });
       if (parsed.kind === "failure") {
         return {
           kind: "failure",

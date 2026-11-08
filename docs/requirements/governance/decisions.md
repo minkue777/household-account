@@ -1417,7 +1417,7 @@ Google 계정이 없는 아이도 자산 명의자가 될 수 있게 하면서 �
 
 결정:
 
-- USD/KRW 환율의 목표 공급자는 Frankfurter v2 하나만 사용한다. `GET /v2/rate/USD/KRW`의 구조화 JSON을 `ExchangeRatePort` Adapter에서 검증하며 한국수출입은행, 네이버 금융 HTML parser 또는 다른 무료 API를 보조 공급자로 호출하지 않는다.
+- USD/KRW 환율의 목표 공급자는 Frankfurter v2 하나만 사용한다. `GET /v2/rate/USD/KRW?date=YYYY-MM-DD`에 요청 시작 시점의 서울 날짜를 지정하고 같은 날짜를 응답 고시일의 상한으로 검증한다. 주말·휴일에는 그 이전 고시일을 허용한다. 구조화 JSON을 `ExchangeRatePort` Adapter에서 검증하며 한국수출입은행, 네이버 금융 HTML parser 또는 다른 무료 API를 보조 공급자로 호출하지 않는다.
 - Frankfurter 응답의 `base=USD`, `quote=KRW`, 유한 양수 `rate`, 미래가 아닌 ISO `date`를 검증한다. Canonical `ExchangeRateObservation`에는 pair, rate, provider=`frankfurter-v2`, 공급자 기준일 `rateDate`, 검증 수신 시각 `observedAt`을 보존하고 Provider 원문은 저장하지 않는다.
 - 성공한 환율 관측은 경과 기간과 무관하게 다음 성공값이 저장될 때까지 평가에 계속 사용한다. 사용자 화면에는 stale·degraded·참고값 표시를 추가하지 않는다.
 - timeout·429·5xx·schema drift·잘못된 값·저장값보다 오래된 `rateDate`는 기존 성공 관측과 기존 정상 KRW 환산 결과를 덮어쓰지 않는다. 성공 이력이 한 번도 없고 이전 정상 환산도 없을 때만 `NoData(EXCHANGE_RATE_NOT_OBSERVED)`로 처리한다.

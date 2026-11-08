@@ -111,6 +111,47 @@ describe("Firebase portfolio market-data adapter", () => {
     expect(requested).toEqual([first, fallback]);
   });
 
+  it.each([
+    { instant: "2026-11-06T14:59:59.000Z", requestedDate: "2026-11-06" },
+    { instant: "2026-11-06T15:00:00.000Z", requestedDate: "2026-11-07" },
+    { instant: "2026-11-08T07:30:00.000Z", requestedDate: "2026-11-08" },
+  ])("bounds FX to Seoul $requestedDate at $instant and accepts the preceding published rate", async ({ instant, requestedDate }) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(instant));
+    const observations = new FirebasePortfolioQuoteObservations(new InMemoryFirestore() as unknown as Firestore);
+    const fetcher = vi.fn(async input => String(input).includes("frankfurter")
+      ? json({ base: "USD", quote: "KRW", rate: 1351.58, date: "2026-11-06" })
+      : json({ data: { primaryData: { lastSalePrice: "$100" } } }));
+    vi.stubGlobal("fetch", fetcher);
+
+    await expect(new FirebasePortfolioMarketData(undefined, observations).getQuote(target("US", "US:AAPL")))
+      .resolves.toMatchObject({ kind: "success", quote: { priceInWon: 135158, exchangeRateDate: "2026-11-06" } });
+    expect(fetcher.mock.calls.map(([input]) => String(input)).filter(url => url.includes("frankfurter")))
+      .toEqual([`https://api.frankfurter.dev/v2/rate/USD/KRW?date=${requestedDate}`]);
+    await expect(observations.rate()).resolves.toMatchObject({ rate: 1351.58, rateDate: "2026-11-06", observedAt: instant });
+  });
+
+  it("rejects FX beyond the requested date even when the response crosses Seoul midnight, preserving the saved rate", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-06T14:59:59.000Z"));
+    const observations = new FirebasePortfolioQuoteObservations(new InMemoryFirestore() as unknown as Firestore);
+    const savedRate = { pair: "USD/KRW" as const, rate: 1342.15, rateDate: "2026-11-06", observedAt: "2026-11-06T01:20:48.486Z", provider: "frankfurter-v2" as const };
+    await observations.saveRate(savedRate);
+    const fetcher = vi.fn(async input => {
+      if (!String(input).includes("frankfurter")) return json({ data: { primaryData: { lastSalePrice: "$100" } } });
+      vi.setSystemTime(new Date("2026-11-06T15:00:00.000Z"));
+      return json({ base: "USD", quote: "KRW", rate: 9999, date: "2026-11-07" });
+    });
+    vi.stubGlobal("fetch", fetcher);
+
+    await expect(new FirebasePortfolioMarketData(undefined, observations).getQuote(target("US", "US:AAPL")))
+      .resolves.toMatchObject({ kind: "success", quote: { priceInWon: 134215, exchangeRateDate: "2026-11-06" },
+        providerFailures: [{ provider: "frankfurter-v2", code: "INVALID_EXCHANGE_RATE_DATE", retryable: false }] });
+    expect(fetcher.mock.calls.map(([input]) => String(input)).filter(url => url.includes("frankfurter")))
+      .toEqual(["https://api.frankfurter.dev/v2/rate/USD/KRW?date=2026-11-06"]);
+    await expect(observations.rate()).resolves.toEqual(savedRate);
+  });
+
   it("keeps the newer FX date, rejects future FX, and revalues the retained USD quote on FX-only success", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-06T00:00:00Z"));
