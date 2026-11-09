@@ -23,3 +23,11 @@
 - 로컬에서 운영 기본 reader 조회는 956ms였다. Cloud Functions나 실제 브라우저 지연 측정값은 아니다.
 - 검증 로그: TEMP `household-admin-version-build-20261109.log`, `household-admin-version-e2e-20261109.log`. E2E build 중 기존 Firebase Auth SSR 경고가 출력됐으나 production build 및 실제 인증·관리자 E2E 모두 exit 0이었다.
 - Firebase 세 codebase를 먼저 배포하고 Web Git 배포 후 정확한 SHA의 CI를 후속 확인한다.
+
+## 후속: 최근 버전 하나만 표시
+
+- 사용자 후속 요청에 따라 사용자별 접속 표와 가구별 목록 모두 마지막으로 확인된 항목 하나만 표시한다. 서버가 이미 최신 확인 순으로 정렬하므로 Web의 목록 반복을 제거하고 첫 항목을 사용한다.
+- 버전 번호의 최댓값을 선택하지 않는다. 최신 등록의 버전이 없을 때 과거 설치 버전을 대신 표시하지 않으며 확인 시각을 보존한다.
+- 응답·저장 계약과 기존 운영 기록은 유지한다. Web Git 배포만 필요하며 Firebase·APK 추가 배포는 없다.
+- Web 단위 검사 5개 통과. 기존 실제 등록→관리자 callable→화면 E2E에서 복수 버전 응답을 유지하면서 두 화면 모두 최근 한 버전만 표시하는지 검사한다.
+- 이전 제품 `4980c107`의 Firebase 세 codebase·기본 smoke와 Web Git 배포·운영 확인은 완료됐다. CI `42633039332`는 functions·web·android·android-instrumentation 성공, web-e2e 진행 중이며 새 CI와 함께 추적한다.

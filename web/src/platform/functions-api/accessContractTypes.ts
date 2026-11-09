@@ -41,6 +41,7 @@ export interface AdminDashboardMemberActivity {
   totalAccessCount: number;
   todayAccessCount: number;
   lastAccessAt?: string;
+  /** 마지막 확인 시각이 최신인 순서. */
   androidAppVersions?: Array<{ version?: string; lastConfirmedAt?: string }>;
   dailyAccess: AdminDashboardDailyAccess[];
 }

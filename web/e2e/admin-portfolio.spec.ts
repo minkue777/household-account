@@ -111,7 +111,7 @@ test('[AST-006][ADM-001][ADM-002][ADM-004][ADM-005][EXT-001][EXT-002][EXT-004] �
       expect(JSON.stringify(versionMember)).not.toContain(phoneFid);
       const userRow = admin.getByRole('row').filter({ has: admin.getByText(versionMember.displayName, { exact: true }) });
       await expect(userRow.getByText('v2.0.12', { exact: true })).toBeVisible();
-      await expect(userRow.getByText('v1.2.17', { exact: true })).toBeVisible();
+      await expect(userRow.getByText('v1.2.17', { exact: true })).toHaveCount(0);
       await expect(userRow.locator(`time[datetime="${latestVersionConfirmation}"]`)).toBeVisible();
       await expect(userRow.getByText('v2.0.11', { exact: true })).toHaveCount(0);
       await expect(userRow.getByText('vweb-version', { exact: true })).toHaveCount(0);
@@ -119,6 +119,7 @@ test('[AST-006][ADM-001][ADM-002][ADM-004][ADM-005][EXT-001][EXT-002][EXT-004] �
       await expect(admin.getByText('12,345원', { exact: true }).first()).toBeVisible();
       const readyHousehold = admin.locator('article').filter({ has: admin.getByRole('heading', { name: householdName, exact: true }) });
       await expect(readyHousehold.getByText('v2.0.12', { exact: true })).toBeVisible();
+      await expect(readyHousehold.getByText('v1.2.17', { exact: true })).toHaveCount(0);
       await readyHousehold.getByRole('button', { name: '관리', exact: true }).click();
       await expect(readyHousehold.getByText(/^복구할 예금 · v/)).toBeVisible();
       await readyHousehold.getByRole('button', { name: '닫기', exact: true }).click();
