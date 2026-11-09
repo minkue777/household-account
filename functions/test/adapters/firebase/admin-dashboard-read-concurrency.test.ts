@@ -28,6 +28,7 @@ function fixture() {
     orderBy: () => emptyQuery,
     limit: () => emptyQuery,
     where: () => emptyQuery,
+    select: () => emptyQuery,
   };
   const database = {
     collection: (name: string) => name === 'households' ? { get: householdRead } : emptyQuery,

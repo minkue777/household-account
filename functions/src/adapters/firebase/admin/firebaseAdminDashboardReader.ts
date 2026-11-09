@@ -222,6 +222,7 @@ export class FirebaseAdminDashboardReader {
       providerSnapshot,
       incidentSnapshot,
       billingCostSnapshot,
+      androidEndpointsSnapshot,
     ] =
       await Promise.all([
         // Member reads depend only on households, not on other dashboard sections.
@@ -238,10 +239,37 @@ export class FirebaseAdminDashboardReader {
           .where("state", "==", "OPEN")
           .get(),
         this.database.doc(BILLING_COST_SNAPSHOT_PATH).get(),
+        this.database.collection("notificationEndpoints")
+          .where("platform", "==", "android")
+          .select("householdId", "memberId", "status", "deviceInfo.appVersion", "lastConfirmedAt", "expiresAt")
+          .get(),
       ]);
 
     const dates = recentDates(input.generatedAt, input.rangeDays);
     const today = dates.at(-1) ?? seoulCalendarDate(input.generatedAt);
+
+    type AndroidAppVersion = NonNullable<AdminDashboardMemberActivity["androidAppVersions"]>[number];
+    const androidVersionsByScope = new Map<string, Map<string, AndroidAppVersion>>();
+    for (const endpoint of androidEndpointsSnapshot.docs) {
+      const data = endpoint.data();
+      const householdId = string(data.householdId);
+      const memberId = string(data.memberId);
+      const expiresAt = instant(data.expiresAt);
+      if (data.status !== "active" || !householdId || !memberId
+        || (expiresAt !== undefined && Date.parse(expiresAt) <= Date.parse(input.generatedAt))) continue;
+      const version = string(data.deviceInfo?.appVersion);
+      const lastConfirmedAt = instant(data.lastConfirmedAt);
+      const scope = `${householdId}\u0000${memberId}`;
+      const versions = androidVersionsByScope.get(scope) ?? new Map<string, AndroidAppVersion>();
+      const previous = versions.get(version ?? "");
+      if (!previous || (lastConfirmedAt ?? "") > (previous.lastConfirmedAt ?? "")) {
+        versions.set(version ?? "", {
+          ...(version === undefined ? {} : { version }),
+          ...(lastConfirmedAt === undefined ? {} : { lastConfirmedAt }),
+        });
+      }
+      androidVersionsByScope.set(scope, versions);
+    }
 
     const statsByScope = new Map(
       statsSnapshot.docs.flatMap((document) => {
@@ -272,6 +300,9 @@ export class FirebaseAdminDashboardReader {
               lifecycleState:
                 memberData.lifecycleState === "removed" ? "removed" : "active",
               linkedPrincipal: string(memberData.linkedPrincipalUid) !== undefined,
+              androidAppVersions: [...(androidVersionsByScope.get(`${household.id}\u0000${member.id}`)?.values() ?? [])]
+                .sort((left, right) => (right.lastConfirmedAt ?? "").localeCompare(left.lastConfirmedAt ?? "")
+                  || (left.version ?? "").localeCompare(right.version ?? "")),
               totalAccessCount: count(stats?.totalAccessCount),
               todayAccessCount: dailyCounts[today] ?? 0,
               ...(instant(stats?.lastAccessAt) === undefined

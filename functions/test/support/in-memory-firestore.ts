@@ -72,6 +72,7 @@ class MemoryQuery {
     readonly ordering: readonly { field: string; direction: "asc" | "desc" }[] = [],
     readonly cursor?: readonly unknown[],
     readonly group = false,
+    readonly selectedFields?: readonly string[],
   ) {}
 
   where(field: string, operator: string, value: unknown): MemoryQuery {
@@ -79,7 +80,7 @@ class MemoryQuery {
     return new MemoryQuery(this.collectionPath, [
       ...this.filters,
       { field, value, operator },
-    ], this.database, this.maximum, this.ordering, this.cursor, this.group);
+    ], this.database, this.maximum, this.ordering, this.cursor, this.group, this.selectedFields);
   }
 
   limit(maximum: number): MemoryQuery {
@@ -88,16 +89,20 @@ class MemoryQuery {
       this.filters,
       this.database,
       maximum,
-      this.ordering, this.cursor, this.group,
+      this.ordering, this.cursor, this.group, this.selectedFields,
     );
   }
 
   orderBy(field: string, direction: "asc" | "desc" = "asc"): MemoryQuery {
-    return new MemoryQuery(this.collectionPath, this.filters, this.database, this.maximum, [...this.ordering, { field, direction }], this.cursor, this.group);
+    return new MemoryQuery(this.collectionPath, this.filters, this.database, this.maximum, [...this.ordering, { field, direction }], this.cursor, this.group, this.selectedFields);
   }
 
   startAfter(...values: readonly unknown[]): MemoryQuery {
-    return new MemoryQuery(this.collectionPath, this.filters, this.database, this.maximum, this.ordering, values, this.group);
+    return new MemoryQuery(this.collectionPath, this.filters, this.database, this.maximum, this.ordering, values, this.group, this.selectedFields);
+  }
+
+  select(...fields: string[]): MemoryQuery {
+    return new MemoryQuery(this.collectionPath, this.filters, this.database, this.maximum, this.ordering, this.cursor, this.group, fields);
   }
 
   execute(database: InMemoryFirestore): MemoryQuerySnapshot {
@@ -130,7 +135,21 @@ class MemoryQuery {
         return false;
       });
     }
-    return new MemoryQuerySnapshot(records.slice(0, this.maximum).map(({ path, value }) => new MemoryDocumentSnapshot(new MemoryDocumentReference(path, database), value)));
+    return new MemoryQuerySnapshot(records.slice(0, this.maximum).map(({ path, value }) => {
+      const selected: StoredDocument = {};
+      for (const field of this.selectedFields ?? []) {
+        const fieldValue = valueAt(value, field);
+        if (fieldValue === undefined) continue;
+        const parts = field.split('.');
+        let target = selected;
+        for (const part of parts.slice(0, -1)) {
+          target[part] ??= {};
+          target = target[part] as StoredDocument;
+        }
+        target[parts.at(-1)!] = fieldValue;
+      }
+      return new MemoryDocumentSnapshot(new MemoryDocumentReference(path, database), this.selectedFields === undefined ? value : selected);
+    }));
   }
 
   async get(): Promise<MemoryQuerySnapshot> {

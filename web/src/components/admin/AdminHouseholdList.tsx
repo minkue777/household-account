@@ -20,6 +20,7 @@ import type {
 } from '@/platform/functions-api';
 
 import { AdminHouseholdOperations } from './AdminHouseholdOperations';
+import { AdminAndroidAppVersions } from './AdminAndroidAppVersions';
 
 interface AdminHouseholdListProps {
   households: AdminDashboardHouseholdActivity[];
@@ -196,6 +197,12 @@ export function AdminHouseholdList({
                           <span className="ml-1.5 rounded bg-slate-800 px-1.5 py-0.5 text-[9px] text-slate-500">
                             자산 명의
                           </span>
+                        )}
+                        {member.linkedPrincipal && (
+                          <div className="mt-1 text-[10px]">
+                            <span className="text-slate-500">Android 앱 · </span>
+                            <AdminAndroidAppVersions versions={member.androidAppVersions} />
+                          </div>
                         )}
                       </div>
                       <span className="text-right font-mono text-slate-300">

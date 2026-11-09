@@ -7,6 +7,21 @@ test.beforeEach(async () => { await resetTestAccount(); });
 
 test('[AST-006][ADM-001][ADM-002][ADM-004][ADM-005][EXT-001][EXT-002][EXT-004] 관리자 권한은 실제 token으로 검증하고 비용·삭제 자산 복구·가구 조회 전용 화면까지 연결된다', async ({ page, browser, request }, testInfo) => {
   const scope = await createHouseholdThroughUi(page, '관리 대상 가구');
+  // 앱과 같은 등록 명령을 거쳐 설치 버전 갱신과 복수 기기의 표시를 검사합니다.
+  const phoneFid = `admin-version-phone-${randomUUID()}`;
+  for (const [fid, platform, appVersion] of [
+    [phoneFid, 'android', '2.0.11'], [phoneFid, 'android', '2.0.12'],
+    [`admin-version-tablet-${randomUUID()}`, 'android', '1.2.17'],
+    [`admin-version-other-${randomUUID()}`, 'android', '2.0.12'],
+    [`admin-version-web-${randomUUID()}`, 'ios-pwa', 'web-version'],
+  ]) {
+    await executeHouseholdCommand(request, { ...scope, command: 'notifications.register-endpoint.v1',
+      payload: { fid, platform, deviceInfo: { appVersion } } });
+  }
+  const registeredEndpoints = (await documents(request, 'notificationEndpoints'))
+    .filter(row => row.householdId === scope.householdId && row.memberId === scope.memberId && row.platform === 'android');
+  const latestVersionConfirmation = registeredEndpoints.filter(row => row.deviceInfo.appVersion === '2.0.12')
+    .map(row => row.lastConfirmedAt as string).sort().at(-1)!;
   const created = await executeHouseholdCommand<{ assetId: string }>(request, { ...scope, command: 'portfolio.create-asset.v1', payload: { asset: { name: '복구할 예금', type: 'savings', owner: '가구', ownerRef: { kind: 'household' }, currency: 'KRW', currentBalance: 25_000, isActive: true, order: 1 } } });
   await executeHouseholdCommand(request, { ...scope, command: 'portfolio.delete-asset.v1', payload: { assetId: created.assetId, expectedVersion: 1 } });
   const id = `e2e-admin-${randomUUID()}`;
@@ -80,10 +95,30 @@ test('[AST-006][ADM-001][ADM-002][ADM-004][ADM-005][EXT-001][EXT-002][EXT-004] �
       await route.fulfill({ response });
     });
     try {
+      const overviewResponse = admin.waitForResponse(response => response.url().endsWith('/executeAdminAccess')
+        && response.request().method() === 'POST'
+        && response.request().postDataJSON()?.data?.operation === 'get-dashboard-overview');
       await admin.goto('/admin');
+      const overview = (await (await overviewResponse).json()).result.result;
+      expect(overview.kind).toBe('succeeded');
+      const versionMember = overview.value.households.find((row: { householdId: string }) => row.householdId === scope.householdId)
+        .members.find((row: { memberId: string }) => row.memberId === scope.memberId);
+      expect(versionMember.androidAppVersions).toHaveLength(2);
+      expect(versionMember.androidAppVersions).toEqual(expect.arrayContaining([
+        { version: '2.0.12', lastConfirmedAt: latestVersionConfirmation },
+        { version: '1.2.17', lastConfirmedAt: expect.any(String) },
+      ]));
+      expect(JSON.stringify(versionMember)).not.toContain(phoneFid);
+      const userRow = admin.getByRole('row').filter({ has: admin.getByText(versionMember.displayName, { exact: true }) });
+      await expect(userRow.getByText('v2.0.12', { exact: true })).toBeVisible();
+      await expect(userRow.getByText('v1.2.17', { exact: true })).toBeVisible();
+      await expect(userRow.locator(`time[datetime="${latestVersionConfirmation}"]`)).toBeVisible();
+      await expect(userRow.getByText('v2.0.11', { exact: true })).toHaveCount(0);
+      await expect(userRow.getByText('vweb-version', { exact: true })).toHaveCount(0);
       await expect(admin.getByText('처리 시간 통계를 불러오는 중입니다.', { exact: true })).toBeVisible();
       await expect(admin.getByText('12,345원', { exact: true }).first()).toBeVisible();
       const readyHousehold = admin.locator('article').filter({ has: admin.getByRole('heading', { name: householdName, exact: true }) });
+      await expect(readyHousehold.getByText('v2.0.12', { exact: true })).toBeVisible();
       await readyHousehold.getByRole('button', { name: '관리', exact: true }).click();
       await expect(readyHousehold.getByText(/^복구할 예금 · v/)).toBeVisible();
       await readyHousehold.getByRole('button', { name: '닫기', exact: true }).click();

@@ -13,6 +13,10 @@ export interface AdminDashboardMemberActivity {
   readonly totalAccessCount: number;
   readonly todayAccessCount: number;
   readonly lastAccessAt?: string;
+  readonly androidAppVersions?: readonly {
+    readonly version?: string;
+    readonly lastConfirmedAt?: string;
+  }[];
   readonly dailyAccess: readonly AdminDashboardDailyAccess[];
 }
 

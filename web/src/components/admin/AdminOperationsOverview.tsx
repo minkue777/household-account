@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 
 import type { AdminOperationsDashboardWireView } from '@/platform/functions-api';
+import { AdminAndroidAppVersions } from './AdminAndroidAppVersions';
 
 interface AdminOperationsOverviewProps {
   dashboard: AdminOperationsDashboardWireView;
@@ -662,17 +663,18 @@ export function AdminOperationsOverview({
 
       <Panel
         title="사용자별 접속"
-        description="현재 가구에 연결된 활성 로그인 사용자별 앱 실행 완료 횟수"
+        description="활성 사용자별 접속 현황 · Android 앱은 마지막 알림 등록 시 확인된 버전"
       >
         {activeUsers.length === 0 ? (
           <EmptyState>접속 통계를 집계할 활성 사용자가 없습니다.</EmptyState>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[620px] text-left text-xs">
+            <table className="w-full min-w-[780px] text-left text-xs">
               <thead className="border-b border-slate-800 text-slate-500">
                 <tr>
                   <th className="px-4 py-3 font-medium">사용자</th>
                   <th className="px-4 py-3 font-medium">가계부</th>
+                  <th className="px-4 py-3 font-medium">Android 앱</th>
                   <th className="px-4 py-3 text-right font-medium">오늘 접속</th>
                   <th className="px-4 py-3 text-right font-medium">누적 접속</th>
                   <th className="px-4 py-3 text-right font-medium">최근 접속</th>
@@ -689,6 +691,9 @@ export function AdminOperationsOverview({
                     </td>
                     <td className="px-4 py-3 text-slate-500">
                       {user.householdName}
+                    </td>
+                    <td className="px-4 py-3">
+                      <AdminAndroidAppVersions versions={user.androidAppVersions} />
                     </td>
                     <td className="px-4 py-3 text-right font-mono font-semibold text-sky-300">
                       {user.todayAccessCount.toLocaleString('ko-KR')}회

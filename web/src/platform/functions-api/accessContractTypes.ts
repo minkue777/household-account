@@ -41,6 +41,7 @@ export interface AdminDashboardMemberActivity {
   totalAccessCount: number;
   todayAccessCount: number;
   lastAccessAt?: string;
+  androidAppVersions?: Array<{ version?: string; lastConfirmedAt?: string }>;
   dailyAccess: AdminDashboardDailyAccess[];
 }
 
