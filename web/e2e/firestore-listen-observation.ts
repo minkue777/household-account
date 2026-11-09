@@ -31,6 +31,9 @@ export async function observeFirestoreListenResponses(page: Page) {
     };
     const targetIds = (value: unknown): number[] => Array.isArray(value)
       ? value.filter((id): id is number => Number.isSafeInteger(id)).slice(0, 30) : [];
+    const timestamp = (value: unknown): string | undefined => typeof value === 'string'
+      && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$/.test(value)
+      ? value : undefined;
     const inspect = (value: unknown, id: number): void => {
       if (Array.isArray(value)) { value.forEach(item => inspect(item, id)); return; }
       if (typeof value !== 'object' || value === null) return;
@@ -38,7 +41,8 @@ export async function observeFirestoreListenResponses(page: Page) {
       const change = event.targetChange;
       if (change && ['NO_CHANGE', 'ADD', 'REMOVE', 'CURRENT', 'RESET'].includes(change.targetChangeType ?? 'NO_CHANGE')) {
         record({ streamId: id, kind: 'targetChange', change: change.targetChangeType ?? 'NO_CHANGE',
-          targetIds: targetIds(change.targetIds), causeCode: Number.isInteger(change.cause?.code) ? change.cause.code : undefined });
+          targetIds: targetIds(change.targetIds), readTime: timestamp(change.readTime),
+          causeCode: Number.isInteger(change.cause?.code) ? change.cause.code : undefined });
       }
       for (const kind of ['documentChange', 'documentDelete', 'documentRemove'] as const) {
         const changed = event[kind];
@@ -51,6 +55,7 @@ export async function observeFirestoreListenResponses(page: Page) {
         const version = Number(fields?.aggregateVersion?.integerValue);
         record({ streamId: id, kind, householdId: name.split('/')[6], targetIds: targetIds(changed.targetIds),
           removedTargetIds: targetIds(changed.removedTargetIds), left: card(fields?.left), right: card(fields?.right),
+          readTime: timestamp(changed.readTime), updateTime: timestamp(document?.updateTime),
           aggregateVersion: Number.isSafeInteger(version) ? version : undefined });
       }
     };

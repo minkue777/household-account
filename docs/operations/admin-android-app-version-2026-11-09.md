@@ -31,3 +31,11 @@
 - 응답·저장 계약과 기존 운영 기록은 유지한다. Web Git 배포만 필요하며 Firebase·APK 추가 배포는 없다.
 - Web 단위 검사 5개 통과. 기존 실제 등록→관리자 callable→화면 E2E에서 복수 버전 응답을 유지하면서 두 화면 모두 최근 한 버전만 표시하는지 검사한다.
 - 이전 제품 `4980c107`의 Firebase 세 codebase·기본 smoke와 Web Git 배포·운영 확인은 완료됐다. CI `42633039332`는 functions·web·android·android-instrumentation 성공, web-e2e 진행 중이며 새 CI와 함께 추적한다.
+
+## CI 후속 확인 — 2026-11-10
+
+- 이전 CI `42633039332`는 다섯 검사와 결과 요약이 모두 성공했다. 최근 한 버전 표시 `319a1364085939d254f575a402b1b2706b22b578`의 Web Git 배포와 운영 페이지 확인도 완료됐다. Firebase·APK 추가 배포는 없다.
+- [CI 42634263958](https://github.com/minkue777/household-account/actions/runs/42634263958)은 functions·web·android·android-instrumentation 성공, web-e2e·결과 요약 실패다. Android instrumentation은 변경 범위 검사 성공이며 실제 에뮬레이터 실행 대상은 아니었다.
+- Web 기능 E2E는 120개 통과, 기존 홈 카드 설정 실시간 반영 검사 1개 실패다. 관리자 버전 표시를 포함한 관리자 검사 3개는 통과했다. 기능 실패로 후속 성능 검사는 실행되지 않았다.
+- 홈 설정은 canonical version 1 저장과 브라우저 Listen 응답 전달까지 확인됐지만 SDK snapshot 콜백에서 version 1이 관측되지 않았다. 제품 결함 또는 Emulator 전용 결함인지는 미확정이다. [홈 설정 조사 기록](home-preferences-live-read-2026-09-29.md)의 2026-11-10 항목에 증거와 읽기 시각 관측 보강을 기록했다.
+- 시각 관측을 넣은 실제 Emulator·production build·Chromium 국소 재현 20회는 모두 통과했다(2.9분). 이는 실패 해결의 증거가 아니다. 후속 변경은 테스트 관측·검증과 문서이며 제품 재배포는 하지 않는다. 새 SHA의 전체 CI를 후속 확인한다.

@@ -60,8 +60,12 @@ test('[T-HOME-002][T-HOME-003][HOME-001][HOME-003][HOME-004] 기본 홈 카드�
     }).toContainEqual(expect.objectContaining({
       kind: 'documentChange', householdId: scope.householdId,
       left: 'YEARLY_EXPENSE', right: 'LOCAL_CURRENCY_BALANCE', aggregateVersion: 1,
+      updateTime: expect.any(String),
     }));
-    expect(await responseObservation.read()).toMatchObject({ parseErrors: 0, truncated: false });
+    expect(await responseObservation.read()).toMatchObject({
+      parseErrors: 0, truncated: false,
+      entries: expect.arrayContaining([expect.objectContaining({ kind: 'targetChange', readTime: expect.any(String) })]),
+    });
     for (const [stage, flags] of [
       ['snapshot', { current: true, fromCache: false }], ['publish', { current: true }],
       ['hook', { active: true }], ['render', { ready: true }],

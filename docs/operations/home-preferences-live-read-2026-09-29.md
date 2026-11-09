@@ -58,3 +58,19 @@ CI `40625003540` (`185ef57d`)에서 같은 홈 설정 검사 1개가 실패했�
 다음 실패를 좁히기 위해 `NEXT_PUBLIC_E2E_TEST_MODE=true` 빌드에서만 SDK snapshot, 공유 publish/구독 수명, hook 수신과 render를 기록합니다. stage·정수 version/세션 세대·관측자 수·cache/current/active/ready 여부만 출력하며 가구·사용자 식별자, 문서 원문, 인증값은 포함하지 않습니다. E2E는 최대 500개를 성공·실패 첨부에 보존하고, 정상 경로에서는 네 경계의 version 1과 유효 상태 및 기록 잘림 없음도 검증합니다. 기존 30초 UI assertion, canonical 저장, 충돌·재전송·새로고침 검증은 유지합니다. 운영 구독 동작·캐시 정책·타임아웃은 바꾸지 않습니다.
 
 최종 관측을 포함한 실제 Emulator·production build·Chromium 파일 검사는 2개 모두 통과했습니다(50.9초). 관련 Jest 2개 파일 45개, TypeScript 검사도 통과했습니다. 별도로 E2E mode를 끈 운영 build를 완료하고 `.next/static/chunks`에 진단 문자열이 없음을 확인했습니다. 로컬 로그는 `TEMP/household-home-preferences-{observation,production}-20261028.log`이며 테스트 서버와 에뮬레이터는 종료됐습니다. Firebase·APK는 변경하지 않으며 Web 소스 변경에 따른 Git 자동배포는 확인합니다.
+
+## 2026-11-10 반복 실패와 wire 시각 관측
+
+[CI 42634263958](https://github.com/minkue777/household-account/actions/runs/42634263958) (`319a1364`)에서 같은 검사가 실패했습니다(120 passed/1 failed). 첫 카드는 30초 동안 `11월 지출0`, 두 번째는 월 잔여 예산을 유지했습니다. 이 실행의 관리자 버전 표시 검사는 통과했으며, 앞선 전체 CI `42633039332`도 성공했습니다. 이 성공으로 최신 실패를 대체하지 않습니다.
+
+canonical version 1과 동일 가구 target 1002의 `YEARLY_EXPENSE`/`LOCAL_CURRENCY_BALANCE`/version 1 전달은 확인됐습니다. 응답 관측은 17개 frame, 6,201자이며 파싱 오류·잘림이 없습니다. 해당 target은 제거되지 않았고 전송 오류도 기록되지 않았습니다.
+
+이번에는 SDK 이후 probe도 남았습니다. 초기 snapshot은 `current: true`, `scopeCurrent: true`, `fromCache: false`, version null이며 publish·hook·render까지 기본 구성이 전달됐습니다. 이후 구독자 2명 중 1명의 해제·재구독은 있지만 SDK snapshot version 1 자체가 없습니다. snapshot probe는 세션·cache 필터보다 앞에 있으므로, 관측된 실패 경계는 wire 수신 이후 SDK 콜백 이전입니다. SDK 내부 처리나 오류 원인은 아직 확인되지 않았으며 React에서 수신한 version 1을 버렸다고 볼 근거는 없습니다.
+
+Firestore Emulator의 [이미 보낸 readTime보다 오래된 문서 변경을 전달하는 보고](https://github.com/firebase/firebase-tools/issues/11221)가 유사합니다. 설치된 Firestore SDK 4.16.0의 `remote_store.ts`는 이전 snapshot보다 오래된 watch snapshot을 적용하지 않으며, `local_store_impl.ts`도 캐시보다 오래된 문서 변경을 무시합니다. 하지만 기존 첨부에는 wire readTime·updateTime이 없어 이번 실패와 같은 원인으로 확정할 수 없습니다. 운영 재현 여부도 미확정입니다.
+
+E2E Listen 관측에 targetChange/documentDelete의 readTime과 documentChange의 updateTime을 추가했습니다. UTC timestamp 형식만 허용하고 나노초 정밀도를 문자열 그대로 보존합니다. 요청·문서 원문·토큰은 추가하지 않으며 SDK에 전달하는 bytes도 변경하지 않습니다. 정상 경로에서는 두 시각의 실제 관측 여부를 검사합니다. 기존 UI 30초 제한, version 경계, 충돌·재전송·재조회 검증은 유지합니다. 제품 구독·캐시 정책이나 Emulator 버전은 바꾸지 않습니다.
+
+실제 Emulator·production build·Chromium 국소 재현 20회가 모두 통과했습니다(2.9분). 20개 첨부 모두 readTime·updateTime을 수집했고 파싱 오류는 없었습니다. 재현되지 않았다는 결과를 해결로 표현하지 않으며, 새로운 시각 관측으로 다음 실패를 좁힙니다. 로그는 `TEMP/household-home-preferences-readtime-20261110.log`, 최초 실패 로그는 `TEMP/household-admin-latest-version-ci-failure-42634263958.log`, 원본 artifact와 추출 관측은 `TEMP/household-home-preferences-ci-42634263958`에 보존했습니다. 후속은 테스트·문서 변경으로 제품 재배포가 필요하지 않습니다.
+
+시각 필드 존재 assertion까지 포함한 최종 국소 검사도 통과했습니다(1 passed, 36.3초; `TEMP/household-home-preferences-readtime-final-20261110.log`). 최초 20회 보고서는 `TEMP/household-home-preferences-readtime-20-20261110.json`에 보존했습니다. 전체 CI 결과는 새 SHA에서 별도로 확인합니다.
