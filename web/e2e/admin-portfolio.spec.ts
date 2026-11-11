@@ -20,7 +20,7 @@ test('[AST-006][ADM-001][ADM-002][ADM-004][ADM-005][EXT-001][EXT-002][EXT-004] �
   }
   const registeredEndpoints = (await documents(request, 'notificationEndpoints'))
     .filter(row => row.householdId === scope.householdId && row.memberId === scope.memberId && row.platform === 'android');
-  const latestVersionConfirmation = registeredEndpoints.filter(row => row.deviceInfo.appVersion === '2.0.12')
+  const latestVersionConfirmation = registeredEndpoints.filter(row => (row.deviceInfo as { appVersion: string }).appVersion === '2.0.12')
     .map(row => row.lastConfirmedAt as string).sort().at(-1)!;
   const created = await executeHouseholdCommand<{ assetId: string }>(request, { ...scope, command: 'portfolio.create-asset.v1', payload: { asset: { name: '복구할 예금', type: 'savings', owner: '가구', ownerRef: { kind: 'household' }, currency: 'KRW', currentBalance: 25_000, isActive: true, order: 1 } } });
   await executeHouseholdCommand(request, { ...scope, command: 'portfolio.delete-asset.v1', payload: { assetId: created.assetId, expectedVersion: 1 } });

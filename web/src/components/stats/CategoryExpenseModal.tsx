@@ -82,7 +82,7 @@ export default function CategoryExpenseModal({
                     type="button"
                     aria-expanded={expanded}
                     onClick={() => setExpandedMonth(expanded ? null : month)}
-                    className="flex w-full items-center gap-2 bg-slate-50 p-3 text-left hover:bg-slate-100 transition-colors"
+                    className="flex w-full items-center gap-2 bg-slate-50 p-3 text-left [@media(hover:hover)]:hover:bg-slate-100 transition-colors"
                   >
                     <ChevronRight aria-hidden="true" className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${expanded ? 'rotate-90' : ''}`} />
                     <span className="font-medium text-slate-800">{year}년 {Number(monthNumber)}월</span>

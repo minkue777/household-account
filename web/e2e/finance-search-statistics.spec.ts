@@ -140,6 +140,19 @@ test('[T-LED-009][T-STAT-005][STAT-001][STAT-002][STAT-003][STAT-004][LED-006] 3
     await expect(months.nth(index)).toHaveAttribute('aria-expanded', 'false');
   }
   await expect(detail.getByText('통계 0개월', { exact: true })).toHaveCount(0);
+  const monthBackground = await months.nth(0).evaluate(element => getComputedStyle(element).backgroundColor);
+  await months.nth(0).hover();
+  await expect(months.nth(0)).not.toHaveCSS('background-color', monthBackground);
+  await page.mouse.move(0, 0);
+  await expect(months.nth(0)).toHaveCSS('background-color', monthBackground);
+  await detail.getByRole('button', { name: '닫기', exact: true }).focus();
+  await page.keyboard.press('Tab');
+  await expect(months.nth(0)).toBeFocused();
+  await expect(months.nth(0)).not.toHaveCSS('outline-style', 'none');
+  await page.keyboard.press('Enter');
+  await expect(months.nth(0)).toHaveAttribute('aria-expanded', 'true');
+  await page.keyboard.press('Enter');
+  await expect(months.nth(0)).toHaveAttribute('aria-expanded', 'false');
   await months.nth(0).click();
   await expect(detail.getByText('통계 0개월', { exact: true })).toBeVisible();
   await months.nth(1).click();
@@ -164,6 +177,32 @@ test('[T-LED-009][T-STAT-005][STAT-001][STAT-002][STAT-003][STAT-004][LED-006] 3
   await page.getByLabel('시작 월').fill(seoulDate().slice(0, 7));
   await expect(page.locator('p[role="alert"]')).toHaveText('시작 월은 종료 월보다 늦을 수 없습니다.');
   await expect(page.getByText('17,600원', { exact: true })).toHaveCount(0);
+});
+
+test.describe('카테고리 월별 상세 터치', () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
+
+  test('[T-STAT-005][STAT-004] 월을 터치로 펼쳤다 접어도 배경 강조가 남지 않는다', async ({ page, request }) => {
+    await createFinanceHousehold(page, request);
+    await addExpenseThroughUi(page, request, { merchant: '월별 터치 확인', amount: 1100, category: '식비' });
+    await page.goto('/stats');
+    await page.getByRole('button', { name: /식비.*1,100원.*100%/ }).tap();
+    const detail = page.getByRole('dialog', { name: '식비 지출 내역' });
+    const month = detail.getByRole('button', { name: /년 .*월/ });
+    const expense = detail.getByText('월별 터치 확인', { exact: true });
+    await expect(month).toHaveAttribute('aria-expanded', 'false');
+    expect(await page.evaluate(() => matchMedia('(hover: hover)').matches)).toBe(false);
+    const background = await month.evaluate(element => getComputedStyle(element).backgroundColor);
+
+    await month.tap();
+    await expect(expense).toBeVisible();
+    await expect(month).toHaveAttribute('aria-expanded', 'true');
+    await month.tap();
+    await expect(expense).toHaveCount(0);
+    await expect(month).toHaveAttribute('aria-expanded', 'false');
+    await expect(month).toHaveCSS('background-color', background);
+    await page.screenshot({ path: test.info().outputPath('category-month-touch-collapsed.png') });
+  });
 });
 
 test('[STAT-003][STAT-004] 예산 카테고리만 추이 기본값으로 선택되고 통계 상세 편집·삭제가 합계를 변경한다', async ({ page, request }) => {
