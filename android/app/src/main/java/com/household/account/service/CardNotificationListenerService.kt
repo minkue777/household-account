@@ -7,6 +7,7 @@ import com.household.account.data.NotificationDebugLogRepository
 import com.household.account.paymentcapture.AndroidCaptureDelivery
 import com.household.account.paymentcapture.AndroidCaptureLatencyTelemetry
 import com.household.account.paymentcapture.CaptureLatencyStage
+import com.household.account.paymentcapture.CaptureDeliveryFailure
 import com.household.account.paymentcapture.PaymentSourceRegistry
 import com.household.account.paymentcapture.RawNotificationCandidate
 import com.household.account.paymentcapture.RawNotificationCandidateFactory
@@ -153,16 +154,16 @@ class CardNotificationListenerService : NotificationListenerService() {
             if (deliveries.isEmpty()) return
 
             serviceScope.launch {
-                runCatching {
-                    AndroidCaptureDelivery.enqueueBatchAndFlush(
-                        applicationContext,
-                        deliveries.map { (_, envelope) -> envelope }
-                    )
-                }
-                deliveries.forEach { (candidate, _) ->
+                val failures = mutableMapOf<String, CaptureDeliveryFailure>()
+                AndroidCaptureDelivery.enqueueBatchAndFlush(
+                    applicationContext,
+                    deliveries.map { (_, envelope) -> envelope },
+                    onFailure = { failures[it.observationId] = it }
+                )
+                deliveries.forEach { (candidate, envelope) ->
                     // 임시 parser 진단은 QuickEdit 표시가 끝난 뒤 보내 네트워크와
                     // App Check token을 결제 저장의 빠른 경로와 경쟁시키지 않습니다.
-                    saveRawNotificationLogIfNeeded(packageName, candidate)
+                    saveRawNotificationLogIfNeeded(packageName, candidate, failures[envelope.observationId])
                 }
             }
         } catch (_: Exception) {
@@ -216,7 +217,8 @@ class CardNotificationListenerService : NotificationListenerService() {
 
     private fun saveRawNotificationLogIfNeeded(
         packageName: String,
-        candidate: RawNotificationCandidate
+        candidate: RawNotificationCandidate,
+        captureFailure: CaptureDeliveryFailure? = null
     ) = saveRawNotificationLogIfNeeded(
         packageName = packageName,
         title = candidate.title,
@@ -225,7 +227,8 @@ class CardNotificationListenerService : NotificationListenerService() {
         textLines = candidate.textLines,
         bodyText = candidate.bodyText,
         fullText = candidate.fullText,
-        postedAtMillis = candidate.postedAtMillis
+        postedAtMillis = candidate.postedAtMillis,
+        captureFailure = captureFailure
     )
 
     private fun saveRawNotificationLogIfNeeded(
@@ -236,7 +239,8 @@ class CardNotificationListenerService : NotificationListenerService() {
         textLines: List<String>,
         bodyText: String,
         fullText: String,
-        postedAtMillis: Long
+        postedAtMillis: Long,
+        captureFailure: CaptureDeliveryFailure?
     ) {
         val source = resolveDebugLogSource(packageName, title, bodyText, fullText) ?: return
         val normalizedTitle = title.trim()
@@ -261,7 +265,8 @@ class CardNotificationListenerService : NotificationListenerService() {
                     bigText = bigText,
                     textLines = textLines,
                     fullText = fullText,
-                    postedAtMillis = postedAtMillis
+                    postedAtMillis = postedAtMillis,
+                    captureFailure = captureFailure
                 )
             } catch (_: Exception) {
             }

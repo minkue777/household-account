@@ -53,6 +53,9 @@ class DefaultDiagnosticRetentionApplication
           fullText: input.notification.fullText,
           postedAtMillis: input.notification.postedAtMillis,
           collectedAt: input.notification.collectedAt,
+          ...(input.notification.captureFailure === undefined ? {} : {
+            captureFailure: input.notification.captureFailure,
+          }),
         },
       });
     } catch {

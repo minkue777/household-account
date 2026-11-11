@@ -173,7 +173,8 @@ class CaptureDeliveryQueue(
     suspend fun flush(
         currentScope: CaptureSessionScope,
         client: CaptureSubmissionClient,
-        beforeCommitFollowUps: suspend (List<CaptureDeliveryFollowUp>) -> Unit = {}
+        beforeCommitFollowUps: suspend (List<CaptureDeliveryFollowUp>) -> Unit = {},
+        onFailure: (CaptureDeliveryFailure) -> Unit = {}
     ): CaptureFlushOutcome = deliveryMutex.withLock {
         val pending = mutex.withLock {
             if (!currentScope.isUsable || currentScope in purgedScopes) emptyList()
@@ -190,9 +191,11 @@ class CaptureDeliveryQueue(
                 currentScope !in purgedScopes && !isExpired(entry) && entry in store.load()
             }
             if (!canSubmit) continue
+            var stage = CaptureDeliveryFailureStage.SUBMIT
             try {
                 // Delivery is serialized, but incoming journal writes and logout never wait for HTTP.
                 val receipt = client.submit(entry.envelope)
+                stage = CaptureDeliveryFailureStage.LOCAL_COMMIT
                 mutex.withLock commit@ {
                     val current = store.load()
                     if (currentScope in purgedScopes || isExpired(entry) || entry !in current) return@commit
@@ -205,11 +208,19 @@ class CaptureDeliveryQueue(
                         else it.copy(terminalBranches = decision.terminalBranches)
                     })
                     followUps += decision.followUps
+                    if (!decision.completed) {
+                        onFailure(CaptureDeliveryFailure(
+                            entry.envelope.observationId,
+                            CaptureDeliveryFailureStage.SUBMIT,
+                            "SERVER_RETRY_REQUIRED"
+                        ))
+                    }
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
-            } catch (_: Exception) {
+            } catch (error: Exception) {
                 // The original journal entry remains retryable after transport or local commit failure.
+                onFailure(CaptureDeliveryFailure.from(entry.envelope.observationId, stage, error))
             }
         }
         mutex.withLock { CaptureFlushOutcome(followUps, store.load().size) }

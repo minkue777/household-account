@@ -59,6 +59,38 @@ function recordingDiagnostics(
 }
 
 describe("submitNotificationDiagnostic callable wire", () => {
+  const captureFailure = { observationId: "observation.android.failure-1", stage: "SUBMIT", code: "CALLABLE_UNAVAILABLE" };
+
+  it("선택적 전송 실패를 원문에 연결하고 기존 APK의 payload도 계속 허용한다", async () => {
+    const collected: Array<Parameters<DiagnosticRetentionInputPort["collect"]>[0]> = [];
+    const handler = createNotificationDiagnosticCallableHandler({
+      memberships: activeMembership(), diagnostics: recordingDiagnostics(collected),
+    });
+    await handler.handle({ principalUid: "firebase-uid", data: { ...payload(), captureFailure } });
+    await handler.handle({ principalUid: "firebase-uid", data: payload() });
+    expect(collected[0]?.notification.captureFailure).toEqual(captureFailure);
+    expect(collected[1]?.notification).not.toHaveProperty("captureFailure");
+  });
+
+  it.each([
+    null,
+    { ...captureFailure, message: "private exception text" },
+    { ...captureFailure, token: "private" },
+    { ...captureFailure, observationId: "" },
+    { ...captureFailure, observationId: "a".repeat(257) },
+    { ...captureFailure, observationId: "private\ntext" },
+    { ...captureFailure, stage: "UNKNOWN" },
+    { ...captureFailure, code: "arbitrary exception message" },
+  ])("실패 진단의 잘못된 값과 임의 정보는 저장하지 않는다: %j", async (failure) => {
+    const collected: Array<Parameters<DiagnosticRetentionInputPort["collect"]>[0]> = [];
+    const handler = createNotificationDiagnosticCallableHandler({
+      memberships: activeMembership(), diagnostics: recordingDiagnostics(collected),
+    });
+    await expect(handler.handle({ principalUid: "firebase-uid", data: { ...payload(), captureFailure: failure } }))
+      .rejects.toMatchObject({ callableCode: "invalid-argument" });
+    expect(collected).toHaveLength(0);
+  });
+
   it("인증 UID의 활성 membership과 서버 source registry로 actor와 source를 확정한다", async () => {
     const collected: Array<Parameters<DiagnosticRetentionInputPort["collect"]>[0]> = [];
     const handler = createNotificationDiagnosticCallableHandler({

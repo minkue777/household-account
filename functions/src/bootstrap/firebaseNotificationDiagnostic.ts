@@ -108,6 +108,7 @@ export function createNotificationDiagnosticCallableHandler(input: {
           fullText: diagnostic.fullText,
           postedAtMillis: diagnostic.postedAtMillis,
           collectedAt: (input.now ?? (() => new Date().toISOString()))(),
+          ...(diagnostic.captureFailure === undefined ? {} : { captureFailure: diagnostic.captureFailure }),
         },
         // 진단 저장은 결제 처리와 독립된 best-effort 경로입니다.
         businessOutcome: "Ignored",

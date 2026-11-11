@@ -3,6 +3,12 @@ export interface DiagnosticActor {
   readonly memberId: string;
 }
 
+export interface CaptureDeliveryFailure {
+  readonly observationId: string;
+  readonly stage: "SCOPE" | "ENQUEUE" | "QUEUE_READ" | "SUBMIT" | "LOCAL_COMMIT";
+  readonly code: string;
+}
+
 export interface DiagnosticNotification {
   readonly packageName: string;
   readonly sourceType: string;
@@ -13,6 +19,7 @@ export interface DiagnosticNotification {
   readonly fullText: string;
   readonly postedAtMillis: number;
   readonly collectedAt: string;
+  readonly captureFailure?: CaptureDeliveryFailure;
 }
 
 export interface DiagnosticDocument extends DiagnosticNotification {

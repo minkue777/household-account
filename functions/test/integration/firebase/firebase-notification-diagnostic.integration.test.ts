@@ -83,13 +83,15 @@ describeWithFirestoreEmulator("Firebase notification diagnostic adapter", () => 
     });
 
     const first = await handler.handle({ principalUid, data: payload() });
-    const second = await handler.handle({ principalUid, data: payload() });
+    const captureFailure = { observationId: "observation.android.failure-1", stage: "SUBMIT", code: "CALLABLE_UNAVAILABLE" };
+    const second = await handler.handle({ principalUid, data: { ...payload(), captureFailure } });
     expect(first.result.kind).toBe("Collected");
     expect(second.result.kind).toBe("Collected");
 
     const logs = await database.collection("notification_debug_logs").get();
     expect(logs.size).toBe(2);
     expect(logs.docs[0].id).not.toBe(logs.docs[1].id);
+    expect(logs.docs.map((doc) => doc.data().captureFailure).filter(Boolean)).toEqual([captureFailure]);
     for (const document of logs.docs) {
       expect(document.data()).toMatchObject({
         householdId,
@@ -116,7 +118,9 @@ describeWithFirestoreEmulator("Firebase notification diagnostic adapter", () => 
       ),
     });
 
-    await expect(handler.handle({ data: payload() })).rejects.toMatchObject({
+    await expect(handler.handle({ data: { ...payload(), captureFailure: {
+      observationId: "observation-1", stage: "SCOPE", code: "AUTH_REQUIRED",
+    } } })).rejects.toMatchObject({
       callableCode: "unauthenticated",
       domainCode: "AUTH_REQUIRED",
     });

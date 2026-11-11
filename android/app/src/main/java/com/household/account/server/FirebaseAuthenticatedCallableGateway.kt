@@ -3,6 +3,7 @@ package com.household.account.server
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.functions.FirebaseFunctionsException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.tasks.await
 
 /**
@@ -30,6 +31,8 @@ class FirebaseAuthenticatedCallableGateway(
             @Suppress("UNCHECKED_CAST")
             return data as? Map<String, Any?>
                 ?: throw RemoteCommandException("Callable response must be an object")
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (error: UnauthenticatedCommandException) {
             throw error
         } catch (error: RemoteCommandException) {

@@ -1,6 +1,7 @@
 package com.household.account.paymentcapture
 
 import android.content.Context
+import android.util.Log
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.ExistingWorkPolicy
@@ -15,6 +16,7 @@ import com.household.account.session.NativeMembershipResolver
 import com.household.account.util.HouseholdPreferences
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 
@@ -34,19 +36,31 @@ object AndroidCaptureDelivery {
 
     suspend fun enqueueBatchAndFlush(
         context: Context,
-        envelopes: List<CaptureDeliveryEnvelope>
+        envelopes: List<CaptureDeliveryEnvelope>,
+        onFailure: (CaptureDeliveryFailure) -> Unit = {}
     ): CaptureFlushOutcome? {
         if (envelopes.isEmpty()) return null
-        val scope = resolveScope(context)
-        if (!scope.isUsable) return null
-
+        val reportFailure: (CaptureDeliveryFailure) -> Unit = {
+            logFailure(it)
+            onFailure(it)
+        }
+        var stage = CaptureDeliveryFailureStage.SCOPE
         val outcome = try {
+            val scope = resolveScope(context)
+            if (!scope.isUsable) {
+                envelopes.forEach {
+                    reportFailure(CaptureDeliveryFailure(it.observationId, stage, "SCOPE_UNAVAILABLE"))
+                }
+                return null
+            }
+            stage = CaptureDeliveryFailureStage.ENQUEUE
             enqueueAndSubmitCaptureBatch(
                 queue = queue(context),
                 scope = scope,
                 envelopes = envelopes,
                 client = submissionClient(),
                 afterJournalPersisted = { persisted ->
+                    stage = CaptureDeliveryFailureStage.QUEUE_READ
                     persisted.forEach { envelope ->
                         AndroidCaptureLatencyTelemetry.mark(
                             observationId = envelope.observationId,
@@ -56,14 +70,17 @@ object AndroidCaptureDelivery {
                 },
                 beforeCommitFollowUps = { followUps ->
                     enqueueFollowUps(context, scope, followUps)
-                }
+                },
+                onFailure = reportFailure
             )
-        } catch (_: Exception) {
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            envelopes.forEach {
+                reportFailure(CaptureDeliveryFailure.from(it.observationId, stage, error))
+            }
             scheduleRetry(context)
-            return CaptureFlushOutcome(
-                followUps = emptyList(),
-                retainedCount = queue(context).snapshot().count { it.scope == scope }
-            )
+            return null
         } ?: return null
         if (outcome.retainedCount > 0) scheduleRetry(context)
         return outcome
@@ -76,7 +93,8 @@ object AndroidCaptureDelivery {
             client = submissionClient(),
             beforeCommitFollowUps = { followUps ->
                 enqueueFollowUps(context, scope, followUps)
-            }
+            },
+            onFailure = ::logFailure
         )
         if (outcome.followUps.isNotEmpty()) {
             QuickEditCoordinator.presentNextAsync(context)
@@ -180,4 +198,8 @@ object AndroidCaptureDelivery {
     }
 
     private const val WORK_NAME = "capture-envelope-delivery.v1"
+
+    private fun logFailure(failure: CaptureDeliveryFailure) {
+        Log.w("HHCaptureDelivery", "observationId=${failure.observationId} stage=${failure.stage} code=${failure.code}")
+    }
 }

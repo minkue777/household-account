@@ -27,6 +27,64 @@ class CaptureDeliveryQueueTest {
 
     private val scope = CaptureSessionScope("household-1", "member-1", 3L)
 
+    @Test fun `전송 실패를 관측하고 다음 알림에서 이전 원문부터 중복 없이 처리한다`() = runTest {
+        val store = MemoryStore()
+        val queue = CaptureDeliveryQueue(store) { 1_000L }
+        val first = rawEnvelope(".pending")
+        val next = rawEnvelope(".next")
+        val failures = mutableListOf<CaptureDeliveryFailure>()
+        val failed = enqueueAndSubmitCaptureBatch(queue, scope, listOf(first), object : CaptureSubmissionClient {
+            override suspend fun submit(envelope: CaptureDeliveryEnvelope): CaptureSubmissionReceipt =
+                throw java.io.IOException("sensitive transport details")
+        }, onFailure = { failures += it })
+
+        assertEquals(1, failed?.retainedCount)
+        assertEquals(listOf(first), store.entries.map { it.envelope })
+        assertEquals(listOf(CaptureDeliveryFailure(first.observationId, CaptureDeliveryFailureStage.SUBMIT, "IO_ERROR")), failures)
+
+        val submitted = mutableListOf<CaptureDeliveryEnvelope>()
+        val client = object : CaptureSubmissionClient {
+            override suspend fun submit(envelope: CaptureDeliveryEnvelope): CaptureSubmissionReceipt {
+                submitted += envelope
+                return CaptureSubmissionReceipt("terminal", null, null)
+            }
+        }
+        enqueueAndSubmitCaptureBatch(queue, scope, listOf(next), client, onFailure = { failures += it })
+        queue.flush(scope, client)
+        assertEquals(listOf(first, next), submitted)
+        assertEquals(1, failures.size)
+        assertTrue(store.entries.isEmpty())
+    }
+
+    @Test fun `서버 재시도 응답도 전송 예외와 구분하여 기록하고 원문을 보존한다`() = runTest {
+        val store = MemoryStore()
+        val queue = CaptureDeliveryQueue(store) { 1_000L }
+        val envelope = rawEnvelope()
+        val failures = mutableListOf<CaptureDeliveryFailure>()
+        enqueueAndSubmitCaptureBatch(queue, scope, listOf(envelope), object : CaptureSubmissionClient {
+            override suspend fun submit(envelope: CaptureDeliveryEnvelope) =
+                CaptureSubmissionReceipt("partial-retryable", CaptureBranchReceipt("retryableFailure", retryable = true), null)
+        }, onFailure = { failures += it })
+        assertEquals("SERVER_RETRY_REQUIRED", failures.single().code)
+        assertEquals(CaptureDeliveryFailureStage.SUBMIT, failures.single().stage)
+        assertEquals(listOf(envelope), store.entries.map { it.envelope })
+    }
+
+    @Test fun `취소는 실패로 삼키지 않고 상위 코루틴으로 전파한다`() = runTest {
+        val store = MemoryStore()
+        val queue = CaptureDeliveryQueue(store) { 1_000L }
+        val failures = mutableListOf<CaptureDeliveryFailure>()
+        val error = runCatching {
+            enqueueAndSubmitCaptureBatch(queue, scope, listOf(rawEnvelope()), object : CaptureSubmissionClient {
+                override suspend fun submit(envelope: CaptureDeliveryEnvelope): CaptureSubmissionReceipt =
+                    throw kotlinx.coroutines.CancellationException()
+            }, onFailure = { failures += it })
+        }.exceptionOrNull()
+        assertTrue(error is kotlinx.coroutines.CancellationException)
+        assertTrue(failures.isEmpty())
+        assertEquals(1, store.entries.size)
+    }
+
     @Test fun `purge 뒤 늦은 응답과 enqueue는 이전 세대를 복구하지 못한다`() = runTest {
         val store = MemoryStore()
         val queue = CaptureDeliveryQueue(store) { 1_000L }
@@ -404,6 +462,7 @@ class CaptureDeliveryQueueTest {
         val store = MemoryStore()
         val queue = CaptureDeliveryQueue(store) { 1_000L }
         queue.enqueueAll(scope, listOf(rawEnvelope()))
+        val failures = mutableListOf<CaptureDeliveryFailure>()
 
         runCatching {
             queue.flush(
@@ -420,11 +479,14 @@ class CaptureDeliveryQueueTest {
                             balance = null
                         )
                 },
-                beforeCommitFollowUps = { error("QUICK_EDIT_QUEUE_UNAVAILABLE") }
+                beforeCommitFollowUps = { error("QUICK_EDIT_QUEUE_UNAVAILABLE") },
+                onFailure = { failures += it }
             )
         }
 
         assertEquals(1, store.entries.size)
+        assertEquals(CaptureDeliveryFailureStage.LOCAL_COMMIT, failures.single().stage)
+        assertEquals("UNEXPECTED_ERROR", failures.single().code)
     }
 
     @Test fun `HTTP 대기 중 새 입력과 purge는 진행되고 이전 응답은 다음 세대 journal을 지우지 않는다`() = runTest {

@@ -33,6 +33,9 @@ export class FirebaseDiagnosticDocumentStore implements DiagnosticDocumentStore 
         postedAtMillis: input.notification.postedAtMillis,
         observedAt: new Date(input.notification.postedAtMillis),
         collectedAt: input.notification.collectedAt,
+        ...(input.notification.captureFailure === undefined ? {} : {
+          captureFailure: input.notification.captureFailure,
+        }),
         createdAt: FieldValue.serverTimestamp(),
       });
       return { kind: "Written", diagnosticId: reference.id };

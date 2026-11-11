@@ -7,19 +7,25 @@ internal suspend fun enqueueAndSubmitCaptureBatch(
     envelopes: List<CaptureDeliveryEnvelope>,
     client: CaptureSubmissionClient,
     afterJournalPersisted: (List<CaptureDeliveryEnvelope>) -> Unit = {},
-    beforeCommitFollowUps: suspend (List<CaptureDeliveryFollowUp>) -> Unit = {}
+    beforeCommitFollowUps: suspend (List<CaptureDeliveryFollowUp>) -> Unit = {},
+    onFailure: (CaptureDeliveryFailure) -> Unit = {}
 ): CaptureFlushOutcome? {
     val persistedEnvelopes = when (val result = queue.enqueueAll(scope, envelopes)) {
         is CaptureBatchEnqueueResult.Accepted -> result.persistedEnvelopes
         is CaptureBatchEnqueueResult.PayloadConflict -> {
             throw CaptureIdempotencyPayloadMismatchException(result.observationId)
         }
-        CaptureBatchEnqueueResult.Rejected -> return null
+        CaptureBatchEnqueueResult.Rejected -> {
+            envelopes.forEach {
+                onFailure(CaptureDeliveryFailure(it.observationId, CaptureDeliveryFailureStage.ENQUEUE, "SCOPE_UNAVAILABLE"))
+            }
+            return null
+        }
     }
     if (persistedEnvelopes.isEmpty()) return null
     afterJournalPersisted(persistedEnvelopes)
 
-    return queue.flush(scope, client, beforeCommitFollowUps)
+    return queue.flush(scope, client, beforeCommitFollowUps, onFailure)
 }
 
 internal class CaptureIdempotencyPayloadMismatchException(
