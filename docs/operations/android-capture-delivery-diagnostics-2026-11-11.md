@@ -27,3 +27,12 @@
 - 선택적 필드를 수용하는 Firebase 세 codebase를 먼저 배포하고 기본 smoke를 확인한 뒤 v2.0.13 APK를 공개한다. Web 제품 변경은 없다.
 - 새 APK 설치 후 발생하는 실패부터 추가 코드가 기록된다. 이전 실패 원인은 소급 복원할 수 없다.
 - 최종 SHA의 다섯 CI 검사·요약과 실제 Android 진단 E2E 실행 여부를 확인한다. 최초 지역화폐 지연은 아직 원인 미확정으로 유지한다.
+
+## CI 42932905664 후속
+
+- 제품 `2805e523`의 Firebase `release-20261111-capture-diagnostics-2805e523` 세 codebase·기본 smoke와 v2.0.13 APK 공개·다운로드 동일 hash·서명 검증을 완료했다. 실제 사용자 로그인 smoke를 수행한 것으로 보고하지 않는다.
+- Functions, Web, Android build는 성공했다. 일반 Android instrumentation 50건 중 23번째 `deniedPushPermissionDoesNotBlockWebAndIsNotRequestedAgainAfterRecreation` 진행 중 프로세스가 종료됐다. 새 진단 Firebase E2E에는 도달하지 못했다. 남은 Web E2E는 별도 확인한다.
+- 00:45:49.341Z 앱 주 스레드에서 SIGSEGV가 발생했다. native backtrace 상위 12개 frame은 WebView 113.0.5672.136의 `libmonochrome_64.so`다. 권한 revoke에 따른 프로세스 강제 종료 로그나 Java assertion/exception으로 단정하지 않는다.
+- 실패 artifact `13817627392`의 logcat과 XML, job `130235790192`를 확인했다. [9월의 유사 관측](storage-consolidation-2026-09-18.md#android-계측-후속-확인)이 있으나 이번 충돌의 직접 원인까지 확정된 것은 아니다.
+- 해당 권한 검사는 운영 URL로 실제 네트워크 로딩을 시작하고 문서 준비 확인 없이 화면을 재생성했다. 기존 `LocalWebViewDocument`를 재사용해 재생성 전후 응답을 격리하고 실제 DOM·Native bridge 완료, 이전 WebView 분리·단일 종료를 추가 검증한다. 권한 거부/재요청 방지와 실제 재생성 단언, 시간제한은 유지한다.
+- 테스트 입력 격리를 바로잡은 후속이며 제품 코드는 변경하지 않는다. 같은 Android 14 CI에서 재검증하고 네이티브 충돌이 반복되면 해결로 보고하거나 자동 수정·재실행을 반복하지 않는다. Firebase·APK 재배포는 불필요하다.

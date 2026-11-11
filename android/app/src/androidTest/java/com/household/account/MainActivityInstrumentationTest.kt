@@ -514,14 +514,38 @@ class MainActivityInstrumentationTest {
             Settings.canDrawOverlays(context) && isNotificationListenerEnabled()
         }
 
-        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+        val document = LocalWebViewDocument(TrustedWebOrigin.APP_URL, """<!doctype html><html><body>
+            <p id="permission-ready">알림 권한 없이 웹 사용</p><script>
+                window.bridgeVersion = null;
+                HouseholdNativeBridge.onmessage = function(event) {
+                  window.bridgeVersion = JSON.parse(event.data).result.value.version;
+                };
+                HouseholdNativeBridge.postMessage(JSON.stringify({contractVersion:'android-bridge.v1',
+                  requestId:'permission-check',operation:'app.get-version',payload:{}}));
+            </script></body></html>""".trimIndent())
+        // 재생성된 WebView까지 같은 문서를 제공하고 실제 문서·bridge 준비를 확인합니다.
+        withObservedWebViewLifecycle(localDocument = document) { scenario ->
+            fun waitForDocument() {
+                waitUntil("알림 권한 거부 상태의 실제 문서와 bridge 준비") {
+                    evaluateWebViewText(scenario, """document.readyState === 'complete' &&
+                        document.getElementById('permission-ready') && window.bridgeVersion
+                    """.trimIndent()) == BuildConfig.VERSION_NAME
+                }
+            }
+            waitForDocument()
+            lateinit var original: LifecycleObservedWebView
+            scenario.onActivity { original = it.findViewById(R.id.webView) }
             assertEquals(PackageManager.PERMISSION_DENIED,
                 context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS))
             assertTrue(context.getSharedPreferences("android_permission_prompts", Context.MODE_PRIVATE)
                 .getBoolean("postNotificationsRequested", false))
 
             scenario.recreate()
+            waitForDocument()
             scenario.onActivity { activity ->
+                assertNotSame(original, activity.findViewById<WebView>(R.id.webView))
+                assertEquals(1, original.destroyCalls)
+                assertTrue(original.wasDetachedAtDestroy)
                 assertEquals(View.VISIBLE, activity.findViewById<WebView>(R.id.webView).visibility)
                 assertEquals(View.GONE, activity.findViewById<LinearLayout>(R.id.permissionLayout).visibility)
                 activity.findViewById<Button>(R.id.btnCheckPermission).performClick()
